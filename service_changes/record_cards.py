@@ -70,19 +70,31 @@ def parse_page(page: str) -> dict | None:
         g = mm.groupdict()
         middle = g["middle"].split()
         make_up = middle.pop() if middle and re.fullmatch(r"[A-Z]", middle[-1]) else ""
-        # The delivery frequency is the next bare number below the "Price Changed / Delivery Days" line.
-        freq = ""
-        for nxt in lines[i + 1:i + 6]:
-            if re.fullmatch(r"\s*(?:\d|[A-Z]\d)\s*", nxt):  # "7", "A2"; a bare "M" is a wearer label
-                freq = nxt.strip()
-                break
+        # Below each line: "Price Changed / Delivery Days" (with the day letters), then for a garment the
+        # locker and the wearer's name, then the delivery frequency as a bare code.
+        freq, days, names = "", "", []
+        for nxt in lines[i + 1:i + 7]:
             if LINE.match(nxt):
                 break
-        items.append({"account": account, "wearer": g["wearer"] or "", "sku": g["sku"], "description": " ".join(middle),
+            if "Delivery Days" in nxt:
+                dm = re.search(r"Delivery Days (.{7})", nxt)
+                days = ";".join(DAYS[k] for k, ch in enumerate(dm.group(1)) if ch == "MTWHFSU"[k]) if dm else ""
+            elif re.fullmatch(r"\s*(?:\d|[A-Z]\d)\s*", nxt):  # "7", "A2"; a bare "M" is a wearer label
+                freq = nxt.strip()
+                break
+            else:
+                names.append(nxt.strip())
+        size, desc = [], list(middle)
+        if g["wearer"]:  # garment: "32 32 PANT WORK BLACK", "XL SHIRT ...", "CUS TOM SHIRT ..."
+            while len(desc) > 1 and (len(desc[0]) <= 3 or re.search(r"\d", desc[0])):
+                size.append(desc.pop(0))
+        items.append({"account": account, "wearer": g["wearer"] or "", "wearer_name": names[-1] if names else "",
+                      "sku": g["sku"], "size": " ".join(size), "description": " ".join(desc),
                       "make_up": make_up, "inventory": int(g["reg"]), "assigned": int(g["asgn"]),
                       "special": int(g["spec"]), "autocount": int(g["auto"]), "unit_price": g["price"],
-                      "frequency": freq})
+                      "frequency": freq, "days": days})
     return {"account": account, "name": name, "route": _first(r"^Route (\d+|[A-Z]\d?)\s*$", page),
+            "service_days": ";".join(route_days),
             "stop_sequence": stop_seq, "contact": contact, "phone": phone, "email": email,
             "special_instructions": special, "sales_rep": rep, "account_type": acct_type,
             "install_date": installed, "contract_expires": _first(r"Contract ExpState Tax \d+ (\d{1,2}/\d{1,2}/\d{4})", page),
@@ -104,14 +116,14 @@ def parse_text(text: str) -> dict[str, dict]:
 
 def write(cards: dict[str, dict], out_dir: str):
     os.makedirs(out_dir, exist_ok=True)
-    head = ["account", "name", "route", "stop_sequence", "contact", "phone", "email", "special_instructions",
+    head = ["account", "name", "route", "service_days", "stop_sequence", "contact", "phone", "email", "special_instructions",
             "sales_rep", "account_type", "install_date", "contract_expires", "stop_minimum"]
     with open(os.path.join(out_dir, "customer_cards.csv"), "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=head, extrasaction="ignore")
         w.writeheader()
         w.writerows(cards.values())
-    cols = ["account", "wearer", "sku", "description", "make_up", "inventory", "assigned", "special", "autocount",
-            "unit_price", "frequency"]
+    cols = ["account", "wearer", "wearer_name", "sku", "size", "description", "make_up", "inventory", "assigned",
+            "special", "autocount", "unit_price", "frequency", "days"]
     with open(os.path.join(out_dir, "card_lines.csv"), "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=cols)
         w.writeheader()
@@ -119,10 +131,47 @@ def write(cards: dict[str, dict], out_dir: str):
             w.writerows(c["items"])
 
 
+def write_bot_data(cards: dict[str, dict], out_dir: str):
+    """The four files the parser loads (customers, current_items, garments, wearers), built from the cards
+    alone, so the Record Cards PDF is the only export the bot needs."""
+    from collections import Counter
+
+    os.makedirs(out_dir, exist_ok=True)
+    customers = [{"account": c["account"], "name": c["name"], "route": c["route"], "service_days": c["service_days"]}
+                 for c in cards.values()]
+    items, garments, wearers = [], [], {}
+    for c in cards.values():
+        for ln in c["items"]:
+            if ln["wearer"]:
+                garments.append({"account": ln["account"], "employee": ln["wearer"], "sku": ln["sku"], "size": ln["size"],
+                                 "item": ln["description"], "quantity": ln["assigned"] or ln["inventory"],
+                                 "days": ln["days"], "frequency": ln["frequency"]})
+                parts = ln["wearer_name"].split()
+                wearers.setdefault((ln["account"], ln["wearer"]), {
+                    "account": ln["account"], "employee": ln["wearer"], "first": parts[0] if parts else "",
+                    "last": " ".join(parts[1:]), "department": ""})
+            else:
+                items.append({"account": ln["account"], "item": ln["description"], "quantity": ln["inventory"],
+                              "autocount": ln["autocount"], "sku": ln["sku"], "days": ln["days"],
+                              "frequency": ln["frequency"], "unit_price": ln["unit_price"]})
+    seen = Counter((i["account"], i["item"]) for i in items)
+    for i in items:  # same item on two delivery schedules: "BAR MOP (Mon)"
+        if seen[(i["account"], i["item"])] > 1:
+            i["item"] = f'{i["item"]} ({i["days"] or "freq " + i["frequency"]})'
+    for name, rows in [("customers.csv", customers), ("current_items.csv", items),
+                       ("garments.csv", garments), ("wearers.csv", list(wearers.values()))]:
+        with open(os.path.join(out_dir, name), "w", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=list(rows[0]))
+            w.writeheader()
+            w.writerows(rows)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("text", help="text of the Customer Record Cards PDF (or the JSON a Dropbox fetch saved)")
     ap.add_argument("--out", default="data")
+    ap.add_argument("--bot-data", action="store_true",
+                    help="also write customers/current_items/garments/wearers.csv from the cards (no other exports needed)")
     args = ap.parse_args()
     raw = open(args.text).read()
     if raw.lstrip().startswith("{"):
@@ -130,6 +179,8 @@ def main():
         raw = json.loads(raw)["text"]
     cards = parse_text(raw)
     write(cards, args.out)
+    if args.bot_data:
+        write_bot_data(cards, args.out)
     print(f"{len(cards)} accounts, {sum(len(c['items']) for c in cards.values())} lines -> {args.out}/")
 
 

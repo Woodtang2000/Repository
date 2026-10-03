@@ -50,6 +50,17 @@ python -m service_changes.run service_changes/examples/messages.json \
 
 ## Alliant data
 
+**Quickest setup (new session):** the Customer Record Cards PDF alone has everything the bot loads.
+It lives in Dropbox at `/Accounting/Alliant Exports/Alliant Customer Record Cards.pdf`. Fetch its text
+with the Dropbox connector (the result is saved as a JSON file), then:
+
+```bash
+python -m service_changes.record_cards <saved fetch result or .txt> --bot-data --out service_changes/data
+```
+
+That writes customers, current_items (with autocount), garments (wearer quantities are Qty Assigned),
+wearers, customer_cards and card_lines. The Item Usage and Wearer Alpha List exports below are optional.
+
 Export three Alliant reports to Excel: **Item Usage** (All SKU Groups, customer/employee order), the
 **Wearer Alpha List**, and the **Customer Record Cards** (for each item's autocount). Then:
 
