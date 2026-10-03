@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(python3 .claude/deputy_write.py:*)",
-      "Bash(python3 /home/user/Repository/.claude/deputy_write.py:*)"
+      "Bash(python3 /home/user/Repository/.claude/deputy_write.py:*)",
+      "Bash(python -m service_changes.bot:*)",
+      "Bash(python3 -m service_changes.bot:*)"
     ]
   }
 }
