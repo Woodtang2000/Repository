@@ -109,7 +109,26 @@ Alliant automatically would need.
 The office can add a line whenever the bot fails to recognize a name. They're shown to the AI next to the
 customer and used for exact matches.
 
+## The bot (`bot.py`)
+
+One run reads the last `--since-minutes` of every `#route-N` channel the bot is in, and for each driver
+message posts the office ticket. **Silent mode** (default) posts to `#service-desk-test` only, with a link to
+the original message, so nobody else sees anything. `--live` replies in the driver's thread instead.
+`--dry-run` prints instead of posting. Each post carries a `ref <channel>/<ts>` tag, so overlapping runs
+never post twice.
+
+```bash
+pip install anthropic pydantic slack_sdk
+python -m service_changes.bot --data service_changes/data --since-minutes 70 --dry-run
+```
+
+Needs `SLACK_BOT_TOKEN` (from the Slack app made with `slack_manifest.yaml`) and `ANTHROPIC_API_KEY` or
+`SERVICE_DESK_API_KEY`. The bot must be invited to `#service-desk-test` and each `#route-N` channel.
+
+For the silent trial it runs as a scheduled Claude Code routine: rebuild the data from the Dropbox PDF, then
+one pass. Instant replies later need an always-on host running it every minute or two (or a Socket Mode
+listener; the app manifest already enables it).
+
 ## Not built yet
 
-- Watching Slack live and replying in threads
 - Writing changes into Alliant
