@@ -17,6 +17,8 @@ SYNONYMS = [
     (r"\bmicro ?fibers?\b", "microfiber"),
     (r"\btable ?cloths?\b", "t/c"),
     (r"\bbrandy ?wine\b", "brandywine"),
+    (r"\bshort ?sleeves?\b|\bss\b", "s/s"),
+    (r"\blong ?sleeves?\b|\bls\b", "l/s"),
 ]
 FILLER = {"mat", "towel", "the", "a", "of", "and", "s"}  # too generic to tell lines apart on their own
 
@@ -28,15 +30,22 @@ def _words(s: str) -> set[str]:
     return {w[:-1] if w.endswith("s") and len(w) > 3 else w for w in re.findall(r"[a-z0-9/]+", s)}
 
 
-_VOCAB: dict[int, set[str]] = {}
-
-
 def alliant_vocab(alliant: Alliant) -> set[str]:
-    """Every word used in any Alliant item name."""
-    key = id(alliant.items)
-    if key not in _VOCAB:
-        _VOCAB[key] = set().union(*(_words(n) for lines in alliant.items.values() for n in lines))
-    return _VOCAB[key]
+    """Every word used in any Alliant item or garment name."""
+    if getattr(alliant, "_vocab", None) is None:
+        names = [n for lines in alliant.items.values() for n in lines] + [n for g in alliant.garments.values() for n in g]
+        alliant._vocab = set().union(*(_words(n) for n in names))
+    return alliant._vocab
+
+
+def _find(lines: dict[str, int], item: str, vocab: set[str]) -> tuple[str, int] | None:
+    if item in lines:
+        return item, lines[item]
+    known = _words(item) & vocab
+    if not known - FILLER:
+        return None
+    hits = [(n, q) for n, q in lines.items() if known <= _words(n)]
+    return hits[0] if len(hits) == 1 else None
 
 
 def current_qty(alliant: Alliant, account: str | None, item: str) -> tuple[str, int] | None:
@@ -46,20 +55,14 @@ def current_qty(alliant: Alliant, account: str | None, item: str) -> tuple[str, 
     in Alliant ("please", "new"). A real color like "brandywine" is kept, so "4x6 brandywine"
     won't match a charcoal 4x6.
     """
-    lines = alliant.items.get(account or "", {})
-    if item in lines:
-        return item, lines[item]
-    known = _words(item) & alliant_vocab(alliant)
-    if not known - FILLER:
-        return None
-    hits = [(n, q) for n, q in lines.items() if known <= _words(n)]
-    return hits[0] if len(hits) == 1 else None
+    return _find(alliant.items.get(account or "", {}), item, alliant_vocab(alliant))
 
 
 @dataclass
 class CheckedChange:
     change: Change
     alliant_item: str | None = None
+    wearer_number: str | None = None
     frequency_now: str | None = None  # Alliant code for the matched item
     already_done: bool = False
     current: int | None = None
@@ -82,12 +85,38 @@ class Result:
         return self.parsed.category in (Category.item_change, Category.wearer_change) and not self.questions
 
 
+def _check_wearer(cc: CheckedChange, account: str | None, alliant: Alliant) -> tuple[str, int] | None:
+    """Look the wearer up by name; return their matching garment line, if one fits."""
+    ch = cc.change
+    if not alliant.wearers or not account:
+        return None
+    w = alliant.find_wearer(account, ch.wearer)
+    if w is None:
+        if ch.action == Action.stop:
+            cc.already_done = True
+            cc.notes.append(f"No wearer named {ch.wearer} on this account (may already be stopped)")
+        elif ch.action == Action.add:
+            cc.notes.append(f"{ch.wearer} is not in Alliant yet (new wearer)")
+        else:
+            cc.notes.append(f"No wearer named {ch.wearer} on this account; check by hand")
+        return None
+    cc.wearer_number = w.employee
+    lines = alliant.garments.get((account, w.employee), {})
+    found = _find(lines, ch.item, alliant_vocab(alliant))
+    if not found and lines and (ch.action == Action.stop or "all" in ch.item.lower()):
+        cc.notes.append(f"#{w.employee} {w.name} has " + ", ".join(f"{q} {n}" for n, q in lines.items()))
+    return found
+
+
 def check(parsed: ParsedMessage, alliant: Alliant) -> Result:
     who = parsed.customer_as_written or "this customer"
     out = []
     for ch in parsed.changes:
         cc = CheckedChange(ch)
-        found = current_qty(alliant, parsed.account_number, ch.alliant_item or ch.item) if not ch.wearer else None
+        if ch.wearer:
+            found = _check_wearer(cc, parsed.account_number, alliant)
+        else:
+            found = current_qty(alliant, parsed.account_number, ch.alliant_item or ch.item)
         if found:
             cc.alliant_item, cc.current = found
             cc.frequency_now = alliant.frequency.get(parsed.account_number or "", {}).get(cc.alliant_item)
@@ -106,6 +135,11 @@ def check(parsed: ParsedMessage, alliant: Alliant) -> Result:
             cc.already_done = True
             cc.new_total = cc.current
             cc.notes.append(f"Alliant already shows {cc.current}; may already be entered")
+        elif ch.wearer and ch.action == Action.add and cc.current is not None and cc.current == q:
+            # "Add 11 pants for Karissa" and she already has exactly 11: almost always entered already.
+            cc.already_done = True
+            cc.new_total = cc.current
+            cc.notes.append(f"Already has {cc.current}; may already be entered")
         elif cc.current == 0 and ch.action == Action.stop:
             cc.already_done = True
             cc.notes.append("Already 0 in Alliant")
@@ -171,7 +205,9 @@ def readback(result: Result) -> str:
                 if nxt.wearer != ch.wearer or nxt.action != ch.action:
                     break
                 group.append(result.changes[i + len(group)])
-            parts.append(f"{ch.wearer}: " + ", ".join(_what(g.change) for g in group)
+            parts.append(f"{ch.wearer}: " + ", ".join(
+                _what(g.change) + (f" (total {g.new_total})" if g.new_total is not None and g.change.action in (Action.add, Action.decrease) else "")
+                for g in group)
                          + f" {VERBS.get(ch.action, 'changed')}" + _tail(group[-1]))
             i += len(group)
             continue

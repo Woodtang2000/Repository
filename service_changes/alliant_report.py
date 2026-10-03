@@ -6,6 +6,7 @@ Writes:
   customers.csv      account, name, route, service_days, frequency
   current_items.csv  account, item, quantity, sku, days, frequency, unit_price, delivery_unit
   garments.csv       account, employee, sku, size, item, quantity, days, frequency
+  wearers.csv        account, employee, first, last, department   (from the Wearer Alpha List, --wearers)
 
 The report is laid out like the printed page: a "Customer" header row, then one row per
 item, then "Total Inventory". Rows with an employee number are wearer garments.
@@ -64,6 +65,29 @@ def parse(path):
     return customers, items, garments
 
 
+def parse_wearers(path):
+    """Alliant "Wearer Alpha List": wearer number, last/first name, account, department.
+
+    Some "names" are pooled no-name sets ("XL", "NOG Red/Bl SS Lg"); they're kept as-is.
+    """
+    wearers = []
+    for r in _rows(path):
+        account = str(r.get(9, ""))
+        if r.get(0) is None or account.count("-") != 2 or not str(r[0]).strip().isdigit():
+            continue
+        wearers.append({"account": account, "employee": str(r[0]).strip(), "first": str(r.get(4, "")),
+                        "last": str(r.get(3, "")), "department": str(r.get(11, ""))})
+    return wearers
+
+
+def write_wearers(wearers, out_dir):
+    os.makedirs(out_dir, exist_ok=True)
+    with open(os.path.join(out_dir, "wearers.csv"), "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=["account", "employee", "first", "last", "department"])
+        w.writeheader()
+        w.writerows(wearers)
+
+
 def write(customers, items, garments, out_dir):
     os.makedirs(out_dir, exist_ok=True)
 
@@ -94,12 +118,18 @@ def write(customers, items, garments, out_dir):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("report")
+    ap.add_argument("report", nargs="?", help="Item Usage report (.xlsx)")
+    ap.add_argument("--wearers", help="Wearer Alpha List (.xlsx)")
     ap.add_argument("--out", default="data")
     args = ap.parse_args()
-    customers, items, garments = parse(args.report)
-    write(customers, items, garments, args.out)
-    print(f"{len(customers)} customers, {len(items)} item lines, {len(garments)} garment lines -> {args.out}/")
+    if args.report:
+        customers, items, garments = parse(args.report)
+        write(customers, items, garments, args.out)
+        print(f"{len(customers)} customers, {len(items)} item lines, {len(garments)} garment lines -> {args.out}/")
+    if args.wearers:
+        wearers = parse_wearers(args.wearers)
+        write_wearers(wearers, args.out)
+        print(f"{len(wearers)} wearers -> {args.out}/wearers.csv")
 
 
 if __name__ == "__main__":

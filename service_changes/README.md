@@ -49,24 +49,26 @@ python -m service_changes.run service_changes/examples/messages.json \
 
 ## Alliant data
 
-Export Alliant's **Item Usage** report (All SKU Groups, customer/employee order) to Excel, then:
+Export two Alliant reports to Excel: **Item Usage** (All SKU Groups, customer/employee order) and the
+**Wearer Alpha List**. Then:
 
 ```bash
-python -m service_changes.alliant_report Alliant_Item_Usage_Report.xlsx --out service_changes/data
+python -m service_changes.alliant_report Alliant_Item_Usage_Report.xlsx \
+  --wearers Wearer_Alpha_List.xlsx --out service_changes/data
 ```
 
 This writes `customers.csv` (account, name, route, service_days, frequency), `current_items.csv`
 (account, item, quantity, sku, days, frequency, unit_price, delivery_unit) and `garments.csv`
-(account, employee number, sku, size, item, quantity). `service_changes/data/` is kept out of git
+(account, employee number, sku, size, item, quantity) and `wearers.csv` (account, employee number,
+first, last, department). `service_changes/data/` is kept out of git
 because it holds customer pricing.
 
-Run the parser against it with `--customers service_changes/data/customers.csv --items service_changes/data/current_items.csv`.
+Run the parser against it with `--data service_changes/data`.
 
 When Alliant already shows the total the driver asked for, the change is reported as "already entered"
 rather than raised as a question.
 
 ## Not built yet
 
-- Employee names for garment checks (the Item Usage report has employee numbers only)
 - Watching Slack live and replying in threads
 - Writing changes into Alliant

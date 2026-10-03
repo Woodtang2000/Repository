@@ -44,7 +44,7 @@ def render(m: dict, parsed: ParsedMessage, alliant: Alliant) -> str:
         for cc in result.changes:
             bits = [f"{cc.change.action.value} {cc.change.quantity if cc.change.quantity is not None else ''} {cc.change.item}".replace("  ", " ")]
             if cc.change.wearer:
-                bits.append(f"wearer {cc.change.wearer}")
+                bits.append(f"wearer {cc.change.wearer}" + (f" (#{cc.wearer_number})" if cc.wearer_number else ""))
             if cc.current is not None:
                 freq = frequency_label(cc.frequency_now)
                 bits.append(f"Alliant: {cc.alliant_item} = {cc.current}" + (f" ({freq})" if freq else ""))
@@ -98,12 +98,13 @@ def main():
     ap.add_argument("messages")
     ap.add_argument("--customers")
     ap.add_argument("--items")
+    ap.add_argument("--data", help="folder with customers/current_items/garments/wearers.csv (replaces --customers/--items)")
     mode = ap.add_mutually_exclusive_group()
     mode.add_argument("--replay")
     mode.add_argument("--eval")
     args = ap.parse_args()
 
-    alliant = Alliant.load(args.customers, args.items)
+    alliant = Alliant.from_dir(args.data) if args.data else Alliant.load(args.customers, args.items)
     messages = load_messages(args.messages)
     labels_path = args.replay or args.eval
     labels = {}

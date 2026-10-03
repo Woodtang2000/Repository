@@ -46,14 +46,55 @@ class Customer:
 
 
 @dataclass
+class Wearer:
+    employee: str  # Alliant wearer number
+    first: str
+    last: str
+    department: str = ""
+
+    @property
+    def name(self) -> str:
+        return f"{self.first} {self.last}".strip()
+
+
+@dataclass
 class Alliant:
     customers: list[Customer] = field(default_factory=list)
     items: dict[str, dict[str, int]] = field(default_factory=dict)  # account -> item -> qty
     frequency: dict[str, dict[str, str]] = field(default_factory=dict)  # account -> item -> Alliant freq code
+    wearers: dict[str, list[Wearer]] = field(default_factory=dict)  # account -> wearers
+    garments: dict[tuple[str, str], dict[str, int]] = field(default_factory=dict)  # (account, wearer#) -> "ITEM SIZE" -> qty
 
     @classmethod
-    def load(cls, customers_csv: str | None = None, items_csv: str | None = None) -> "Alliant":
+    def from_dir(cls, data_dir: str) -> "Alliant":
+        """Load whatever of customers/current_items/garments/wearers.csv exists in `data_dir`."""
+        import os
+        f = lambda n: os.path.join(data_dir, n) if os.path.exists(os.path.join(data_dir, n)) else None
+        return cls.load(f("customers.csv"), f("current_items.csv"), f("garments.csv"), f("wearers.csv"))
+
+    def find_wearer(self, account: str | None, name: str) -> Wearer | None:
+        """The wearer on `account` called `name` (first name, last name or both), if exactly one fits."""
+        want = re.sub(r"[^a-z ]", "", name.lower()).split()
+        if not want:
+            return None
+        hits = [w for w in self.wearers.get(account or "", [])
+                if all(p in re.sub(r"[^a-z ]", "", w.name.lower()).split() for p in want)]
+        return hits[0] if len(hits) == 1 else None
+
+    @classmethod
+    def load(cls, customers_csv: str | None = None, items_csv: str | None = None,
+             garments_csv: str | None = None, wearers_csv: str | None = None) -> "Alliant":
         data = cls()
+        if garments_csv:
+            with open(garments_csv, newline="") as f:
+                for row in csv.DictReader(f):
+                    label = f'{row["item"].strip()} {row["size"].strip()}'.strip()
+                    data.garments.setdefault((row["account"], row["employee"]), {})[label] = int(row["quantity"])
+        if wearers_csv:
+            with open(wearers_csv, newline="") as f:
+                for row in csv.DictReader(f):
+                    data.wearers.setdefault(row["account"], []).append(
+                        Wearer(row["employee"], row["first"].strip(), row["last"].strip(), row.get("department", "").strip()))
         if customers_csv:
             with open(customers_csv, newline="") as f:
                 for row in csv.DictReader(f):

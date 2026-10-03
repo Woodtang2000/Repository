@@ -142,3 +142,29 @@ def test_frequency_codes():
     assert frequency_label("") is None
     p = msg(None, Change(action=Action.add, item="3x10 charcoal heather mat", quantity=1, frequency="frequency 7"), customer="10th & M")
     assert readback(check(p, ALLIANT)) == "✅ 10th & M – 1 3x10 charcoal heather mat added (weekly)"
+
+
+def test_wearer_checks():
+    from .context import Wearer
+    a = Alliant(
+        wearers={"M3": [Wearer("163", "Adam", ""), Wearer("91", "Dale", "A")],
+                 "M6": [Wearer("20", "Karissa", ""), Wearer("1", "Rob", "Colins")]},
+        garments={("M3", "163"): {"PANT WORK BLACK 32 32": 14, "SHIRT INDUSTRIAL MIDAS L/S L": 14, "JACKET TEAM BLACK L": 2},
+                  ("M6", "20"): {"SHIRT INDUSTRIAL MIDAS S/S M": 11, "PANT WORK BLACK 32 30": 11}})
+    # The Sep 9 request Ana asked about: Adam has 14 pants, +3 makes 17.
+    p = ParsedMessage(category=Category.wearer_change, customer_as_written="Midas #3", account_number="M3", summary="",
+                      changes=[Change(action=Action.add, item="pants", quantity=3, wearer="Adam", size="same size")])
+    r = check(p, a)
+    assert r.changes[0].wearer_number == "163" and r.changes[0].current == 14 and r.changes[0].new_total == 17
+    assert readback(r) == "✅ Midas #3 – Adam: 3 pants (same size) (total 17) added"
+    # Stopping someone who is already gone, and adding someone new.
+    p = ParsedMessage(category=Category.wearer_change, customer_as_written="Midas #6", account_number="M6", summary="", changes=[
+        Change(action=Action.stop, item="all garments", wearer="Dalton"),
+        Change(action=Action.add, item="short sleeve shirts", quantity=11, wearer="Karissa", size="M"),
+        Change(action=Action.add, item="pants", quantity=11, wearer="Riley")])
+    r = check(p, a)
+    assert r.changes[0].already_done and "No wearer named Dalton" in r.changes[0].notes[0]
+    assert r.changes[1].alliant_item == "SHIRT INDUSTRIAL MIDAS S/S M" and r.changes[1].current == 11
+    assert r.changes[1].already_done and r.changes[1].new_total == 11
+    assert r.changes[2].notes == ["Riley is not in Alliant yet (new wearer)"]
+    assert a.find_wearer("M6", "rob colins").employee == "1" and a.find_wearer("M6", "Bob") is None
