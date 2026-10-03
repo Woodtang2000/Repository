@@ -127,3 +127,15 @@ def test_decode_days():
     assert decode_days("M  H   ") == ["Mon", "Thu"]
     assert decode_days("MTWHFSU") == ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
     assert decode_days("") == []
+
+
+def test_frequency_codes():
+    from .context import frequency_label
+    assert frequency_label("7") == "weekly"
+    assert frequency_label("5") == frequency_label("6") == "every other week"
+    assert frequency_label("2") == "monthly, week 2"
+    assert frequency_label("8") == "more than once a week"
+    assert frequency_label("A2") == "frequency A2"  # not defined yet
+    assert frequency_label("") is None
+    p = msg(None, Change(action=Action.add, item="3x10 charcoal heather mat", quantity=1, frequency="frequency 7"), customer="10th & M")
+    assert readback(check(p, ALLIANT)) == "✅ 10th & M – 1 3x10 charcoal heather mat added (weekly)"

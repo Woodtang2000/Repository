@@ -2,7 +2,7 @@
 import re
 from dataclasses import dataclass, field
 
-from .context import Alliant
+from .context import Alliant, frequency_label
 from .schema import Action, Category, Change, ParsedMessage
 
 
@@ -60,6 +60,7 @@ def current_qty(alliant: Alliant, account: str | None, item: str) -> tuple[str, 
 class CheckedChange:
     change: Change
     alliant_item: str | None = None
+    frequency_now: str | None = None  # Alliant code for the matched item
     already_done: bool = False
     current: int | None = None
     new_total: int | None = None
@@ -89,6 +90,7 @@ def check(parsed: ParsedMessage, alliant: Alliant) -> Result:
         found = current_qty(alliant, parsed.account_number, ch.alliant_item or ch.item) if not ch.wearer else None
         if found:
             cc.alliant_item, cc.current = found
+            cc.frequency_now = alliant.frequency.get(parsed.account_number or "", {}).get(cc.alliant_item)
         q = ch.quantity
 
         if ch.action == Action.stop:
@@ -144,7 +146,8 @@ def _tail(cc: CheckedChange) -> str:
     if cc.current is not None and ch.action in (Action.set, Action.stop):
         s += f" (was {cc.current})"
     if ch.frequency:
-        s += f" ({ch.frequency})"
+        m = re.fullmatch(r"(?:freq(?:uency)?\s*)?([0-9][0-9]?|[A-Z][0-9])", ch.frequency.strip(), re.I)
+        s += f" ({frequency_label(m.group(1)) if m else ch.frequency})"
     if ch.effective:
         s += f" – {ch.effective}" if ch.effective.lower().startswith("until") else f" – starts {ch.effective}"
     return s

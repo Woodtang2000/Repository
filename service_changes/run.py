@@ -14,7 +14,7 @@ import json
 from datetime import datetime
 
 from .checks import check, readback
-from .context import ALASKA, Alliant, route_from_channel, service_day
+from .context import ALASKA, Alliant, frequency_label, route_from_channel, service_day
 from .schema import Category, ParsedMessage
 
 ACTIONABLE = {Category.item_change, Category.wearer_change, Category.hold_or_closure, Category.special_order}
@@ -46,7 +46,8 @@ def render(m: dict, parsed: ParsedMessage, alliant: Alliant) -> str:
             if cc.change.wearer:
                 bits.append(f"wearer {cc.change.wearer}")
             if cc.current is not None:
-                bits.append(f"Alliant: {cc.alliant_item} = {cc.current}")
+                freq = frequency_label(cc.frequency_now)
+                bits.append(f"Alliant: {cc.alliant_item} = {cc.current}" + (f" ({freq})" if freq else ""))
             if cc.new_total is not None:
                 bits.append(f"new total {cc.new_total}")
             bits += cc.notes

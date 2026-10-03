@@ -26,6 +26,15 @@ def service_day(ts: str | float) -> str:
     return DAYS[datetime.fromtimestamp(float(ts), ALASKA).weekday()]
 
 
+def frequency_label(code: str | None) -> str | None:
+    """Alliant delivery frequency code in plain words (codes per Snow White's office)."""
+    code = (code or "").strip().upper()
+    if code in ("1", "2", "3", "4"):
+        return f"monthly, week {code}"
+    return {"5": "every other week", "6": "every other week", "7": "weekly",
+            "8": "more than once a week"}.get(code, f"frequency {code}" if code else None)
+
+
 @dataclass
 class Customer:
     account: str
@@ -38,6 +47,7 @@ class Customer:
 class Alliant:
     customers: list[Customer] = field(default_factory=list)
     items: dict[str, dict[str, int]] = field(default_factory=dict)  # account -> item -> qty
+    frequency: dict[str, dict[str, str]] = field(default_factory=dict)  # account -> item -> Alliant freq code
 
     @classmethod
     def load(cls, customers_csv: str | None = None, items_csv: str | None = None) -> "Alliant":
@@ -50,7 +60,10 @@ class Alliant:
         if items_csv:
             with open(items_csv, newline="") as f:
                 for row in csv.DictReader(f):
-                    data.items.setdefault(row["account"].strip(), {})[row["item"].strip()] = int(row["quantity"])
+                    acct, item = row["account"].strip(), row["item"].strip()
+                    data.items.setdefault(acct, {})[item] = int(row["quantity"])
+                    if row.get("frequency"):
+                        data.frequency.setdefault(acct, {})[item] = row["frequency"].strip()
         return data
 
     def match_account(self, name: str | None, route: str | None, day: str) -> str | None:

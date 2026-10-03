@@ -26,6 +26,8 @@ Classify the message and extract every change in it. Rules:
   Store numbers and departments matter: "Safeway 1817 Deli" is not "Safeway 1817 Meat".
 - Add a question for the driver only when something needed to enter the change is genuinely missing or
   ambiguous (which customer, which mat, which size, which employee). Do not ask about things that are clear.
+- Alliant frequency codes: 1-4 = once a month in that week, 5 or 6 = every other week, 7 = weekly,
+  8 = more than once a week. Write frequency in plain words ("frequency 7" -> "weekly"; "bi-weekly" -> "every other week").
 - Plant completion posts ("You're 100% complete with the linens"), "ok", "done", and other replies are not_a_request.
 """
 
