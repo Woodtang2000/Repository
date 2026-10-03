@@ -117,7 +117,7 @@ def _end_state(c) -> tuple:
     return (wearer, c.action.value, c.quantity)
 
 
-def score(parsed: ParsedMessage, label: ParsedMessage) -> list[str]:
+def score(parsed: ParsedMessage, label: ParsedMessage, alliant: Alliant | None = None) -> list[str]:
     """Differences that matter for entering the change. Wording of items and questions is not scored."""
     issues = []
     if parsed.category != label.category:
@@ -128,8 +128,10 @@ def score(parsed: ParsedMessage, label: ParsedMessage) -> list[str]:
     want = sorted(_end_state(c) for c in label.changes)
     if got != want:
         issues.append(f"changes {got} != {want}")
-    if bool(parsed.questions_for_driver) != bool(label.questions_for_driver):
-        issues.append("asked a question" if parsed.questions_for_driver else "missed a question")
+    # Count every question the bot would show, including ones the Alliant checks add.
+    asked = check(parsed, alliant).questions if alliant else parsed.questions_for_driver
+    if bool(asked) != bool(label.questions_for_driver):
+        issues.append("asked a question" if asked else "missed a question")
     return issues
 
 
@@ -171,7 +173,7 @@ def main():
             fill_item_matches(client, parsed, alliant)
         print(render(m, parsed, alliant), "\n")
         if args.eval:
-            issues = score(parsed, labels[m["id"]])
+            issues = score(parsed, labels[m["id"]], alliant)
             passed += not issues
             print(("✔ matches label" if not issues else "✘ " + "; ".join(issues)), "\n")
     if args.eval:

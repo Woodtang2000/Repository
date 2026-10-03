@@ -39,6 +39,8 @@ Classify the message and extract every change in it. Rules:
   the driver says.
 - Holds, closures, skipped weeks and cancelled accounts are hold_or_closure with NO changes: describe them in
   summary only ("closed 9/5 to 9/13"). Route order, redates and stop moves are route_or_schedule with no changes.
+- When part of a message is clear and part isn't, list the clear changes AND ask about the rest; don't hold
+  back a certain change because another one is in doubt.
 - Record what the driver is asking the office to do, not everything mentioned. If a customer stopped two mats but
   the driver thinks only one should go, that is a question for the driver, not two stops.
 - Garments for a department (meat, deli, bakery, seafood) belong to that department's account when one exists.
