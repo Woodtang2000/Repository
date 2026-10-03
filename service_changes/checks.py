@@ -286,22 +286,16 @@ def _do(ch: Change) -> str:
 
 
 def ticket(result: Result, alliant: Alliant, with_readback: bool = True) -> str:
-    """Work ticket for the office: who, where, and one line per thing to key into Alliant, verb first.
+    """Work ticket for the office: account and name, then one line per thing to key into Alliant, verb first.
     The same fields are what an automated entry needs."""
     p = result.parsed
     acct = p.account_number
     cust = next((c for c in alliant.customers if c.account == acct), None)
     card = alliant.cards.get(acct or "", {})
     if cust:
-        out = [f"📋 *{cust.name}*  `{acct}`"]
-        where = f"Route {cust.route}"
-        if card.get("stop_sequence"):
-            where += " · " + ", ".join(re.sub(r"^(\w+) 0*(\d+)$", r"\1 stop \2", x) for x in card["stop_sequence"].split(";"))
-        elif cust.service_days:
-            where += f" · {', '.join(cust.service_days)}"
-        out.append(where)
+        out = [f"*{acct}*  {cust.name}"]
     else:
-        out = [f"📋 *{p.customer_as_written or 'Customer?'}*  ⚠️ account not matched, please look it up"]
+        out = [f"⚠️ *Account not matched*  {p.customer_as_written or 'customer?'}: please look it up"]
     note = (card.get("special_instructions") or "").strip()
     if note and "Remittance" not in note:
         out.append(f"_📝 {note}_")

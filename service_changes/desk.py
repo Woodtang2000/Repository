@@ -179,12 +179,10 @@ class Desk:
         else:
             lines = [f"📣 *FYI: {parsed.category.value.replace('_', ' ')}*", parsed.summary]
             rb = f"✅ Office has it: {parsed.summary}"
-        lines[1 if len(lines) > 1 else 0] += f" · from {author}"
         if label:
-            said = f"{label}" + (f": _\u201c{_short(latest)}\u201d_" if latest else "")
-            lines.insert(2, said)
+            lines.insert(1, f"{label}" + (f": _\u201c{_short(latest)}\u201d_" if latest else ""))
         text = "\n".join(lines + ["", _quote(_short(m.get("text", ""), 300)),
-                                   f"<{link}|Driver's thread> · React ✅ when it's in Alliant"])
+                                   f"<{link}|#{route_name} thread> · React ✅ when it's in Alliant"])
         new = _post(self.slack, self.desk_id, text, {"kind": "ticket", "src_channel": channel, "src_ts": m["ts"],
                                                      "readback": rb, "driver": author, "driver_id": m.get("user")})
         for old_ts in replaces:
