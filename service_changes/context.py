@@ -66,6 +66,8 @@ class Alliant:
     wearers: dict[str, list[Wearer]] = field(default_factory=dict)  # account -> wearers
     garments: dict[tuple[str, str], dict[str, int]] = field(default_factory=dict)  # (account, wearer#) -> "ITEM SIZE" -> qty
     aliases: dict[str, list[str]] = field(default_factory=dict)  # account -> other names drivers use ("BSI")
+    sku: dict[tuple, str] = field(default_factory=dict)  # (account, item) or (account, wearer#, "ITEM SIZE") -> Alliant SKU
+    cards: dict[str, dict] = field(default_factory=dict)  # account -> record card header (stop_sequence, special_instructions, ...)
 
     @classmethod
     def from_dir(cls, data_dir: str) -> "Alliant":
@@ -74,6 +76,9 @@ class Alliant:
         f = lambda n: os.path.join(data_dir, n) if os.path.exists(os.path.join(data_dir, n)) else None
         data = cls.load(f("customers.csv"), f("current_items.csv"), f("garments.csv"), f("wearers.csv"))
         data.load_aliases(f("aliases.csv") or os.path.join(os.path.dirname(__file__), "aliases.csv"))
+        if f("customer_cards.csv"):
+            with open(f("customer_cards.csv"), newline="") as fh:
+                data.cards = {row["account"]: row for row in csv.DictReader(fh)}
         if f("card_lines.csv") and f("current_items.csv"):
             data._autocount_from_cards(f("current_items.csv"), f("card_lines.csv"))
         return data
@@ -118,6 +123,8 @@ class Alliant:
                 for row in csv.DictReader(f):
                     label = f'{row["item"].strip()} {row["size"].strip()}'.strip()
                     data.garments.setdefault((row["account"], row["employee"]), {})[label] = int(row["quantity"])
+                    if row.get("sku"):
+                        data.sku[(row["account"], row["employee"], label)] = row["sku"].strip()
         if wearers_csv:
             with open(wearers_csv, newline="") as f:
                 for row in csv.DictReader(f):
@@ -133,6 +140,8 @@ class Alliant:
                 for row in csv.DictReader(f):
                     acct, item = row["account"].strip(), row["item"].strip()
                     data.items.setdefault(acct, {})[item] = int(row["quantity"])
+                    if row.get("sku"):
+                        data.sku[(acct, item)] = row["sku"].strip()
                     if row.get("frequency"):
                         data.frequency.setdefault(acct, {})[item] = row["frequency"].strip()
                     if (row.get("autocount") or "").strip():

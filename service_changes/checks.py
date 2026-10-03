@@ -206,6 +206,12 @@ def _what(ch: Change) -> str:
     return " ".join(x for x in [qty, ch.size, ch.item] if x)
 
 
+def _freq_words(text: str) -> str:
+    """"frequency 7" or "7" -> "weekly"; plain words are kept."""
+    m = re.fullmatch(r"(?:freq(?:uency)?\s*)?([0-9][0-9]?|[A-Z][0-9])", text.strip(), re.I)
+    return frequency_label(m.group(1)) if m else text
+
+
 def _tail(cc: CheckedChange) -> str:
     ch, s = cc.change, ""
     if cc.new_total is not None and ch.action not in (Action.stop, Action.set) and not ch.wearer:
@@ -213,8 +219,7 @@ def _tail(cc: CheckedChange) -> str:
     if cc.current is not None and ch.action in (Action.set, Action.stop):
         s += f" (was {cc.current})"
     if ch.frequency:
-        m = re.fullmatch(r"(?:freq(?:uency)?\s*)?([0-9][0-9]?|[A-Z][0-9])", ch.frequency.strip(), re.I)
-        s += f" ({frequency_label(m.group(1)) if m else ch.frequency})"
+        s += f" ({_freq_words(ch.frequency)})"
     if ch.effective:
         s += f" – {ch.effective}" if ch.effective.lower().startswith("until") else f" – starts {ch.effective}"
     return s
@@ -248,3 +253,58 @@ def readback(result: Result) -> str:
         parts.append(f"{_what(ch)} {verb}{_tail(cc)}")
         i += 1
     return f"✅ {p.customer_as_written} – " + "; ".join(parts) if parts else ""
+
+
+def ticket(result: Result, alliant: Alliant) -> str:
+    """Work ticket for the office: account, route and stop, and each line as Alliant names it, so the
+    change can be keyed in without looking anything up. The same fields are what an automated entry needs."""
+    p = result.parsed
+    acct = p.account_number
+    cust = next((c for c in alliant.customers if c.account == acct), None)
+    card = alliant.cards.get(acct or "", {})
+    if cust:
+        head = f"📋 *{cust.name}* · Acct *{acct}* · Route {cust.route}"
+        if card.get("stop_sequence"):
+            head += " · " + ", ".join(re.sub(r"^(\w+) (\d+)$", r"\1 stop \2", x) for x in card["stop_sequence"].split(";"))
+        elif cust.service_days:
+            head += f" · {', '.join(cust.service_days)}"
+    else:
+        head = f"📋 *{p.customer_as_written or 'Customer?'}* · Acct *not matched*: please check"
+    out = [head]
+    note = (card.get("special_instructions") or "").strip()
+    if note and "Remittance" not in note:
+        out.append(f"_Card note: {note}_")
+    for cc in result.changes:
+        ch = cc.change
+        if ch.wearer:
+            who = f"#{cc.wearer_number} {ch.wearer}" if cc.wearer_number else f"{ch.wearer} (new wearer)"
+            what = cc.alliant_item or " ".join(x for x in [ch.size, ch.item] if x)
+            sku = alliant.sku.get((acct, cc.wearer_number, cc.alliant_item)) if cc.wearer_number and cc.alliant_item else None
+            line = f"• {who} · {what}"
+        else:
+            what = cc.alliant_item or f"{ch.item} (not on account)"
+            sku = alliant.sku.get((acct, cc.alliant_item)) if cc.alliant_item else None
+            line = f"• {what}"
+        if sku:
+            line += f" `{sku}`"
+        if cc.current is not None and cc.new_total is not None:
+            line += f": {'autocount ' if not ch.wearer else ''}*{cc.current} → {cc.new_total}*"
+        elif cc.new_total is not None:
+            line += f": new total *{cc.new_total}*"
+        elif ch.action == Action.stop:
+            line += ": *stop*"
+        elif ch.quantity is not None:
+            line += f": {ch.action.value} {ch.quantity}"
+        freq = _freq_words(ch.frequency) if ch.frequency else frequency_label(cc.frequency_now)
+        if freq:
+            line += f" ({freq})"
+        if cc.already_done:
+            line += " · already in Alliant"
+        out.append(line)
+    if p.category == Category.hold_or_closure and not result.changes:
+        out.append(f"• {p.summary}")
+    if result.questions:
+        out += [f"❓ {q}" for q in result.questions]
+    elif rb := readback(result):
+        out.append(f"Readback when done: {rb}")
+    return "\n".join(out)

@@ -13,7 +13,7 @@ import argparse
 import json
 from datetime import datetime
 
-from .checks import check, readback
+from .checks import check, readback, ticket
 from .context import ALASKA, Alliant, frequency_label, route_from_channel, service_day
 from .schema import Category, ParsedMessage
 
@@ -60,6 +60,7 @@ def render(m: dict, parsed: ParsedMessage, alliant: Alliant) -> str:
             out += [f"❓ Ask driver: {q}" for q in result.questions]
         elif rb := readback(result):
             out += ["", f"Proposed readback: `{rb}`"]
+        out += ["", "Office ticket:", *("> " + t for t in ticket(result, alliant).splitlines())]
     else:
         out.append("_No account change; not queued._")
     return "\n".join(out)

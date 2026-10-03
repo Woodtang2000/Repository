@@ -95,6 +95,14 @@ inventory (about 98% of item lines). Where no autocount was found, the checks ac
 it, whichever fits the driver's numbers. (The `--cards` option of `alliant_report.py` reads the Excel
 conversion of the cards instead, which loses every header after the first; use the PDF when you can.)
 
+## Office ticket
+
+For every change the report (and later the bot's Slack reply) includes a ticket with what the office needs
+to key it in: customer name, Alliant account, route and stop, each line's Alliant item name and SKU, the
+wearer number for garments, the autocount before and after, the frequency, and any delivery note from the
+record card. Drivers don't have to supply any of it. The same fields are what entering changes into
+Alliant automatically would need.
+
 ## Nicknames
 
 `aliases.csv` lists other names drivers use for a customer (`account,also_called`, e.g. `1003-1-00000,BSI`).
