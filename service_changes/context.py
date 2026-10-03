@@ -65,6 +65,7 @@ class Alliant:
     autocount: dict[str, dict[str, int]] = field(default_factory=dict)  # account -> item -> per-delivery autocount, when exported
     wearers: dict[str, list[Wearer]] = field(default_factory=dict)  # account -> wearers
     garments: dict[tuple[str, str], dict[str, int]] = field(default_factory=dict)  # (account, wearer#) -> "ITEM SIZE" -> qty
+    aliases: dict[str, list[str]] = field(default_factory=dict)  # account -> other names drivers use ("BSI")
 
     @classmethod
     def from_dir(cls, data_dir: str) -> "Alliant":
@@ -72,6 +73,7 @@ class Alliant:
         import os
         f = lambda n: os.path.join(data_dir, n) if os.path.exists(os.path.join(data_dir, n)) else None
         data = cls.load(f("customers.csv"), f("current_items.csv"), f("garments.csv"), f("wearers.csv"))
+        data.load_aliases(f("aliases.csv") or os.path.join(os.path.dirname(__file__), "aliases.csv"))
         if f("card_lines.csv") and f("current_items.csv"):
             data._autocount_from_cards(f("current_items.csv"), f("card_lines.csv"))
         return data
@@ -89,6 +91,14 @@ class Alliant:
                 found = cards.get((row["account"].strip(), row["sku"].strip(), int(row["quantity"])))
                 if found:
                     self.autocount.setdefault(row["account"].strip(), {})[row["item"].strip()] = found.pop(0)
+
+    def load_aliases(self, path: str | None) -> None:
+        """Nicknames the office keeps in aliases.csv (account, also_called)."""
+        import os
+        if path and os.path.exists(path):
+            with open(path, newline="") as f:
+                for row in csv.DictReader(f):
+                    self.aliases.setdefault(row["account"].strip(), []).append(row["also_called"].strip())
 
     def find_wearer(self, account: str | None, name: str) -> Wearer | None:
         """The wearer on `account` called `name` (first name, last name or both), if exactly one fits."""
@@ -133,8 +143,10 @@ class Alliant:
         """Account number when `name` matches exactly one candidate, ignoring case and punctuation."""
         if not name:
             return None
-        key = re.sub(r"[^a-z0-9]", "", name.lower())
-        hits = [c.account for c in self.candidates(route, day) if re.sub(r"[^a-z0-9]", "", c.name.lower()) == key]
+        norm = lambda s: re.sub(r"[^a-z0-9]", "", s.lower())
+        key = norm(name)
+        hits = [c.account for c in self.candidates(route, day)
+                if norm(c.name) == key or any(norm(a) == key for a in self.aliases.get(c.account, []))]
         return hits[0] if len(hits) == 1 else None
 
     def candidates(self, route: str | None, day: str) -> list[Customer]:

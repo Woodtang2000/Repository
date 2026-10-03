@@ -260,3 +260,20 @@ def test_record_card_parsing():
     towel, shirt = card["items"]
     assert (towel["sku"], towel["inventory"], towel["autocount"], towel["frequency"]) == ("5-01-01", 240, 120, "8")
     assert (shirt["wearer"], shirt["sku"], shirt["inventory"], shirt["frequency"]) == ("12", "2-LS524BK", 11, "7")
+
+
+def test_aliases_and_department_fix():
+    from .context import Wearer
+    from .run import fix_department, _end_state
+    a = Alliant(customers=[Customer("B1", "BOB'S SERVICES", "6", ["Thu"]), Customer("S0", "SAFEWAY 1817", "2", ["Fri"]),
+                           Customer("S2", "SAFEWAY 1817 (MEAT)", "2", ["Fri"])],
+                wearers={"S2": [Wearer("45", "Raven", "")]}, aliases={"B1": ["BSI"]})
+    assert a.match_account("BSI", "6", "Thu") == "B1"
+    assert "B1 | BOB'S SERVICES | Thu | also called: BSI" in build_prompt("BSI stop mop heads", "route-6", "1790636236", a)
+    p = ParsedMessage(category=Category.wearer_change, customer_as_written="Safeway 1817", account_number="S0", summary="",
+                      changes=[Change(action=Action.add, item="meat coat", quantity=1, wearer="Raven")])
+    fix_department(p, a, "2", "Fri")
+    assert p.account_number == "S2"
+    # "add 4, total 6" and "set to 6" end in the same place
+    assert _end_state(Change(action=Action.add, item="mat", quantity=4, stated_total=6)) == \
+        _end_state(Change(action=Action.set, item="mat", quantity=6))

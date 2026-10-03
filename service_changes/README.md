@@ -41,7 +41,7 @@ python -m service_changes.run service_changes/examples/messages.json \
   --items service_changes/examples/demo_current_items.csv \
   --replay service_changes/examples/labels.json
 
-# Let Claude read the messages and score it against the labels (needs ANTHROPIC_API_KEY)
+# Let Claude read the messages and score it against the labels (needs ANTHROPIC_API_KEY or SERVICE_DESK_API_KEY)
 python -m service_changes.run service_changes/examples/messages.json \
   --customers service_changes/examples/demo_customers.csv \
   --items service_changes/examples/demo_current_items.csv \
@@ -94,6 +94,12 @@ its autocount). `--data` loads them automatically; the autocount is matched to i
 inventory (about 98% of item lines). Where no autocount was found, the checks accept inventory or half of
 it, whichever fits the driver's numbers. (The `--cards` option of `alliant_report.py` reads the Excel
 conversion of the cards instead, which loses every header after the first; use the PDF when you can.)
+
+## Nicknames
+
+`aliases.csv` lists other names drivers use for a customer (`account,also_called`, e.g. `1003-1-00000,BSI`).
+The office can add a line whenever the bot fails to recognize a name. They're shown to the AI next to the
+customer and used for exact matches.
 
 ## Not built yet
 

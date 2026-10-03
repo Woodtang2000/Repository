@@ -28,6 +28,12 @@ Classify the message and extract every change in it. Rules:
   ambiguous (which customer, which mat, which size, which employee). Do not ask about things that are clear.
 - Alliant frequency codes: 1-4 = once a month in that week, 5 or 6 = every other week, 7 = weekly,
   8 = more than once a week, 9 = first delivery only, 0 = no delivery, A1-A3 = once every 8 weeks in that week. Write frequency in plain words ("frequency 7" -> "weekly"; "bi-weekly" -> "every other week").
+- Holds, closures, skipped weeks and cancelled accounts are hold_or_closure with NO changes: describe them in
+  summary only ("closed 9/5 to 9/13"). Route order, redates and stop moves are route_or_schedule with no changes.
+- Record what the driver is asking the office to do, not everything mentioned. If a customer stopped two mats but
+  the driver thinks only one should go, that is a question for the driver, not two stops.
+- Garments for a department (meat, deli, bakery, seafood) belong to that department's account when one exists.
+- The list may show other names a customer goes by ("also called: BSI"); use them to match.
 - Plant completion posts ("You're 100% complete with the linens"), "ok", "done", and other replies are not_a_request.
 """
 
@@ -40,7 +46,9 @@ def build_prompt(text: str, channel: str, ts: str, alliant: Alliant) -> str:
     if cands:
         lines.append(f"Customers on this route (account | name | service days). Prefer {day} stops; "
                      "drivers sometimes post a day late:")
-        lines += [f"{c.account} | {c.name} | {';'.join(c.service_days)}" for c in cands]
+        lines += [f"{c.account} | {c.name} | {';'.join(c.service_days)}"
+                  + (f" | also called: {', '.join(alliant.aliases[c.account])}" if c.account in alliant.aliases else "")
+                  for c in cands]
     else:
         lines.append("No customer list loaded; leave account_number null.")
     lines += ["", "Message:", text]

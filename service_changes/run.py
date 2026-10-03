@@ -65,6 +65,30 @@ def render(m: dict, parsed: ParsedMessage, alliant: Alliant) -> str:
     return "\n".join(out)
 
 
+def fix_department(parsed: ParsedMessage, alliant: Alliant, route: str | None, day: str) -> None:
+    """A garment change names a wearer: make sure the account is the department that wearer is on.
+
+    "Raven @ Safeway 1817 needs a meat coat" can land on SAFEWAY 1817 when Raven is on SAFEWAY 1817 (MEAT).
+    If the chosen account doesn't have the wearer and exactly one sister account (same name before the
+    brackets, same route) does, switch to it.
+    """
+    names = [c.wearer for c in parsed.changes if c.wearer]
+    if not names or not parsed.account_number or not alliant.wearers:
+        return
+    if any(alliant.find_wearer(parsed.account_number, n) for n in names):
+        return
+    by_acct = {c.account: c for c in alliant.customers}
+    chosen = by_acct.get(parsed.account_number)
+    if not chosen:
+        return
+    base = chosen.name.split("(")[0].strip().upper()
+    sisters = [c.account for c in alliant.candidates(route, day)
+               if c.account != chosen.account and c.name.split("(")[0].strip().upper() == base]
+    hits = [a for a in sisters if all(alliant.find_wearer(a, n) for n in names)]
+    if len(hits) == 1:
+        parsed.account_number = hits[0]
+
+
 def fill_item_matches(client, parsed: ParsedMessage, alliant: Alliant) -> None:
     """Ask Claude to place any item the word match couldn't find on the account."""
     from .checks import current_qty
@@ -78,6 +102,18 @@ def fill_item_matches(client, parsed: ParsedMessage, alliant: Alliant) -> None:
             c.alliant_item = name
 
 
+def _end_state(c) -> tuple:
+    """What a change leaves in Alliant, so "add 4, total 6" and "set to 6" score the same."""
+    wearer = (c.wearer or "").lower()
+    if c.action.value in ("add", "decrease") and c.stated_total is not None:
+        return (wearer, "total", c.stated_total)
+    if c.action.value == "set":
+        return (wearer, "total", c.quantity)
+    if c.action.value == "stop":
+        return (wearer, "total", 0)
+    return (wearer, c.action.value, c.quantity)
+
+
 def score(parsed: ParsedMessage, label: ParsedMessage) -> list[str]:
     """Differences that matter for entering the change. Wording of items and questions is not scored."""
     issues = []
@@ -85,8 +121,8 @@ def score(parsed: ParsedMessage, label: ParsedMessage) -> list[str]:
         issues.append(f"category {parsed.category.value} != {label.category.value}")
     if label.account_number and parsed.account_number != label.account_number:
         issues.append(f"account {parsed.account_number} != {label.account_number}")
-    got = sorted((c.action.value, c.quantity, c.stated_total, (c.wearer or "").lower()) for c in parsed.changes)
-    want = sorted((c.action.value, c.quantity, c.stated_total, (c.wearer or "").lower()) for c in label.changes)
+    got = sorted(_end_state(c) for c in parsed.changes)
+    want = sorted(_end_state(c) for c in label.changes)
     if got != want:
         issues.append(f"changes {got} != {want}")
     if bool(parsed.questions_for_driver) != bool(label.questions_for_driver):
@@ -118,7 +154,9 @@ def main():
         import anthropic
 
         from .parser import parse_message
-        client = anthropic.Anthropic()
+        import os
+        # The Service Desk environment stores the key as SERVICE_DESK_API_KEY.
+        client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("SERVICE_DESK_API_KEY"))
 
     passed = 0
     for m in messages:
@@ -126,6 +164,7 @@ def main():
             parsed = labels[m["id"]]
         else:
             parsed = parse_message(client, m["text"], m["channel"], m["ts"], alliant)
+            fix_department(parsed, alliant, route_from_channel(m["channel"]), service_day(m["ts"]))
             fill_item_matches(client, parsed, alliant)
         print(render(m, parsed, alliant), "\n")
         if args.eval:
