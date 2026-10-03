@@ -31,8 +31,10 @@ def frequency_label(code: str | None) -> str | None:
     code = (code or "").strip().upper()
     if code in ("1", "2", "3", "4"):
         return f"monthly, week {code}"
-    return {"5": "every other week", "6": "every other week", "7": "weekly",
-            "8": "more than once a week"}.get(code, f"frequency {code}" if code else None)
+    if re.fullmatch(r"A[1-8]", code):
+        return f"every 8 weeks, week {code[1]}"
+    return {"5": "every other week", "6": "every other week", "7": "weekly", "8": "more than once a week",
+            "9": "first delivery only", "0": "no delivery"}.get(code, f"frequency {code}" if code else None)
 
 
 @dataclass

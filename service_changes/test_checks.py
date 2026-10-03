@@ -135,7 +135,10 @@ def test_frequency_codes():
     assert frequency_label("5") == frequency_label("6") == "every other week"
     assert frequency_label("2") == "monthly, week 2"
     assert frequency_label("8") == "more than once a week"
-    assert frequency_label("A2") == "frequency A2"  # not defined yet
+    assert frequency_label("9") == "first delivery only"
+    assert frequency_label("0") == "no delivery"
+    assert frequency_label("A2") == "every 8 weeks, week 2"
+    assert frequency_label("B3") == "frequency B3"  # not defined yet
     assert frequency_label("") is None
     p = msg(None, Change(action=Action.add, item="3x10 charcoal heather mat", quantity=1, frequency="frequency 7"), customer="10th & M")
     assert readback(check(p, ALLIANT)) == "✅ 10th & M – 1 3x10 charcoal heather mat added (weekly)"
