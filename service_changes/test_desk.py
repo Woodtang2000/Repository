@@ -200,3 +200,11 @@ def test_real_route_channels_need_the_live_setting(monkeypatch):
     monkeypatch.delenv("SERVICE_DESK_LIVE", raising=False)
     with pytest.raises(SystemExit, match="#route-12 are real route channels"):
         desk.main()
+
+
+def test_office_person_who_posted_can_answer_the_question(setup):
+    slack, d = setup
+    post = slack.say("C1", "U2", "more mats at wendys")  # Sonja posts a call-in
+    assert d.run_once()["asked"] == 1
+    slack.say("C1", "U2", "6", thread_ts=post["ts"])
+    assert d.run_once()["ticket"] == 1

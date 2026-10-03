@@ -116,10 +116,11 @@ class Desk:
     def handle_driver_message(self, route_name: str, channel: str, m: dict, open_tickets: dict) -> str | None:
         """Look at one top-level route message and its thread; act on anything new. Returns what it did."""
         thread = self.thread(channel, m)
-        # New input = top-level post or a non-office reply that the bot hasn't marked 👀 yet.
+        # New input = the top-level post, or a reply from whoever posted it or anyone not in the office, that the
+        # bot hasn't marked 👀 yet. Other office replies in the thread are context only.
         todo = [t for i, t in enumerate(thread)
                 if not _is_bot(t, self.me) and t.get("subtype") in (None, "thread_broadcast") and not _seen(t, self.me)
-                and (i == 0 or not self.is_office(t.get("user")))]
+                and (i == 0 or t.get("user") == m.get("user") or not self.is_office(t.get("user")))]
         if not todo:
             return None
         trigger = todo[-1]
