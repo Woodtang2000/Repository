@@ -85,7 +85,9 @@ def match_items(client: anthropic.Anthropic, driver_items: list[str], account_it
     """Second pass, only for items the word match couldn't place: let Claude pick from the account's real list."""
     prompt = ("Alliant items on this customer's account:\n" + "\n".join(account_items)
               + "\n\nWhich Alliant item does each driver item mean? Drivers leave out colors and use slang "
-                "('mop heads' = MOP WET, 'bibs' = APRON ... BIB). Return null if two items fit equally or none fits.\n"
+                "('mop heads' = MOP WET, 'bibs' = APRON ... BIB), but a color they DO name must match: if no item "
+                "on the account is that color, return null (it may already be stopped). "
+                "Return null if two items fit equally or none fits.\n"
               + "\n".join(f"{i + 1}. {t}" for i, t in enumerate(driver_items)))
     response = client.beta.messages.parse(
         model=MODEL,

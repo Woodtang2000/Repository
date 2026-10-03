@@ -99,8 +99,9 @@ def fill_item_matches(client, parsed: ParsedMessage, alliant: Alliant) -> None:
     todo = [c for c in parsed.changes
             if not c.wearer and account_items and current_qty(alliant, parsed.account_number, c.item) is None]
     if todo:
+        from .checks import colors_agree
         for c, name in zip(todo, match_items(client, [c.item for c in todo], account_items)):
-            c.alliant_item = name
+            c.alliant_item = name if name and colors_agree(c.item, name) else None
 
 
 def _end_state(c) -> tuple:

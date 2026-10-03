@@ -151,6 +151,9 @@ def main():
     slack = WebClient(token=os.environ["SLACK_BOT_TOKEN"])
     claude = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("SERVICE_DESK_API_KEY"))
     alliant = Alliant.from_dir(args.data)
+    if args.live and os.environ.get("SERVICE_DESK_LIVE") != "1":
+        # Safety lock: replying in the drivers' channels takes a setting in the environment, not just a flag.
+        sys.exit("--live needs SERVICE_DESK_LIVE=1 in the environment. Until then the bot only posts to #service-desk-test.")
     n = run_once(slack, claude, alliant, args.since_minutes, args.live, args.dry_run)
     print(f"{n} post(s)")
 

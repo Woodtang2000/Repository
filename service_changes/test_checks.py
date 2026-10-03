@@ -308,3 +308,11 @@ def test_new_wearer_without_size_asks():
                       changes=[Change(action=Action.add, item="shirts", wearer="Riley"),
                                Change(action=Action.add, item="pants", wearer="Riley", size="42x32")])
     assert check(p, a).questions == ["What size shirts for Riley?"]
+
+
+def test_named_color_must_match():
+    from .checks import colors_agree
+    assert not colors_agree("4x6 Brandywine mat", "MAT CHARCOAL HEATHER 4X6")
+    assert colors_agree("4x6 charcoal mat", "MAT CHARCOAL HEATHER 4X6")
+    assert colors_agree("4x6 mat", "MAT CHARCOAL HEATHER 4X6")
+    assert colors_agree("24oz orange mop heads", "MOP WET 24 OZ")

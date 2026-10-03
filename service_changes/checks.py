@@ -20,6 +20,17 @@ SYNONYMS = [
     (r"\bshort ?sleeves?\b|\bss\b", "s/s"),
     (r"\blong ?sleeves?\b|\bls\b", "l/s"),
 ]
+COLORS = {"black", "blue", "brandywine", "brown", "burgundy", "charcoal", "confetti", "gold", "gray", "green", "grey",
+          "ivory", "navy", "orange", "red", "white", "yellow", "heather", "galaxy"}
+
+
+def colors_agree(driver_item: str, alliant_item: str) -> bool:
+    """A color the driver names must be in the Alliant item ("4x6 brandywine" is never MAT CHARCOAL HEATHER 4X6).
+    Orange and blue are exempt for mop heads, where they only mark the size."""
+    said = (_words(driver_item) & COLORS) - ({"orange", "blue"} if "mop" in driver_item.lower() else set())
+    return said <= _words(alliant_item)
+
+
 FILLER = {"mat", "towel", "the", "a", "of", "and", "s"}  # too generic to tell lines apart on their own
 
 
