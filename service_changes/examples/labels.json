@@ -141,7 +141,10 @@
   "r2-wendys": {
     "category": "hold_or_closure",
     "customer_as_written": "Wendy's 12318 Palmer",
-    "summary": "Closed for the winter; pick up mats and remove from delivery."
+    "summary": "Closed for the winter; pick up mats and remove from delivery.",
+    "questions_for_driver": [
+      "Which Wendy's is this (no Wendy's at 12318 Palmer on this route), and when do they reopen?"
+    ]
   },
   "r2-stoporder": {
     "category": "route_or_schedule",
@@ -324,6 +327,9 @@
         "action": "other",
         "item": "all towels (reduce by half)"
       }
+    ],
+    "questions_for_driver": [
+      "What is the last service date before they close for the season?"
     ]
   },
   "r5-midas6": {

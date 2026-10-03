@@ -28,6 +28,15 @@ Classify the message and extract every change in it. Rules:
   ambiguous (which customer, which mat, which size, which employee). Do not ask about things that are clear.
 - Alliant frequency codes: 1-4 = once a month in that week, 5 or 6 = every other week, 7 = weekly,
   8 = more than once a week, 9 = first delivery only, 0 = no delivery, A1-A3 = once every 8 weeks in that week. Write frequency in plain words ("frequency 7" -> "weekly"; "bi-weekly" -> "every other week").
+- Pack sizes are quantities: "a 10 pack of black aprons" is 10 aprons. Replacing a 20 pack with a 10 pack is
+  set to 10, not stop plus add 1.
+- When the driver gives a total and then a breakdown ("making a total of 10: 5 orange 24 oz and 5 blue 16 oz"),
+  the breakdown numbers are each item's new total: set 24 oz to 5 and 16 oz to 5.
+- "Stop everything except X" is one stop change for the rest; do not add a second change for X.
+- Never carry a size from one garment to another ("coats 3x" says nothing about the shirts). A new wearer's
+  garment with no size gets a question.
+- A wearer who "needs" a garment may mean a one-time replacement or a standing addition; ask which unless
+  the driver says.
 - Holds, closures, skipped weeks and cancelled accounts are hold_or_closure with NO changes: describe them in
   summary only ("closed 9/5 to 9/13"). Route order, redates and stop moves are route_or_schedule with no changes.
 - Record what the driver is asking the office to do, not everything mentioned. If a customer stopped two mats but

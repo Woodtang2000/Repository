@@ -291,3 +291,20 @@ def test_office_ticket():
         "_Card note: Back door only_",
         "• TOWEL BAR MOP GOLD STRIPE `5-01-01`: autocount *80 → 40* (weekly)",
         "Readback when done: ✅ Kobuk – 40 bar mops decreased – total now 40"]
+
+
+def test_add_matching_current_asks():
+    a = Alliant(items={"M": {"MAT CHARCOAL HEATHER 3X5": 2}})
+    r = check(msg("M", Change(action=Action.add, item="3x5 charcoal heather mat", quantity=2), customer="Moose's Tooth"), a)
+    assert r.questions == ["Moose's Tooth has 2 3x5 charcoal heather mat now. Add 2 more (total 4), or should they have 2 total?"]
+    r = check(msg("M", Change(action=Action.add, item="3x5 charcoal heather mat", quantity=1)), a)
+    assert not r.questions
+
+
+def test_new_wearer_without_size_asks():
+    from .context import Wearer
+    a = Alliant(wearers={"M8": [Wearer("3", "Chris", "")]})
+    p = ParsedMessage(category=Category.wearer_change, customer_as_written="Midas #8", account_number="M8", summary="",
+                      changes=[Change(action=Action.add, item="shirts", wearer="Riley"),
+                               Change(action=Action.add, item="pants", wearer="Riley", size="42x32")])
+    assert check(p, a).questions == ["What size shirts for Riley?"]

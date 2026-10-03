@@ -112,6 +112,8 @@ def _end_state(c) -> tuple:
         return (wearer, "total", c.quantity)
     if c.action.value == "stop":
         return (wearer, "total", 0)
+    if c.quantity is None:  # "reduce all towels in half": the kind of change matters less than that it's flagged
+        return (wearer, "change", None)
     return (wearer, c.action.value, c.quantity)
 
 

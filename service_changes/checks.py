@@ -93,6 +93,8 @@ def _check_wearer(cc: CheckedChange, account: str | None, alliant: Alliant) -> t
         return None
     w = alliant.find_wearer(account, ch.wearer)
     if w is None:
+        if ch.action == Action.add and not ch.size:
+            cc.questions.append(f"What size {ch.item} for {ch.wearer}?")
         if ch.action == Action.stop:
             cc.already_done = True
             cc.notes.append(f"No wearer named {ch.wearer} on this account (may already be stopped)")
@@ -173,6 +175,10 @@ def check(parsed: ParsedMessage, alliant: Alliant) -> Result:
             cc.already_done = True
             cc.new_total = cc.current
             cc.notes.append(f"Already has {cc.current}; may already be entered")
+        elif (ch.action == Action.add and ch.stated_total is None and q and cc.current == q and not ch.wearer):
+            # "Add two 3x5 mats" when they have 2: two more, or two in all? (Ana had to ask this one.)
+            cc.questions.append(f"{who} has {cc.current} {ch.item} now. Add {q} more (total {cc.current + q}), "
+                                f"or should they have {q} total?")
         elif cc.current == 0 and ch.action == Action.stop:
             cc.already_done = True
             cc.notes.append("Already 0 in Alliant")
