@@ -107,6 +107,29 @@ def match_items(client: anthropic.Anthropic, driver_items: list[str], account_it
     return [n if n in account_items else None for n in (names + [None] * len(driver_items))[: len(driver_items)]]
 
 
+class ReplyCheck(BaseModel):
+    reply: bool = Field(description="True if the new message answers, corrects or acknowledges what Service Desk said "
+                                    "about that request; false if it is a separate request (another customer or item).")
+
+
+def is_reply(client: anthropic.Anthropic, bot_said: str, request: str, message: str) -> bool:
+    """Drivers answer in the main channel, not a thread: is this message about the bot's last question or readback?"""
+    prompt = (f"A driver posted this service request:\n{request}\n\nService Desk then told the driver:\n{bot_said}\n\n"
+              f"The driver's next message in the channel:\n{message}\n\n"
+              "Is that message a reply to Service Desk about the same request (an answer, a correction, a thanks), "
+              "or a new, separate request?")
+    response = client.beta.messages.parse(
+        model=MODEL,
+        max_tokens=2000,
+        messages=[{"role": "user", "content": prompt}],
+        output_format=ReplyCheck,
+        output_config={"effort": "low"},
+        betas=["server-side-fallback-2026-07-01"],
+        fallbacks="default",
+    )
+    return bool(response.parsed_output and response.parsed_output.reply)
+
+
 def parse_message(client: anthropic.Anthropic, text: str, channel: str, ts: str, alliant: Alliant,
                   author: str = "", office: bool = False, previous: str = "") -> ParsedMessage:
     response = client.beta.messages.parse(

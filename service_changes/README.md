@@ -133,20 +133,21 @@ listener; the app manifest already enables it).
 
 ## The office workflow (`desk.py`)
 
-The go-live design: drivers talk to the bot, the office only sees clean tickets.
+The go-live design: drivers talk to the bot in their route channel, the office only sees clean tickets, and nobody
+has to use threads.
 
-1. A driver posts a change in a route channel. The bot reacts 👀 (picked up).
-2. If something is unclear it asks in the driver's thread, at most twice, and reads the answer together with
-   the original post. Clear requests skip this step.
-3. The ticket goes to the office channel (`--desk`): account, route, stop, item, SKU, counts, plus the driver's
-   words and a link to the thread. A ticket still unclear after two questions says to call the driver. Route
-   moves and problems go over as FYI tickets so the office can mute the route channels.
-4. The office enters it in Alliant and reacts ✅ to the ticket or replies "done". Anything else they type in the
-   ticket's thread is passed to the driver as an office note.
-5. The bot posts the tower readback in the driver's thread, "entered by <name>", and notes "Readback sent" on
-   the ticket.
-6. A driver reply after that ("no, I meant 3") comes back as a 🔁 correction ticket. A change posted before the
-   office finished replaces the open ticket.
+1. A driver posts a change. The bot reacts 👀 (picked up).
+2. If something is unclear it asks in the channel, @mentioning the driver (at most twice). The driver answers in
+   the channel; Claude checks whether their next message is the answer or a new request.
+3. The ticket goes to the office channel (`--desk`): account number and name, then one line per change
+   (➕ Add 20  APRON BIB WHITE · 10 → 30 · weekly), the driver's words, and a link to the route channel.
+   Route moves and problems go over as FYI tickets so the office can mute the route channels.
+4. The office enters it in Alliant and reacts ✅ on the ticket or types "done" in the channel (with the account
+   number if several tickets are open). Words after "done" go to the driver as a note.
+5. The bot posts the readback in the route channel, @mentioning the driver, and marks the ticket
+   "✅ Entered by <name> · readback sent".
+6. A correction after the readback comes back as a 🔁 correction ticket; a change before the office finished
+   marks the open ticket 🚫 Replaced.
 
 ```bash
 # Test channels: create #route-12-test (route 12's customers), invite @Service Desk there and to #service-desk-test
