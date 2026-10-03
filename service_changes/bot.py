@@ -45,6 +45,24 @@ def format_post(channel_name: str, author: str, text: str, link: str, parsed, re
     return f"*#{channel_name}* · {author} · <{link}|open>\n{quoted}\n{body}"
 
 
+def _office_staff() -> set[str]:
+    """Names (as Slack shows them) of office staff, from office_staff.txt, one per line, lower-cased."""
+    path = os.path.join(os.path.dirname(__file__), "office_staff.txt")
+    if not os.path.exists(path):
+        return set()
+    return {ln.strip().lower() for ln in open(path) if ln.strip() and not ln.startswith("#")}
+
+
+def _name(slack, cache: dict, user: str | None) -> str:
+    if user not in cache:
+        try:
+            u = slack.users_info(user=user)["user"]
+            cache[user] = u.get("real_name") or u.get("name") or user
+        except Exception:
+            cache[user] = user or "?"
+    return cache[user]
+
+
 def _messages(client, channel_id: str, oldest: float):
     cursor = None
     while True:
@@ -81,10 +99,15 @@ def run_once(slack, claude, alliant: Alliant, since_minutes: int, live: bool, dr
             done.update(REF.findall(m.get("text", "")))
     me = slack.auth_test()["user_id"]
     names: dict[str, str] = {}
+    office = _office_staff()
     posted = 0
     for name, cid in sorted(routes.items()):
-        for m in reversed(list(_messages(slack, cid, oldest))):
+        previous = ""
+        for m in reversed(list(_messages(slack, cid, oldest - 3600))):  # an hour of lead-in for context
             if m.get("subtype") or m.get("bot_id") or (m.get("thread_ts") and m["thread_ts"] != m["ts"]):
+                continue
+            prior, previous = previous, m.get("text", "")
+            if float(m["ts"]) < oldest:
                 continue
             if (cid, m["ts"]) in done:
                 continue
@@ -93,18 +116,14 @@ def run_once(slack, claude, alliant: Alliant, since_minutes: int, live: bool, dr
                 if any(r.get("user") == me or REF.search(r.get("text", "")) for r in replies[1:]):
                     continue
             text = m.get("text", "")
-            parsed = parse_message(claude, text, name, m["ts"], alliant)
+            author = _name(slack, names, m.get("user"))
+            parsed = parse_message(claude, text, name, m["ts"], alliant, author=author,
+                                   office=author.lower() in office, previous=prior)
             fix_department(parsed, alliant, route_from_channel(name), service_day(m["ts"]))
             fill_item_matches(claude, parsed, alliant)
             result = check(parsed, alliant)
-            if m.get("user") not in names:
-                try:
-                    u = slack.users_info(user=m["user"])["user"]
-                    names[m["user"]] = u.get("real_name") or u.get("name") or m["user"]
-                except Exception:
-                    names[m.get("user")] = m.get("user") or "?"
             link = slack.chat_getPermalink(channel=cid, message_ts=m["ts"])["permalink"]
-            post = format_post(name, names[m.get("user")], text, link, parsed, result, alliant, live)
+            post = format_post(name, author, text, link, parsed, result, alliant, live)
             if post is None:
                 continue
             post += f"\n_{ref_tag(cid, m['ts'])}_"

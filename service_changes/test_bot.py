@@ -35,7 +35,11 @@ class FakeSlack:
         self.history[channel].append({"ts": "9", "text": text, "bot_id": "B"})
 
 
-def fake_parse(client, text, channel, ts, alliant):
+SEEN = []
+
+
+def fake_parse(client, text, channel, ts, alliant, author="", office=False, previous=""):
+    SEEN.append((text, author, office, previous))
     if "complete" in text:
         return ParsedMessage(category=Category.not_a_request, summary="plant update")
     return ParsedMessage(category=Category.item_change, customer_as_written="Kobuk", account_number="K1", summary="",
@@ -54,3 +58,15 @@ def test_silent_run_posts_once_to_test_channel(monkeypatch):
     assert "ref C1/1790636236.000100" in text
     # A second run sees its own ref in the test channel and posts nothing new.
     assert bot.run_once(slack, None, a, since_minutes=10**7, live=False) == 0
+
+
+
+def test_bot_passes_author_and_previous_message(monkeypatch):
+    import service_changes.parser as parser
+    monkeypatch.setattr(parser, "parse_message", fake_parse)
+    monkeypatch.setattr(bot, "_office_staff", lambda: {"kirk"})
+    SEEN.clear()
+    a = Alliant(customers=[Customer("K1", "KOBUK COFFEE", "1", ["Fri"])], items={"K1": {"TOWEL BAR MOP GOLD STRIPE": 80}})
+    bot.run_once(FakeSlack(), None, a, since_minutes=10**7, live=False)
+    assert SEEN[0] == ("Kobuk decrease 40 barmops. Total 40", "Route 1", False, "")
+    assert SEEN[1] == ("You're 100% complete with the linens", "Kirk", True, "Kobuk decrease 40 barmops. Total 40")

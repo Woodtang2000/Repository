@@ -1,0 +1,6 @@
+# Office staff as their names show in Slack. Their messages are read as confirmations unless they're new requests.
+Ana Faamita
+Sonja Burke
+Bill Dubinsky
+Maria Aukuso
+Scott Woodland

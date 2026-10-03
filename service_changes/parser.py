@@ -45,11 +45,17 @@ Classify the message and extract every change in it. Rules:
   the driver thinks only one should go, that is a question for the driver, not two stops.
 - Garments for a department (meat, deli, bakery, seafood) belong to that department's account when one exists.
 - The list may show other names a customer goes by ("also called: BSI"); use them to match.
+- Office staff confirm changes in the channel ("added 2 more", "stopped wet mops", "decrease 40 bar mops" right
+  after a driver asked for it, "done", "ok"). A message from office staff that confirms or repeats the previous
+  request is not_a_request. Office staff can also post new requests (a customer called in); treat those normally.
+- A message that only makes sense with the previous one ("Actually cancel the special", "make that 6") applies to
+  that previous request: say what it changes, using the customer from the previous message.
 - Plant completion posts ("You're 100% complete with the linens"), "ok", "done", and other replies are not_a_request.
 """
 
 
-def build_prompt(text: str, channel: str, ts: str, alliant: Alliant) -> str:
+def build_prompt(text: str, channel: str, ts: str, alliant: Alliant, author: str = "", office: bool = False,
+                 previous: str = "") -> str:
     route = route_from_channel(channel)
     day = service_day(ts)
     lines = [f"Channel: #{channel} (route {route or 'unknown'}), posted {day}."]
@@ -62,6 +68,10 @@ def build_prompt(text: str, channel: str, ts: str, alliant: Alliant) -> str:
                   for c in cands]
     else:
         lines.append("No customer list loaded; leave account_number null.")
+    if previous:
+        lines += ["", "Previous message in the channel (context only, already handled):", previous]
+    if author:
+        lines += ["", f"Posted by: {author} ({'office staff' if office else 'driver or sales'})"]
     lines += ["", "Message:", text]
     return "\n".join(lines)
 
@@ -90,12 +100,13 @@ def match_items(client: anthropic.Anthropic, driver_items: list[str], account_it
     return [n if n in account_items else None for n in (names + [None] * len(driver_items))[: len(driver_items)]]
 
 
-def parse_message(client: anthropic.Anthropic, text: str, channel: str, ts: str, alliant: Alliant) -> ParsedMessage:
+def parse_message(client: anthropic.Anthropic, text: str, channel: str, ts: str, alliant: Alliant,
+                  author: str = "", office: bool = False, previous: str = "") -> ParsedMessage:
     response = client.beta.messages.parse(
         model=MODEL,
         max_tokens=16000,
         system=SYSTEM,
-        messages=[{"role": "user", "content": build_prompt(text, channel, ts, alliant)}],
+        messages=[{"role": "user", "content": build_prompt(text, channel, ts, alliant, author, office, previous)}],
         output_format=ParsedMessage,
         output_config={"effort": "medium"},
         betas=["server-side-fallback-2026-07-01"],
