@@ -63,10 +63,10 @@ def _name(slack, cache: dict, user: str | None) -> str:
     return cache[user]
 
 
-def _messages(client, channel_id: str, oldest: float):
+def _messages(client, channel_id: str, oldest: float, **kw):
     cursor = None
     while True:
-        r = client.conversations_history(channel=channel_id, oldest=str(oldest), limit=200, cursor=cursor)
+        r = client.conversations_history(channel=channel_id, oldest=str(oldest), limit=200, cursor=cursor, **kw)
         yield from r["messages"]
         cursor = r.get("response_metadata", {}).get("next_cursor")
         if not cursor:

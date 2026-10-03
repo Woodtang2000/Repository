@@ -22,6 +22,8 @@ Claude only reads and classifies the message (`parser.py`). The arithmetic and t
 | `run.py` | Command line: runs a batch of messages and prints the report |
 | `alliant_report.py` | Converts Alliant's Item Usage report and Wearer Alpha List (Excel) into the CSVs below |
 | `record_cards.py` | Parses the Customer Record Cards PDF text: autocount, stop sequence, contacts, special instructions |
+| `bot.py` | Silent trial: one ticket per driver post in `#service-desk-test` |
+| `desk.py` | Office workflow: questions to the driver, tickets to the office, ✅ → readback |
 | `slack_manifest.yaml` | Slack app definition for the Service Desk bot |
 | `examples/messages.json` | 27 real messages from the route channels (Jul–Oct 2026) |
 | `examples/labels.json` | Hand-checked correct reading of each message, used to score the parser |
@@ -128,6 +130,33 @@ Needs `SLACK_BOT_TOKEN` (from the Slack app made with `slack_manifest.yaml`) and
 For the silent trial it runs as a scheduled Claude Code routine: rebuild the data from the Dropbox PDF, then
 one pass. Instant replies later need an always-on host running it every minute or two (or a Socket Mode
 listener; the app manifest already enables it).
+
+## The office workflow (`desk.py`)
+
+The go-live design: drivers talk to the bot, the office only sees clean tickets.
+
+1. A driver posts a change in a route channel. The bot reacts 👀 (picked up).
+2. If something is unclear it asks in the driver's thread, at most twice, and reads the answer together with
+   the original post. Clear requests skip this step.
+3. The ticket goes to the office channel (`--desk`): account, route, stop, item, SKU, counts, plus the driver's
+   words and a link to the thread. A ticket still unclear after two questions says to call the driver. Route
+   moves and problems go over as FYI tickets so the office can mute the route channels.
+4. The office enters it in Alliant and reacts ✅ to the ticket or replies "done". Anything else they type in the
+   ticket's thread is passed to the driver as an office note.
+5. The bot posts the tower readback in the driver's thread, "entered by <name>", and notes "Readback sent" on
+   the ticket.
+6. A driver reply after that ("no, I meant 3") comes back as a 🔁 correction ticket. A change posted before the
+   office finished replaces the open ticket.
+
+```bash
+# Test channels: create #route-12-test (route 12's customers), invite @Service Desk there and to #service-desk-test
+python -m service_changes.desk --data service_changes/data --desk service-desk-test --routes route-12-test --watch 30
+```
+
+State lives in Slack (👀 reactions and message metadata on the bot's posts), so a pass can rerun safely and
+`--watch N` repeats it every N seconds. Real `#route-N` channels need `SERVICE_DESK_LIVE=1`; `#route-N-anything`
+channels are treated as tests. Office staff are recognised from `office_staff.txt`; their replies in a driver's
+thread are context, not new requests.
 
 ## Not built yet
 

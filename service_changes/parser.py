@@ -51,6 +51,11 @@ Classify the message and extract every change in it. Rules:
 - A message that only makes sense with the previous one ("Actually cancel the special", "make that 6") applies to
   that previous request: say what it changes, using the customer from the previous message.
 - Plant completion posts ("You're 100% complete with the linens"), "ok", "done", and other replies are not_a_request.
+- The message may be a whole thread: the original request, questions Service Desk asked, and the driver's answers,
+  sometimes followed by what the office entered and the driver's reply to that. Read it as one request as it stands
+  now: answers fill in or override the original. Only ask again about what is still unanswered. If the driver's last
+  reply only acknowledges the office ("thanks", "ok", "👍"), it is not_a_request. If the driver says the office got
+  it wrong, list the changes needed to make it right and say so in summary.
 """
 
 
