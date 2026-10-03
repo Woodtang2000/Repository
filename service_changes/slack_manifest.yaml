@@ -1,0 +1,32 @@
+# Slack app for the service-change bot.
+# api.slack.com/apps -> Create New App -> From a manifest -> pick the workspace -> paste this file.
+display_information:
+  name: Service Desk
+  description: Reads route-channel change requests, checks them against Alliant, and drafts readbacks.
+  background_color: "#1d4f91"
+features:
+  bot_user:
+    display_name: Service Desk
+    always_online: true
+oauth_config:
+  scopes:
+    bot:
+      - groups:history     # read messages in the private #route- channels
+      - groups:read        # list the private channels it has been invited to
+      - channels:history   # read public channels it is invited to (e.g. a test channel)
+      - channels:read
+      - chat:write         # post thread replies
+      - reactions:read     # see 👍 / ✅ replies from drivers and staff
+      - reactions:write    # mark messages it has picked up
+      - users:read         # tell drivers' route accounts apart from office staff
+settings:
+  event_subscriptions:
+    bot_events:
+      - message.groups
+      - message.channels
+      - reaction_added
+  interactivity:
+    is_enabled: false
+  org_deploy_enabled: false
+  socket_mode_enabled: true  # no public web address needed; the bot connects out to Slack
+  token_rotation_enabled: false
