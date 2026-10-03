@@ -1,0 +1,10 @@
+account,name,route,service_days
+DEMO-01,Kobuk Coffee,1,Fri
+DEMO-02,City Boy Burgers,1,Tue
+DEMO-03,Moose's Tooth,1,Mon;Thu
+DEMO-08,Snow City Cafe,1,Mon
+DEMO-04,Tacos Cancun,4,Fri
+DEMO-06,Alyeska Tire Palmer,4,Thu
+DEMO-09,Midas #8 Palmer,4,Thu
+DEMO-05,Denali Brewing Company,4,Mon
+DEMO-07,Great Alaska Pizza,3,Mon
