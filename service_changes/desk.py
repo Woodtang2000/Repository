@@ -155,11 +155,9 @@ class Desk:
             did = "asked"
         else:
             correction = last_readback >= 0
-            updated = any((meta(t) or {}).get("kind") == "question" for t in thread) or (channel, m["ts"]) in open_tickets
             open_tickets[(channel, m["ts"])] = [self.post_ticket(route_name, channel, m, author, thread, parsed, result,
-                             label="🔁 *Correction*" if correction else "✏️ *Driver answered*" if updated and len(thread) > 1 else "",
-                             replaces=open_tickets.get((channel, m["ts"]), []),
-                             latest=trigger.get("text") if trigger is not m else None)]
+                             label="🔁 *Correction*: the driver says the last entry wasn't right" if correction else "",
+                             replaces=open_tickets.get((channel, m["ts"]), []))]
             did = "ticket"
         for t in todo:
             try:
@@ -169,7 +167,7 @@ class Desk:
                     raise
         return did
 
-    def post_ticket(self, route_name, channel, m, author, thread, parsed, result, label, replaces, latest=None):
+    def post_ticket(self, route_name, channel, m, author, thread, parsed, result, label, replaces):
         link = self.slack.chat_getPermalink(channel=channel, message_ts=m["ts"])["permalink"]
         if parsed.category in ACTIONABLE:
             lines = ticket(result, self.alliant, with_readback=False).splitlines()
@@ -180,7 +178,7 @@ class Desk:
             lines = [f"📣 *FYI: {parsed.category.value.replace('_', ' ')}*", parsed.summary]
             rb = f"✅ Office has it: {parsed.summary}"
         if label:
-            lines.insert(1, f"{label}" + (f": _\u201c{_short(latest)}\u201d_" if latest else ""))
+            lines.insert(1, label)
         text = "\n".join(lines + ["", _quote(_short(m.get("text", ""), 300)),
                                    f"<{link}|#{route_name} thread> · React ✅ when it's in Alliant"])
         new = _post(self.slack, self.desk_id, text, {"kind": "ticket", "src_channel": channel, "src_ts": m["ts"],

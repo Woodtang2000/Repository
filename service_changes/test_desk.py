@@ -133,7 +133,7 @@ def test_full_loop(setup):
     assert d.run_once()["ticket"] == 1
     assert "Service Desk asked:" in CALLS[-1] and "Mike Driver: 6" in CALLS[-1]
     [t] = slack.bot_posts("D1", "ticket")
-    assert "WENDY'S #4412" in t["text"] and "4 → *6*" in t["text"] and "Driver answered" in t["text"] and "6" in t["text"]
+    assert "WENDY'S #4412" in t["text"] and "4 → *6*" in t["text"] and "Correction" not in t["text"]
     assert desk.meta(t)["src_ts"] == post["ts"]
     assert d.run_once()["ticket"] == 0
 
@@ -155,7 +155,7 @@ def test_full_loop(setup):
     slack.say("C1", "U1", "no, 3", thread_ts=post["ts"])
     assert d.run_once()["ticket"] == 1
     new = slack.bot_posts("D1", "ticket")[-1]
-    assert "Correction" in new["text"] and "no, 3" in new["text"] and "4 → *3*" in new["text"]
+    assert "Correction" in new["text"] and "4 → *3*" in new["text"]
 
 
 def test_clear_request_goes_straight_to_office_and_done_reply_finishes_it(setup):
@@ -164,7 +164,7 @@ def test_clear_request_goes_straight_to_office_and_done_reply_finishes_it(setup)
     assert d.run_once() == {"asked": 0, "ticket": 1, "read": 0, "readback": 0}
     assert not slack.bot_posts("C1", "question")
     [t] = slack.bot_posts("D1", "ticket")
-    assert "Driver answered" not in t["text"]
+    assert t["text"].startswith("*W1*  WENDY'S #4412")
     slack.say("D1", "U2", "Done", thread_ts=t["ts"])
     assert d.run_once()["readback"] == 1
     [rb] = slack.bot_posts("C1", "readback")
