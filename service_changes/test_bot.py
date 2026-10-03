@@ -54,7 +54,7 @@ def test_silent_run_posts_once_to_test_channel(monkeypatch):
     assert bot.run_once(slack, None, a, since_minutes=10**7, live=False) == 1
     channel, thread, text = slack.posts[0]
     assert channel == "T1" and thread is None
-    assert "*#route-1* · Route 1" in text and "KOBUK COFFEE" in text and "80 → 40" in text
+    assert "*#route-1* · Route 1" in text and "KOBUK COFFEE" in text and "80 → *40*" in text
     assert "ref C1/1790636236.000100" in text
     # A second run sees its own ref in the test channel and posts nothing new.
     assert bot.run_once(slack, None, a, since_minutes=10**7, live=False) == 0

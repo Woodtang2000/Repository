@@ -58,6 +58,11 @@ def _seen(m: dict, me: str) -> bool:
     return any(r.get("name") == SEEN and me in r.get("users", []) for r in m.get("reactions", []))
 
 
+def _short(text: str, n: int = 120) -> str:
+    text = " ".join(text.split())
+    return text if len(text) <= n else text[: n - 1] + "…"
+
+
 def _quote(text: str) -> str:
     return "\n".join("> " + ln for ln in text.splitlines()) or ">"
 
@@ -150,8 +155,9 @@ class Desk:
             correction = last_readback >= 0
             updated = any((meta(t) or {}).get("kind") == "question" for t in thread) or (channel, m["ts"]) in open_tickets
             open_tickets[(channel, m["ts"])] = [self.post_ticket(route_name, channel, m, author, thread, parsed, result,
-                             label="🔁 Correction after readback" if correction else "✏️ Updated request" if updated and len(thread) > 1 else "",
-                             replaces=open_tickets.get((channel, m["ts"]), []))]
+                             label="🔁 *Correction*" if correction else "✏️ *Driver answered*" if updated and len(thread) > 1 else "",
+                             replaces=open_tickets.get((channel, m["ts"]), []),
+                             latest=trigger.get("text") if trigger is not m else None)]
             did = "ticket"
         for t in todo:
             try:
@@ -161,20 +167,22 @@ class Desk:
                     raise
         return did
 
-    def post_ticket(self, route_name, channel, m, author, thread, parsed, result, label, replaces):
+    def post_ticket(self, route_name, channel, m, author, thread, parsed, result, label, replaces, latest=None):
         link = self.slack.chat_getPermalink(channel=channel, message_ts=m["ts"])["permalink"]
         if parsed.category in ACTIONABLE:
-            body = ticket(result, self.alliant)
+            lines = ticket(result, self.alliant, with_readback=False).splitlines()
             rb = readback(result) if not result.questions else ""
+            if result.questions:
+                lines.append("⚠️ _Still unclear after asking the driver. Please call them._")
         else:
-            body = f"_FYI, not an account change ({parsed.category.value.replace('_', ' ')}): {parsed.summary}_"
+            lines = [f"📣 *FYI: {parsed.category.value.replace('_', ' ')}*", parsed.summary]
             rb = f"✅ Office has it: {parsed.summary}"
-        if result.questions and parsed.category in ACTIONABLE:
-            body += "\n⚠️ _Still unclear after asking the driver. Please call them._"
-        said = "\n".join(_quote(t.get("text", "")) if i == 0 else _quote(f"{self.name(t.get('user')) if not _is_bot(t, self.me) else 'Service Desk'}: {t.get('text', '')}")
-                         for i, t in enumerate(thread))
-        head = f"*#{route_name}* · {author} · <{link}|open thread>" + (f" · *{label}*" if label else "")
-        text = f"{head}\n{said}\n{body}\n_React ✅ or reply \"done\" once it's in Alliant; the driver gets the readback._"
+        lines[1 if len(lines) > 1 else 0] += f" · from {author}"
+        if label:
+            said = f"{label}" + (f": _\u201c{_short(latest)}\u201d_" if latest else "")
+            lines.insert(2, said)
+        text = "\n".join(lines + ["", _quote(_short(m.get("text", ""), 300)),
+                                   f"<{link}|Driver's thread> · React ✅ when it's in Alliant"])
         new = _post(self.slack, self.desk_id, text, {"kind": "ticket", "src_channel": channel, "src_ts": m["ts"],
                                                      "readback": rb, "driver": author})
         for old_ts in replaces:

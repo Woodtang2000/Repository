@@ -287,9 +287,10 @@ def test_office_ticket():
                 cards={"K1": {"stop_sequence": "Fri 11", "special_instructions": "Back door only"}})
     r = check(msg("K1", Change(action=Action.decrease, item="bar mops", quantity=40, stated_total=40), customer="Kobuk"), a)
     assert ticket(r, a).splitlines() == [
-        "📋 *KOBUK COFFEE* · Acct *K1* · Route 1 · Fri stop 11",
-        "_Card note: Back door only_",
-        "• TOWEL BAR MOP GOLD STRIPE `5-01-01`: autocount *80 → 40* (weekly)",
+        "📋 *KOBUK COFFEE*  `K1`",
+        "Route 1 · Fri stop 11",
+        "_📝 Back door only_",
+        "➖ *Remove 40*  TOWEL BAR MOP GOLD STRIPE `5-01-01` · 80 → *40* · weekly",
         "Readback when done: ✅ Kobuk – 40 bar mops decreased – total now 40"]
 
 

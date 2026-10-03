@@ -272,56 +272,66 @@ def readback(result: Result) -> str:
     return f"✅ {p.customer_as_written} – " + "; ".join(parts) if parts else ""
 
 
-def ticket(result: Result, alliant: Alliant) -> str:
-    """Work ticket for the office: account, route and stop, and each line as Alliant names it, so the
-    change can be keyed in without looking anything up. The same fields are what an automated entry needs."""
+ICONS = {Action.add: "➕", Action.decrease: "➖", Action.set: "🔢", Action.stop: "⛔", Action.restart: "🔄",
+         Action.size_change: "📏", Action.other: "✏️"}
+
+
+def _do(ch: Change) -> str:
+    """What to key in, verb first: "Add 2", "Set to 6", "Stop"."""
+    q = ch.quantity
+    return {Action.add: f"Add {q}" if q is not None else "Add",
+            Action.decrease: f"Remove {q}" if q is not None else "Decrease",
+            Action.set: f"Set to {q}",
+            Action.stop: "Stop", Action.restart: "Restart", Action.size_change: "Size change"}.get(ch.action, "Change")
+
+
+def ticket(result: Result, alliant: Alliant, with_readback: bool = True) -> str:
+    """Work ticket for the office: who, where, and one line per thing to key into Alliant, verb first.
+    The same fields are what an automated entry needs."""
     p = result.parsed
     acct = p.account_number
     cust = next((c for c in alliant.customers if c.account == acct), None)
     card = alliant.cards.get(acct or "", {})
     if cust:
-        head = f"📋 *{cust.name}* · Acct *{acct}* · Route {cust.route}"
+        out = [f"📋 *{cust.name}*  `{acct}`"]
+        where = f"Route {cust.route}"
         if card.get("stop_sequence"):
-            head += " · " + ", ".join(re.sub(r"^(\w+) (\d+)$", r"\1 stop \2", x) for x in card["stop_sequence"].split(";"))
+            where += " · " + ", ".join(re.sub(r"^(\w+) 0*(\d+)$", r"\1 stop \2", x) for x in card["stop_sequence"].split(";"))
         elif cust.service_days:
-            head += f" · {', '.join(cust.service_days)}"
+            where += f" · {', '.join(cust.service_days)}"
+        out.append(where)
     else:
-        head = f"📋 *{p.customer_as_written or 'Customer?'}* · Acct *not matched*: please check"
-    out = [head]
+        out = [f"📋 *{p.customer_as_written or 'Customer?'}*  ⚠️ account not matched, please look it up"]
     note = (card.get("special_instructions") or "").strip()
     if note and "Remittance" not in note:
-        out.append(f"_Card note: {note}_")
+        out.append(f"_📝 {note}_")
     for cc in result.changes:
         ch = cc.change
         if ch.wearer:
-            who = f"#{cc.wearer_number} {ch.wearer}" if cc.wearer_number else f"{ch.wearer} (new wearer)"
+            who = f"#{cc.wearer_number} {ch.wearer}" if cc.wearer_number else f"{ch.wearer} _(new wearer)_"
             what = cc.alliant_item or " ".join(x for x in [ch.size, ch.item] if x)
             sku = alliant.sku.get((acct, cc.wearer_number, cc.alliant_item)) if cc.wearer_number and cc.alliant_item else None
-            line = f"• {who} · {what}"
+            what = f"{who}: {what}"
         else:
-            what = cc.alliant_item or f"{ch.item} (not on account)"
+            what = cc.alliant_item or f"{ch.item} _(not on account yet)_"
             sku = alliant.sku.get((acct, cc.alliant_item)) if cc.alliant_item else None
-            line = f"• {what}"
-        if sku:
-            line += f" `{sku}`"
+        bits = [f"{ICONS.get(ch.action, '✏️')} *{_do(ch)}*  {what}" + (f" `{sku}`" if sku else "")]
         if cc.current is not None and cc.new_total is not None:
-            line += f": {'autocount ' if not ch.wearer else ''}*{cc.current} → {cc.new_total}*"
-        elif cc.new_total is not None:
-            line += f": new total *{cc.new_total}*"
-        elif ch.action == Action.stop:
-            line += ": *stop*"
-        elif ch.quantity is not None:
-            line += f": {ch.action.value} {ch.quantity}"
+            bits.append(f"{cc.current} → *{cc.new_total}*")
+        elif cc.new_total is not None and ch.action != Action.set:
+            bits.append(f"new total *{cc.new_total}*")
         freq = _freq_words(ch.frequency) if ch.frequency else frequency_label(cc.frequency_now)
         if freq:
-            line += f" ({freq})"
+            bits.append(freq)
+        if ch.effective:
+            bits.append(ch.effective)
         if cc.already_done:
-            line += " · already in Alliant"
-        out.append(line)
+            bits.append("☑️ already in Alliant")
+        out.append(" · ".join(bits))
     if p.category == Category.hold_or_closure and not result.changes:
-        out.append(f"• {p.summary}")
+        out.append(f"⏸️ *{p.summary}*")
     if result.questions:
         out += [f"❓ {q}" for q in result.questions]
-    elif rb := readback(result):
+    elif with_readback and (rb := readback(result)):
         out.append(f"Readback when done: {rb}")
     return "\n".join(out)
