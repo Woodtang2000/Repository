@@ -51,7 +51,7 @@ python -m service_changes.run service_changes/examples/messages.json \
 ## Alliant data
 
 **Quickest setup (new session):** the Customer Record Cards PDF alone has everything the bot loads.
-It lives in Dropbox at `/Accounting/Alliant Exports/Alliant Customer Record Cards.pdf`. Fetch its text
+It lives in Dropbox at `/Scott Woodland/Accounting/Alliant Exports/Alliant Customer Record Cards.pdf`. Fetch its text
 with the Dropbox connector (the result is saved as a JSON file), then:
 
 ```bash
