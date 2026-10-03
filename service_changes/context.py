@@ -71,7 +71,24 @@ class Alliant:
         """Load whatever of customers/current_items/garments/wearers.csv exists in `data_dir`."""
         import os
         f = lambda n: os.path.join(data_dir, n) if os.path.exists(os.path.join(data_dir, n)) else None
-        return cls.load(f("customers.csv"), f("current_items.csv"), f("garments.csv"), f("wearers.csv"))
+        data = cls.load(f("customers.csv"), f("current_items.csv"), f("garments.csv"), f("wearers.csv"))
+        if f("card_lines.csv") and f("current_items.csv"):
+            data._autocount_from_cards(f("current_items.csv"), f("card_lines.csv"))
+        return data
+
+    def _autocount_from_cards(self, items_csv: str, card_lines_csv: str) -> None:
+        """Take each item's autocount from the record cards (record_cards.py), matched on account, SKU and
+        inventory. This replaces any autocount the Item Usage converter guessed by line order."""
+        with open(card_lines_csv, newline="") as f:
+            cards: dict[tuple[str, str, int], list[int]] = {}
+            for row in csv.DictReader(f):
+                if not row["wearer"]:
+                    cards.setdefault((row["account"], row["sku"], int(row["inventory"])), []).append(int(row["autocount"]))
+        with open(items_csv, newline="") as f:
+            for row in csv.DictReader(f):
+                found = cards.get((row["account"].strip(), row["sku"].strip(), int(row["quantity"])))
+                if found:
+                    self.autocount.setdefault(row["account"].strip(), {})[row["item"].strip()] = found.pop(0)
 
     def find_wearer(self, account: str | None, name: str) -> Wearer | None:
         """The wearer on `account` called `name` (first name, last name or both), if exactly one fits."""

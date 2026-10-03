@@ -20,7 +20,8 @@ Claude only reads and classifies the message (`parser.py`). The arithmetic and t
 | `context.py` | Route and service day, plus loading the Alliant CSV exports |
 | `checks.py` | Quantity checks against Alliant, driver questions, readback text |
 | `run.py` | Command line: runs a batch of messages and prints the report |
-| `alliant_report.py` | Converts Alliant's Item Usage report (Excel) into the CSVs below |
+| `alliant_report.py` | Converts Alliant's Item Usage report and Wearer Alpha List (Excel) into the CSVs below |
+| `record_cards.py` | Parses the Customer Record Cards PDF text: autocount, stop sequence, contacts, special instructions |
 | `slack_manifest.yaml` | Slack app definition for the Service Desk bot |
 | `examples/messages.json` | 27 real messages from the route channels (Jul–Oct 2026) |
 | `examples/labels.json` | Hand-checked correct reading of each message, used to score the parser |
@@ -69,9 +70,19 @@ When Alliant already shows the total the driver asked for, the change is reporte
 rather than raised as a question.
 
 Drivers talk about the **autocount** (what gets delivered). Inventory on some accounts is double the
-autocount. The autocount comes from the record cards; the PDF-to-Excel conversion keeps only the first
-card's header, so lines are matched to the Item Usage report by order (about 89% of item lines). Where no
-autocount was found, the checks accept inventory or half of it, whichever fits the driver's numbers.
+autocount. The autocount comes from the **Customer Record Cards PDF**. Save the PDF's text (a Dropbox
+fetch of the PDF returns it) and run:
+
+```bash
+python -m service_changes.record_cards record_cards.txt --out service_changes/data
+```
+
+This writes `customer_cards.csv` (route, stop sequence, contact, phone, email, special instructions, sales
+rep, install date, contract expiry, stop minimum) and `card_lines.csv` (every item and garment line with
+its autocount). `--data` loads them automatically; the autocount is matched to items on account, SKU and
+inventory (about 98% of item lines). Where no autocount was found, the checks accept inventory or half of
+it, whichever fits the driver's numbers. (The `--cards` option of `alliant_report.py` reads the Excel
+conversion of the cards instead, which loses every header after the first; use the PDF when you can.)
 
 ## Not built yet
 

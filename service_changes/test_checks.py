@@ -188,3 +188,75 @@ def test_inventory_double_the_autocount():
     a.autocount = {"K": {"TOWEL BAR MOP GOLD STRIPE": 40}}
     r = check(msg("K", Change(action=Action.add, item="barmops", quantity=20, stated_total=60)), a)
     assert r.ready and r.changes[0].current == 40 and r.changes[0].inventory == 80
+
+
+CARD = """
+Delivery Days
+
+10/03/2026
+
+Page 1 of 1
+
+Customer Record Card
+
+Mon Tue Wed Thu Fri Sat Sun
+
+Stop Seq
+
+Bag Count
+
+4 0 0 0 7 00
+
+0 0 0 0 0 0 0
+
+TEST DINER
+
+100 Main St
+
+Anchorage AK 99501
+
+Route 3
+
+Account 9999-1-00001
+
+Contact Pat Lee Contact Phone (907)555-0100
+
+Email (907)555-0199pat@testdiner.com Contact Fax
+
+Route 3 0 0 0 3 0 0
+
+ 18.00# of Invoices Contract ExpState Tax 1 5/1/2027 Service $0.00%
+Install DateSales Rep Account TypeJESSE Restaurant 4/2/2024 Stop Minimum $30.00
+
+Use back door after 2pmSpecial Instructions
+
+  5-01-01 TOWEL BAR MOP GOLD STRIPE D  240  0  0 8  120 $0.2800 $0.00 N
+
+Price ChangedDelivery Days M   F  0.00% or $0.2800 on 2/1/2026 By MARINA
+
+  8
+
+    12  2-LS524BK L SHIRT INDUSTRIAL MIDAS S/S B  11  11  0 9  0 $1.5800 N
+
+Price ChangedDelivery Days M   F  5.33% or $1.5000 on 2/1/2026 By MARINA
+
+M
+
+M
+
+7
+"""
+
+
+def test_record_card_parsing():
+    from .record_cards import parse_text
+    card = parse_text(CARD)["9999-1-00001"]
+    assert card["name"] == "TEST DINER" and card["route"] == "3"
+    assert card["stop_sequence"] == "Mon 4;Fri 7"
+    assert card["email"] == "pat@testdiner.com" and card["phone"] == "(907)555-0100"
+    assert card["special_instructions"] == "Use back door after 2pm"
+    assert (card["sales_rep"], card["install_date"], card["contract_expires"], card["stop_minimum"]) == \
+        ("JESSE", "4/2/2024", "5/1/2027", "30.00")
+    towel, shirt = card["items"]
+    assert (towel["sku"], towel["inventory"], towel["autocount"], towel["frequency"]) == ("5-01-01", 240, 120, "8")
+    assert (shirt["wearer"], shirt["sku"], shirt["inventory"], shirt["frequency"]) == ("12", "2-LS524BK", 11, "7")
