@@ -3,13 +3,14 @@
   python -m service_changes.desk --data service_changes/data --desk service-desk-test --routes route-12-test --watch 60
 
 1. A driver posts a change in a route channel. The bot reacts 👀 so the driver knows it was picked up.
-2. If something needed to enter the change is unclear, the bot asks in the driver's thread (at most twice).
+2. If something needed to enter the change is unclear, the bot asks in the driver's thread (at most twice),
+   @mentioning them so it pushes to their phone and also showing it in the channel.
    The driver's answer is read together with the original post.
 3. Once the request is clear (or still unclear after two tries) a ticket goes to the office channel (--desk)
    with the account, item, SKU and counts. Unclear tickets say to call the driver.
 4. Office staff enter it in Alliant, then react ✅ to the ticket or reply "done". Anything else they type in the
    ticket's thread goes to the driver as an office note.
-5. The bot posts the readback in the driver's thread ("✅ Wendy's – 2 3x10 mats added – total now 6 – entered by
+5. The bot posts the readback in the driver's thread, @mentioning them, ("✅ Wendy's – 2 3x10 mats added – total now 6 – entered by
    Sonja") and notes in the ticket thread that it was sent.
 6. If the driver replies after that ("no, I meant 3"), it goes back through steps 2-3 as a correction.
 
@@ -45,9 +46,9 @@ def meta(m: dict) -> dict | None:
     return md.get("event_payload") if md.get("event_type") == KIND else None
 
 
-def _post(slack, channel: str, text: str, payload: dict, thread_ts: str | None = None) -> dict:
+def _post(slack, channel: str, text: str, payload: dict, thread_ts: str | None = None, **kw) -> dict:
     return slack.chat_postMessage(channel=channel, text=text, thread_ts=thread_ts, unfurl_links=False,
-                                  metadata={"event_type": KIND, "event_payload": payload})
+                                  metadata={"event_type": KIND, "event_payload": payload}, **kw)
 
 
 def _is_bot(m: dict, me: str) -> bool:
@@ -148,8 +149,9 @@ class Desk:
             pass
         elif result.questions and asks < MAX_ASKS and parsed.category in ACTIONABLE:
             qs = "\n".join(f"• {q}" for q in result.questions)
-            _post(self.slack, channel, f"Quick check before this goes to the office:\n{qs}",
-                  {"kind": "question", "trigger": trigger["ts"]}, thread_ts=m["ts"])
+            # @mention so it pushes to the driver's phone; also show it in the channel so it can't be missed.
+            _post(self.slack, channel, f"<@{m.get('user')}> Quick check before this goes to the office:\n{qs}",
+                  {"kind": "question", "trigger": trigger["ts"]}, thread_ts=m["ts"], reply_broadcast=True)
             did = "asked"
         else:
             correction = last_readback >= 0
@@ -184,7 +186,7 @@ class Desk:
         text = "\n".join(lines + ["", _quote(_short(m.get("text", ""), 300)),
                                    f"<{link}|Driver's thread> · React ✅ when it's in Alliant"])
         new = _post(self.slack, self.desk_id, text, {"kind": "ticket", "src_channel": channel, "src_ts": m["ts"],
-                                                     "readback": rb, "driver": author})
+                                                     "readback": rb, "driver": author, "driver_id": m.get("user")})
         for old_ts in replaces:
             _post(self.slack, self.desk_id, "Replaced by a newer ticket for the same request, below. Don't enter this one.",
                   {"kind": "replaced"}, thread_ts=old_ts)
@@ -219,7 +221,7 @@ class Desk:
                 continue
             who = self.name(done_by)
             notes = [r.get("text", "") for r in people if not DONE_WORDS.match(r.get("text", ""))]
-            msg = (p.get("readback") or "✅ Done") + f" – entered by {who}"
+            msg = (f"<@{p['driver_id']}> " if p.get("driver_id") else "") + (p.get("readback") or "✅ Done") + f" – entered by {who}"
             msg += "".join(f"\nOffice note: {n}" for n in notes)
             msg += "\n_Reply here if that's not what you meant._"
             _post(self.slack, p["src_channel"], msg, {"kind": "readback"}, thread_ts=p["src_ts"])

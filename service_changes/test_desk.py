@@ -68,8 +68,8 @@ class FakeSlack:
     def chat_getPermalink(self, channel, message_ts):
         return {"permalink": f"https://slack/{channel}/{message_ts}"}
 
-    def chat_postMessage(self, channel, text, thread_ts=None, metadata=None, **kw):
-        return self.say(channel, "UBOT", text, thread_ts=thread_ts, bot_id="B", metadata=metadata)
+    def chat_postMessage(self, channel, text, thread_ts=None, metadata=None, reply_broadcast=False, **kw):
+        return self.say(channel, "UBOT", text, thread_ts=thread_ts, bot_id="B", metadata=metadata, broadcast=reply_broadcast)
 
     def reactions_add(self, channel, timestamp, name):
         self.react(channel, timestamp, "UBOT", name)
@@ -118,7 +118,8 @@ def test_full_loop(setup):
 
     # 1. Unclear: the bot asks in the driver's thread and marks the post 👀. A rerun does nothing more.
     assert d.run_once()["asked"] == 1
-    assert len(slack.bot_posts("C1", "question")) == 1
+    [q] = slack.bot_posts("C1", "question")
+    assert q["text"].startswith("<@U1> ") and q["broadcast"]
     assert desk._seen(slack.find("C1", post["ts"]), "UBOT")
     assert d.run_once() == {"asked": 0, "ticket": 0, "read": 0, "readback": 0}
     assert len(CALLS) == 1
@@ -142,7 +143,7 @@ def test_full_loop(setup):
     assert d.run_once()["readback"] == 1
     [rb] = slack.bot_posts("C1", "readback")
     assert rb["thread_ts"] == post["ts"]
-    assert "set to 6" in rb["text"] and "entered by Sonja Burke" in rb["text"] and "Office note: only had 1" in rb["text"]
+    assert rb["text"].startswith("<@U1> ") and "set to 6" in rb["text"] and "entered by Sonja Burke" in rb["text"] and "Office note: only had 1" in rb["text"]
     assert len(slack.bot_posts("D1", "sent")) == 1
     assert d.run_once()["readback"] == 0  # never twice
 
