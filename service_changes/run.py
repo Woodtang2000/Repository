@@ -47,7 +47,8 @@ def render(m: dict, parsed: ParsedMessage, alliant: Alliant) -> str:
                 bits.append(f"wearer {cc.change.wearer}" + (f" (#{cc.wearer_number})" if cc.wearer_number else ""))
             if cc.current is not None:
                 freq = frequency_label(cc.frequency_now)
-                bits.append(f"Alliant: {cc.alliant_item} = {cc.current}" + (f" ({freq})" if freq else ""))
+                bits.append(f"Alliant: {cc.alliant_item} = {cc.current}" + (f" (inventory {cc.inventory})" if cc.inventory else "")
+                            + (f" ({freq})" if freq else ""))
             if cc.new_total is not None:
                 bits.append(f"new total {cc.new_total}")
             bits += cc.notes

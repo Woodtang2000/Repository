@@ -62,6 +62,7 @@ class Alliant:
     customers: list[Customer] = field(default_factory=list)
     items: dict[str, dict[str, int]] = field(default_factory=dict)  # account -> item -> qty
     frequency: dict[str, dict[str, str]] = field(default_factory=dict)  # account -> item -> Alliant freq code
+    autocount: dict[str, dict[str, int]] = field(default_factory=dict)  # account -> item -> per-delivery autocount, when exported
     wearers: dict[str, list[Wearer]] = field(default_factory=dict)  # account -> wearers
     garments: dict[tuple[str, str], dict[str, int]] = field(default_factory=dict)  # (account, wearer#) -> "ITEM SIZE" -> qty
 
@@ -107,6 +108,8 @@ class Alliant:
                     data.items.setdefault(acct, {})[item] = int(row["quantity"])
                     if row.get("frequency"):
                         data.frequency.setdefault(acct, {})[item] = row["frequency"].strip()
+                    if (row.get("autocount") or "").strip():
+                        data.autocount.setdefault(acct, {})[item] = int(row["autocount"])
         return data
 
     def match_account(self, name: str | None, route: str | None, day: str) -> str | None:

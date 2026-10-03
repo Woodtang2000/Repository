@@ -68,6 +68,11 @@ Run the parser against it with `--data service_changes/data`.
 When Alliant already shows the total the driver asked for, the change is reported as "already entered"
 rather than raised as a question.
 
+Drivers talk about the **autocount** (what gets delivered). The Item Usage report only has inventory, which
+on some accounts is double the autocount. Until an autocount export is added (an `autocount` column in
+`current_items.csv` is picked up automatically), the checks accept either reading when it fits the
+driver's numbers and note which one they used.
+
 ## Not built yet
 
 - Watching Slack live and replying in threads

@@ -65,7 +65,8 @@ class CheckedChange:
     wearer_number: str | None = None
     frequency_now: str | None = None  # Alliant code for the matched item
     already_done: bool = False
-    current: int | None = None
+    current: int | None = None  # autocount (per delivery) where known; Alliant inventory otherwise
+    inventory: int | None = None  # set only when Alliant inventory differs from the autocount
     new_total: int | None = None
     questions: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
@@ -108,6 +109,36 @@ def _check_wearer(cc: CheckedChange, account: str | None, alliant: Alliant) -> t
     return found
 
 
+def _autocount(cc: CheckedChange, alliant: Alliant, account: str | None) -> int:
+    """The per-delivery autocount drivers talk about, from the Alliant inventory number.
+
+    Some accounts keep inventory equal to the autocount, others at double it. Use the real
+    autocount when the export has one; otherwise take whichever reading fits the driver's numbers.
+    """
+    ch, inventory = cc.change, cc.current
+    known = alliant.autocount.get(account or "", {}).get(cc.alliant_item)
+    if known is not None:
+        if known != inventory:
+            cc.inventory = inventory
+        return known
+    target = ch.stated_total if ch.stated_total is not None else (ch.quantity if ch.action == Action.set else None)
+    if target is None or inventory % 2 or inventory == 0:
+        return inventory
+
+    def result(base):  # what an add/decrease would leave; a set only fits when base already equals it
+        q = ch.quantity or 0
+        return {Action.add: base + q, Action.decrease: base - q}.get(ch.action)
+
+    if inventory == target or result(inventory) == target:
+        return inventory
+    half = inventory // 2
+    if half == target or result(half) == target:
+        cc.inventory = inventory
+        cc.notes.append(f"Alliant inventory is {inventory}, double the autocount of {half}")
+        return half
+    return inventory
+
+
 def check(parsed: ParsedMessage, alliant: Alliant) -> Result:
     who = parsed.customer_as_written or "this customer"
     out = []
@@ -120,6 +151,8 @@ def check(parsed: ParsedMessage, alliant: Alliant) -> Result:
         if found:
             cc.alliant_item, cc.current = found
             cc.frequency_now = alliant.frequency.get(parsed.account_number or "", {}).get(cc.alliant_item)
+            if not ch.wearer:
+                cc.current = _autocount(cc, alliant, parsed.account_number)
         q = ch.quantity
 
         if ch.action == Action.stop:

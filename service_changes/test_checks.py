@@ -168,3 +168,23 @@ def test_wearer_checks():
     assert r.changes[1].already_done and r.changes[1].new_total == 11
     assert r.changes[2].notes == ["Riley is not in Alliant yet (new wearer)"]
     assert a.find_wearer("M6", "rob colins").employee == "1" and a.find_wearer("M6", "Bob") is None
+
+
+def test_inventory_double_the_autocount():
+    a = Alliant(items={"B": {"TOWEL BAR MOP GOLD STRIPE": 120, "APRON BLACK BIB": 40}, "K": {"TOWEL BAR MOP GOLD STRIPE": 80}})
+    # Bake Shop: inventory 120 is double the autocount of 60, which is what was asked for.
+    r = check(msg("B", Change(action=Action.set, item="bar mops", quantity=60)), a)
+    assert r.changes[0].current == 60 and r.changes[0].inventory == 120 and r.changes[0].already_done
+    # Decrease 10 bibs, total 10: only fits if the autocount is 20.
+    r = check(msg("B", Change(action=Action.decrease, item="black bibs", quantity=10, stated_total=10)), a)
+    assert r.ready and r.changes[0].current == 20 and r.changes[0].new_total == 10
+    # Inventory equals autocount: Kobuk 80 - 40 = 40.
+    r = check(msg("K", Change(action=Action.decrease, item="barmops", quantity=40, stated_total=40)), a)
+    assert r.ready and r.changes[0].current == 80 and r.changes[0].inventory is None
+    # Neither reading fits: still a question for the driver.
+    r = check(msg("K", Change(action=Action.add, item="barmops", quantity=10, stated_total=100)), a)
+    assert not r.ready
+    # A real autocount from Alliant wins over guessing.
+    a.autocount = {"K": {"TOWEL BAR MOP GOLD STRIPE": 40}}
+    r = check(msg("K", Change(action=Action.add, item="barmops", quantity=20, stated_total=60)), a)
+    assert r.ready and r.changes[0].current == 40 and r.changes[0].inventory == 80
