@@ -34,6 +34,7 @@ class Change(BaseModel):
     wearer: Optional[str] = Field(None, description="Employee name for garment changes.")
     size: Optional[str] = Field(None, description="Garment size, e.g. 'L', '2XL', '42x32'.")
     effective: Optional[str] = Field(None, description="When it starts if the driver said so, e.g. 'next week', 'this Friday'.")
+    alliant_item: Optional[str] = Field(None, description="Exact Alliant item name from the account's item list, when one was provided and one clearly fits.")
 
 
 class ParsedMessage(BaseModel):

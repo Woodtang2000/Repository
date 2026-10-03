@@ -25,23 +25,44 @@ def test_route_and_day():
 
 
 def test_candidates_narrow_by_route_and_day():
-    assert [c.account for c in ALLIANT.candidates("4", "Mon")] == ["A1"]
-    assert [c.account for c in ALLIANT.candidates("4", "Wed")] == ["A1", "A3"]  # nobody today: whole route
+    assert [c.account for c in ALLIANT.candidates("4", "Fri")] == ["A3", "A1"]  # today's stops first
+    assert [c.account for c in ALLIANT.candidates("4", "Mon")] == ["A1", "A3"]
+    assert len(ALLIANT.candidates(None, "Mon")) == 3
     assert ALLIANT.match_account("denali brewing company", "4", "Mon") == "A1"
     assert ALLIANT.match_account("Denali", "4", "Mon") is None
 
 
-def test_item_matching():
-    from .checks import _matches
-    assert _matches("3x10 mat", "3x10 Charcoal Heather Mat")
-    assert _matches("barmops", "Bar Mops") and _matches("bar mop", "Bar Mops")
-    assert _matches("4 x 6 charcoal", "4x6 Charcoal Heather Mat")
-    assert not _matches("3x5 mat", "3x10 Charcoal Heather Mat")
-    assert not _matches("laundry bags", "Bag Stands")
-    two = Alliant(items={"A": {"3x5 Charcoal Mat": 1, "3x5 Confetti Mat": 2}})
+def test_item_matching_on_real_alliant_names():
     from .checks import current_qty
-    assert current_qty(two, "A", "3x5 mat") is None  # ambiguous: don't guess
-    assert current_qty(two, "A", "3x5 confetti") == ("3x5 Confetti Mat", 2)
+    acct = Alliant(items={"A": {
+        "TOWEL BAR MOP GOLD STRIPE": 60, "MOP WET 16 OZ": 5, "MOP WET 24 OZ": 5, "MAT CHARCOAL HEATHER 3X10": 6,
+        "MAT CHARCOAL HEATHER 3X5": 1, "MAT BLACK COMFORT FLOW 3X5": 1, "APRON BLACK BIB": 40,
+        "ROUTE LAUNDRY BAG": 3, "ROUTE BAG STAND": 3, "MAT CHARCOAL WATERHOG 4X6": 1}})
+    assert current_qty(acct, "A", "barmops") == ("TOWEL BAR MOP GOLD STRIPE", 60)
+    assert current_qty(acct, "A", "24oz orange mop heads") == ("MOP WET 24 OZ", 5)
+    assert current_qty(acct, "A", "16 oz wet mops") == ("MOP WET 16 OZ", 5)
+    assert current_qty(acct, "A", "3 x 10 mat") == ("MAT CHARCOAL HEATHER 3X10", 6)
+    assert current_qty(acct, "A", "3x5 comfort flow") == ("MAT BLACK COMFORT FLOW 3X5", 1)
+    assert current_qty(acct, "A", "black bibs") == ("APRON BLACK BIB", 40)
+    assert current_qty(acct, "A", "laundry bags") == ("ROUTE LAUNDRY BAG", 3)
+    assert current_qty(acct, "A", "4x6 water hog") == ("MAT CHARCOAL WATERHOG 4X6", 1)
+    assert current_qty(acct, "A", "3x5 mat") is None   # two 3x5 mats: don't guess
+    assert current_qty(acct, "A", "mop heads") is None  # 16 oz or 24 oz?
+    assert current_qty(acct, "A", "16oz blue mop heads") == ("MOP WET 16 OZ", 5)
+    assert current_qty(acct, "A", "logo mat") is None   # nothing specific left to match on
+    # A color that exists elsewhere in Alliant must not be ignored.
+    ihop = Alliant(items={"I": {"MAT CHARCOAL HEATHER 4X6": 1}, "H": {"MAT BRANDYWINE 3X10": 2}})
+    assert current_qty(ihop, "I", "4x6 Brandywine mat") is None
+    assert current_qty(ihop, "I", "4x6 charcoal mat") == ("MAT CHARCOAL HEATHER 4X6", 1)
+
+
+def test_already_entered_is_not_a_question():
+    acct = Alliant(items={"K": {"TOWEL BAR MOP GOLD STRIPE": 40}})
+    r = check(msg("K", Change(action=Action.decrease, item="barmops", quantity=40, stated_total=40), customer="Kobuk"), acct)
+    assert r.ready and r.changes[0].already_done
+    assert r.changes[0].notes == ["Alliant already shows 40; may already be entered"]
+    r = check(msg("K", Change(action=Action.stop, item="napkins")), acct)
+    assert r.changes[0].notes == ["Not on this account in Alliant (may already be stopped)"]
 
 
 def test_stated_total_matches():
@@ -71,7 +92,7 @@ def test_decrease_below_zero_asks_driver():
 def test_no_total_and_unknown_item_are_notes_not_blockers():
     r = check(msg("A2", Change(action=Action.add, item="logo mat", quantity=1)), ALLIANT)
     assert r.ready
-    assert r.changes[0].notes == ["No total given", "Item not found on account; check by hand"]
+    assert r.changes[0].notes == ["No total given", "Not on this account in Alliant; check by hand"]
 
 
 def test_wearer_readback():
@@ -96,4 +117,13 @@ def test_hold_readback_and_until():
 def test_prompt_lists_only_todays_route_customers():
     p = build_prompt("Denali brewing increase wet mops to 28", "route-4", "1790636236", ALLIANT)  # Mon 2026-09-28
     assert "route 4" in p and "posted Mon" in p
-    assert "A1 | Denali Brewing Company" in p and "Tacos Cancun" not in p and "Moose" not in p
+    assert "A1 | Denali Brewing Company | Mon" in p and "Moose" not in p
+    assert p.index("Denali") < p.index("Tacos Cancun")
+
+
+def test_decode_days():
+    from .alliant_report import decode_days
+    assert decode_days("   H   ") == ["Thu"]
+    assert decode_days("M  H   ") == ["Mon", "Thu"]
+    assert decode_days("MTWHFSU") == ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    assert decode_days("") == []

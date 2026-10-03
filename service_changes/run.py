@@ -46,12 +46,14 @@ def render(m: dict, parsed: ParsedMessage, alliant: Alliant) -> str:
             if cc.change.wearer:
                 bits.append(f"wearer {cc.change.wearer}")
             if cc.current is not None:
-                bits.append(f"Alliant now {cc.current}")
+                bits.append(f"Alliant: {cc.alliant_item} = {cc.current}")
             if cc.new_total is not None:
                 bits.append(f"new total {cc.new_total}")
             bits += cc.notes
             out.append("- " + " · ".join(bits))
-        if result.questions:
+        if result.changes and all(c.already_done for c in result.changes):
+            out += ["", "☑️ Alliant already matches this request. Nothing to enter."]
+        elif result.questions:
             out.append("")
             out += [f"❓ Ask driver: {q}" for q in result.questions]
         elif rb := readback(result):
@@ -61,11 +63,26 @@ def render(m: dict, parsed: ParsedMessage, alliant: Alliant) -> str:
     return "\n".join(out)
 
 
+def fill_item_matches(client, parsed: ParsedMessage, alliant: Alliant) -> None:
+    """Ask Claude to place any item the word match couldn't find on the account."""
+    from .checks import current_qty
+    from .parser import match_items
+
+    account_items = list(alliant.items.get(parsed.account_number or "", {}))
+    todo = [c for c in parsed.changes
+            if not c.wearer and account_items and current_qty(alliant, parsed.account_number, c.item) is None]
+    if todo:
+        for c, name in zip(todo, match_items(client, [c.item for c in todo], account_items)):
+            c.alliant_item = name
+
+
 def score(parsed: ParsedMessage, label: ParsedMessage) -> list[str]:
     """Differences that matter for entering the change. Wording of items and questions is not scored."""
     issues = []
     if parsed.category != label.category:
         issues.append(f"category {parsed.category.value} != {label.category.value}")
+    if label.account_number and parsed.account_number != label.account_number:
+        issues.append(f"account {parsed.account_number} != {label.account_number}")
     got = sorted((c.action.value, c.quantity, c.stated_total, (c.wearer or "").lower()) for c in parsed.changes)
     want = sorted((c.action.value, c.quantity, c.stated_total, (c.wearer or "").lower()) for c in label.changes)
     if got != want:
@@ -106,6 +123,7 @@ def main():
             parsed = labels[m["id"]]
         else:
             parsed = parse_message(client, m["text"], m["channel"], m["ts"], alliant)
+            fill_item_matches(client, parsed, alliant)
         print(render(m, parsed, alliant), "\n")
         if args.eval:
             issues = score(parsed, labels[m["id"]])

@@ -62,7 +62,8 @@ class Alliant:
         return hits[0] if len(hits) == 1 else None
 
     def candidates(self, route: str | None, day: str) -> list[Customer]:
-        """Customers on this route serviced today; falls back to the whole route, then everyone."""
-        on_route = [c for c in self.customers if route is None or c.route == route]
-        today = [c for c in on_route if day in c.service_days]
-        return today or on_route or self.customers
+        """Customers on this route, today's stops first; everyone if the route is unknown.
+
+        The whole route stays in: drivers sometimes post a day after the stop."""
+        on_route = [c for c in self.customers if route is None or c.route == route] or self.customers
+        return sorted(on_route, key=lambda c: day not in c.service_days)

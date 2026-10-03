@@ -1,71 +1,432 @@
 {
-  "r1-kobuk": {"category": "item_change", "customer_as_written": "Kobuk Coffee", "summary": "Decrease bar mops by 40 to 40 total.",
-    "changes": [{"action": "decrease", "item": "bar mops", "quantity": 40, "stated_total": 40}]},
-  "r1-cityboy": {"category": "item_change", "customer_as_written": "City Boy Burgers", "summary": "Add 120 bar mops to 240 total.",
-    "changes": [{"action": "add", "item": "bar mops", "quantity": 120, "stated_total": 240}]},
-  "r1-moosetooth": {"category": "item_change", "customer_as_written": "Moose's Tooth", "summary": "Add two 3x5 charcoal heather mats.",
-    "changes": [{"action": "add", "item": "3x5 charcoal heather mat", "quantity": 2}],
-    "questions_for_driver": ["Add 2 more, or should they have 2 total?"]},
-  "r1-10thm": {"category": "item_change", "customer_as_written": "10th & M Seafoods Muldoon", "summary": "Swap one 3x10 confetti mat for a 3x10 charcoal heather.",
-    "changes": [{"action": "decrease", "item": "3x10 confetti mat", "quantity": 1, "stated_total": 2},
-                {"action": "add", "item": "3x10 charcoal heather mat", "quantity": 1, "stated_total": 1, "frequency": "frequency 7"}]},
-  "r1-wildstarr": {"category": "item_change", "customer_as_written": "Wild Starr Coffee", "summary": "Cut white microfiber by 25 and move black bibs to monthly.",
-    "changes": [{"action": "decrease", "item": "white microfiber towels", "quantity": 25, "stated_total": 50},
-                {"action": "other", "item": "black bibs", "quantity": 20, "frequency": "once per month", "effective": "this week"}]},
-  "r1-kirk": {"category": "not_a_request", "summary": "Plant completion post."},
-  "r1-omalleys": {"category": "operational_issue", "customer_as_written": "O'Malley's On The Green", "summary": "Price check: Thursday invoice costs more than Monday for the same items."},
-  "r2-safeway1807": {"category": "item_change", "customer_as_written": "Safeway 1807 Eagle River", "summary": "Stop all mats except one 3x10 until further notice.",
-    "changes": [{"action": "stop", "item": "all mats except one 3x10", "effective": "until further notice"}]},
-  "r2-raven": {"category": "wearer_change", "customer_as_written": "Safeway 1817", "summary": "Raven needs an XL meat coat.",
-    "changes": [{"action": "add", "item": "meat coat", "quantity": 1, "wearer": "Raven", "size": "XL"}],
-    "questions_for_driver": ["Is this one extra coat now, or a standing coat added to Raven's weekly set?"]},
-  "r2-3bears60": {"category": "item_change", "customer_as_written": "Three Bears #60", "summary": "Black aprons from a 20-pack to a 10-pack.",
-    "changes": [{"action": "set", "item": "black aprons", "quantity": 10}]},
-  "r2-wendys": {"category": "hold_or_closure", "customer_as_written": "Wendy's 12318 Palmer", "summary": "Closed for the winter; pick up mats and remove from delivery."},
-  "r2-stoporder": {"category": "route_or_schedule", "customer_as_written": "N & Out Transmissions", "summary": "Move stop to after Lake Otis Subway."},
-  "r3-greatak": {"category": "item_change", "customer_as_written": "Great Alaska Pizza", "summary": "Remove 20 black bibs, 20 total.",
-    "changes": [{"action": "decrease", "item": "black bibs", "quantity": 20, "stated_total": 20}]},
-  "r3-dinnerfactory": {"category": "item_change", "customer_as_written": "Alaska Dinner Factory", "summary": "Mop heads to 10 (5 orange 24oz, 5 blue 16oz) and add a 3x5 comfort flow mat.",
-    "changes": [{"action": "set", "item": "24oz orange mop heads", "quantity": 5},
-                {"action": "set", "item": "16oz blue mop heads", "quantity": 5},
-                {"action": "add", "item": "3x5 comfort flow mat", "quantity": 1}]},
-  "r3-midas-adam": {"category": "wearer_change", "customer_as_written": "Midas", "summary": "Add 3 pants for Adam, same size.",
-    "changes": [{"action": "add", "item": "pants", "quantity": 3, "wearer": "Adam", "size": "same size"}]},
-  "r4-ihop": {"category": "item_change", "customer_as_written": "IHOP", "summary": "Swap 4x6 Brandywine mat for a 4x6 charcoal.",
-    "changes": [{"action": "stop", "item": "4x6 Brandywine mat"},
-                {"action": "add", "item": "4x6 charcoal mat", "quantity": 1}]},
-  "r4-tacoscancun": {"category": "item_change", "customer_as_written": "Tacos Cancun", "summary": "Add four 3x10 mats, six total.",
-    "changes": [{"action": "add", "item": "3x10 mat", "quantity": 4, "stated_total": 6}]},
-  "r4-alyeska": {"category": "item_change", "customer_as_written": "Alyeska Tire Palmer", "summary": "Fewer laundry bags, more bag stands.",
-    "changes": [{"action": "decrease", "item": "laundry bags", "quantity": 3, "stated_total": 3},
-                {"action": "add", "item": "bag stands", "quantity": 2, "stated_total": 3}]},
-  "r4-midas8": {"category": "wearer_change", "customer_as_written": "Midas #8", "summary": "Two new wearers, Riley and Kastis.",
-    "changes": [{"action": "add", "item": "shirts", "wearer": "Riley"},
-                {"action": "add", "item": "coats", "wearer": "Riley", "size": "3X"},
-                {"action": "add", "item": "pants", "wearer": "Riley", "size": "42x32"},
-                {"action": "add", "item": "shirts", "wearer": "Kastis"},
-                {"action": "add", "item": "jackets", "wearer": "Kastis", "size": "L"},
-                {"action": "add", "item": "pants", "wearer": "Kastis", "size": "30x30"}],
-    "questions_for_driver": ["What shirt sizes for Riley and Kastis?"]},
-  "r4-denali": {"category": "item_change", "customer_as_written": "Denali Brewing Company", "summary": "Wet mops to 28.",
-    "changes": [{"action": "set", "item": "wet mops", "quantity": 28}]},
-  "r4-settlers": {"category": "item_change", "customer_as_written": "Settlers Bay Albatross", "summary": "Stop 85x85, halve all towels; closing for season in three weeks.",
-    "changes": [{"action": "stop", "item": "85x85 tablecloths"},
-                {"action": "other", "item": "all towels (reduce by half)"}]},
-  "r5-midas6": {"category": "wearer_change", "customer_as_written": "Midas #6", "summary": "Stop Dalton; add Karissa.",
-    "changes": [{"action": "stop", "item": "all garments", "wearer": "Dalton"},
-                {"action": "add", "item": "short sleeve shirts", "quantity": 11, "wearer": "Karissa", "size": "M"},
-                {"action": "add", "item": "pants", "quantity": 11, "wearer": "Karissa", "size": "32x30"},
-                {"action": "add", "item": "coats", "quantity": 2, "wearer": "Karissa", "size": "M"}]},
-  "r5-chinasea": {"category": "hold_or_closure", "customer_as_written": "China Sea Restaurant", "summary": "Closed 9/5 to 9/13; pause this week."},
-  "r6-teamcc": {"category": "item_change", "customer_as_written": "Team CC", "summary": "Customer stopped a 3x10 and a 3x5; driver thinks they meant the 4x6.",
-    "changes": [{"action": "stop", "item": "3x10 mat"}],
-    "questions_for_driver": ["Which mat should be stopped with the 3x10: the 3x5 or the 4x6? Who at Team CC can confirm?"]},
-  "r6-heritage": {"category": "item_change", "customer_as_written": "AK Native Heritage Center", "summary": "Add one 4x6 Waterhog, every other week.",
-    "changes": [{"action": "add", "item": "4x6 Waterhog mat", "quantity": 1, "frequency": "every other week"}]},
-  "r6-bsi": {"category": "item_change", "customer_as_written": "BSI", "summary": "Stop mop heads.",
-    "changes": [{"action": "stop", "item": "mop heads"}]},
-  "r7-midas-jordan": {"category": "wearer_change", "customer_as_written": "Midas", "summary": "New wearer Jordan, 11 sets.",
-    "changes": [{"action": "add", "item": "shirts", "quantity": 11, "wearer": "Jordan", "size": "2XL"},
-                {"action": "add", "item": "pants", "quantity": 11, "wearer": "Jordan", "size": "42x34"}]}
+  "r1-kobuk": {
+    "category": "item_change",
+    "customer_as_written": "Kobuk Coffee",
+    "account_number": "5015-1-00000",
+    "summary": "Decrease bar mops by 40 to 40 total.",
+    "changes": [
+      {
+        "action": "decrease",
+        "item": "bar mops",
+        "quantity": 40,
+        "stated_total": 40
+      }
+    ]
+  },
+  "r1-cityboy": {
+    "category": "item_change",
+    "customer_as_written": "City Boy Burgers",
+    "account_number": "7587-1-00000",
+    "summary": "Add 120 bar mops to 240 total.",
+    "changes": [
+      {
+        "action": "add",
+        "item": "bar mops",
+        "quantity": 120,
+        "stated_total": 240
+      }
+    ]
+  },
+  "r1-moosetooth": {
+    "category": "item_change",
+    "customer_as_written": "Moose's Tooth",
+    "account_number": "7468-1-00000",
+    "summary": "Add two 3x5 charcoal heather mats.",
+    "changes": [
+      {
+        "action": "add",
+        "item": "3x5 charcoal heather mat",
+        "quantity": 2
+      }
+    ],
+    "questions_for_driver": [
+      "Add 2 more, or should they have 2 total?"
+    ]
+  },
+  "r1-10thm": {
+    "category": "item_change",
+    "customer_as_written": "10th & M Seafoods Muldoon",
+    "account_number": "1254-1-00001",
+    "summary": "Swap one 3x10 confetti mat for a 3x10 charcoal heather.",
+    "changes": [
+      {
+        "action": "decrease",
+        "item": "3x10 confetti mat",
+        "quantity": 1,
+        "stated_total": 2
+      },
+      {
+        "action": "add",
+        "item": "3x10 charcoal heather mat",
+        "quantity": 1,
+        "stated_total": 1,
+        "frequency": "frequency 7"
+      }
+    ]
+  },
+  "r1-wildstarr": {
+    "category": "item_change",
+    "customer_as_written": "Wild Starr Coffee",
+    "account_number": "7606-1-00000",
+    "summary": "Cut white microfiber by 25 and move black bibs to monthly.",
+    "changes": [
+      {
+        "action": "decrease",
+        "item": "white microfiber towels",
+        "quantity": 25,
+        "stated_total": 50
+      },
+      {
+        "action": "other",
+        "item": "black bibs",
+        "quantity": 20,
+        "frequency": "once per month",
+        "effective": "this week"
+      }
+    ]
+  },
+  "r1-kirk": {
+    "category": "not_a_request",
+    "summary": "Plant completion post."
+  },
+  "r1-omalleys": {
+    "category": "operational_issue",
+    "customer_as_written": "O'Malley's On The Green",
+    "account_number": "1220-1-00000",
+    "summary": "Price check: Thursday invoice costs more than Monday for the same items."
+  },
+  "r2-safeway1807": {
+    "category": "item_change",
+    "customer_as_written": "Safeway 1807 Eagle River",
+    "summary": "Stop all mats except one 3x10 until further notice.",
+    "changes": [
+      {
+        "action": "stop",
+        "item": "all mats except one 3x10",
+        "effective": "until further notice"
+      }
+    ]
+  },
+  "r2-raven": {
+    "category": "wearer_change",
+    "customer_as_written": "Safeway 1817",
+    "account_number": "4000-1-01502",
+    "summary": "Raven needs an XL meat coat.",
+    "changes": [
+      {
+        "action": "add",
+        "item": "meat coat",
+        "quantity": 1,
+        "wearer": "Raven",
+        "size": "XL"
+      }
+    ],
+    "questions_for_driver": [
+      "Is this one extra coat now, or a standing coat added to Raven's weekly set?"
+    ]
+  },
+  "r2-3bears60": {
+    "category": "item_change",
+    "customer_as_written": "Three Bears #60",
+    "account_number": "7518-1-00060",
+    "summary": "Black aprons from a 20-pack to a 10-pack.",
+    "changes": [
+      {
+        "action": "set",
+        "item": "black aprons",
+        "quantity": 10
+      }
+    ]
+  },
+  "r2-wendys": {
+    "category": "hold_or_closure",
+    "customer_as_written": "Wendy's 12318 Palmer",
+    "summary": "Closed for the winter; pick up mats and remove from delivery."
+  },
+  "r2-stoporder": {
+    "category": "route_or_schedule",
+    "customer_as_written": "N & Out Transmissions",
+    "account_number": "7494-1-00000",
+    "summary": "Move stop to after Lake Otis Subway."
+  },
+  "r3-greatak": {
+    "category": "item_change",
+    "customer_as_written": "Great Alaska Pizza",
+    "account_number": "7208-1-00000",
+    "summary": "Remove 20 black bibs, 20 total.",
+    "changes": [
+      {
+        "action": "decrease",
+        "item": "black bibs",
+        "quantity": 20,
+        "stated_total": 20
+      }
+    ]
+  },
+  "r3-dinnerfactory": {
+    "category": "item_change",
+    "customer_as_written": "Alaska Dinner Factory",
+    "account_number": "7465-1-00000",
+    "summary": "Mop heads to 10 (5 orange 24oz, 5 blue 16oz) and add a 3x5 comfort flow mat.",
+    "changes": [
+      {
+        "action": "set",
+        "item": "24oz orange mop heads",
+        "quantity": 5
+      },
+      {
+        "action": "set",
+        "item": "16oz blue mop heads",
+        "quantity": 5
+      },
+      {
+        "action": "add",
+        "item": "3x5 comfort flow mat",
+        "quantity": 1
+      }
+    ]
+  },
+  "r3-midas-adam": {
+    "category": "wearer_change",
+    "customer_as_written": "Midas",
+    "account_number": "1205-1-00003",
+    "summary": "Add 3 pants for Adam, same size.",
+    "changes": [
+      {
+        "action": "add",
+        "item": "pants",
+        "quantity": 3,
+        "wearer": "Adam",
+        "size": "same size"
+      }
+    ]
+  },
+  "r4-ihop": {
+    "category": "item_change",
+    "customer_as_written": "IHOP",
+    "account_number": "1097-1-00001",
+    "summary": "Swap 4x6 Brandywine mat for a 4x6 charcoal.",
+    "changes": [
+      {
+        "action": "stop",
+        "item": "4x6 Brandywine mat"
+      },
+      {
+        "action": "add",
+        "item": "4x6 charcoal mat",
+        "quantity": 1
+      }
+    ]
+  },
+  "r4-tacoscancun": {
+    "category": "item_change",
+    "customer_as_written": "Tacos Cancun",
+    "account_number": "1143-1-00000",
+    "summary": "Add four 3x10 mats, six total.",
+    "changes": [
+      {
+        "action": "add",
+        "item": "3x10 mat",
+        "quantity": 4,
+        "stated_total": 6
+      }
+    ]
+  },
+  "r4-alyeska": {
+    "category": "item_change",
+    "customer_as_written": "Alyeska Tire Palmer",
+    "account_number": "7487-1-00003",
+    "summary": "Fewer laundry bags, more bag stands.",
+    "changes": [
+      {
+        "action": "decrease",
+        "item": "laundry bags",
+        "quantity": 3,
+        "stated_total": 3
+      },
+      {
+        "action": "add",
+        "item": "bag stands",
+        "quantity": 2,
+        "stated_total": 3
+      }
+    ]
+  },
+  "r4-midas8": {
+    "category": "wearer_change",
+    "customer_as_written": "Midas #8",
+    "account_number": "1205-1-00008",
+    "summary": "Two new wearers, Riley and Kastis.",
+    "changes": [
+      {
+        "action": "add",
+        "item": "shirts",
+        "wearer": "Riley"
+      },
+      {
+        "action": "add",
+        "item": "coats",
+        "wearer": "Riley",
+        "size": "3X"
+      },
+      {
+        "action": "add",
+        "item": "pants",
+        "wearer": "Riley",
+        "size": "42x32"
+      },
+      {
+        "action": "add",
+        "item": "shirts",
+        "wearer": "Kastis"
+      },
+      {
+        "action": "add",
+        "item": "jackets",
+        "wearer": "Kastis",
+        "size": "L"
+      },
+      {
+        "action": "add",
+        "item": "pants",
+        "wearer": "Kastis",
+        "size": "30x30"
+      }
+    ],
+    "questions_for_driver": [
+      "What shirt sizes for Riley and Kastis?"
+    ]
+  },
+  "r4-denali": {
+    "category": "item_change",
+    "customer_as_written": "Denali Brewing Company",
+    "account_number": "7363-1-00001",
+    "summary": "Wet mops to 28.",
+    "changes": [
+      {
+        "action": "set",
+        "item": "wet mops",
+        "quantity": 28
+      }
+    ]
+  },
+  "r4-settlers": {
+    "category": "item_change",
+    "customer_as_written": "Settlers Bay Albatross",
+    "account_number": "7364-1-00000",
+    "summary": "Stop 85x85, halve all towels; closing for season in three weeks.",
+    "changes": [
+      {
+        "action": "stop",
+        "item": "85x85 tablecloths"
+      },
+      {
+        "action": "other",
+        "item": "all towels (reduce by half)"
+      }
+    ]
+  },
+  "r5-midas6": {
+    "category": "wearer_change",
+    "customer_as_written": "Midas #6",
+    "account_number": "1205-1-00006",
+    "summary": "Stop Dalton; add Karissa.",
+    "changes": [
+      {
+        "action": "stop",
+        "item": "all garments",
+        "wearer": "Dalton"
+      },
+      {
+        "action": "add",
+        "item": "short sleeve shirts",
+        "quantity": 11,
+        "wearer": "Karissa",
+        "size": "M"
+      },
+      {
+        "action": "add",
+        "item": "pants",
+        "quantity": 11,
+        "wearer": "Karissa",
+        "size": "32x30"
+      },
+      {
+        "action": "add",
+        "item": "coats",
+        "quantity": 2,
+        "wearer": "Karissa",
+        "size": "M"
+      }
+    ]
+  },
+  "r5-chinasea": {
+    "category": "hold_or_closure",
+    "customer_as_written": "China Sea Restaurant",
+    "account_number": "7414-1-00000",
+    "summary": "Closed 9/5 to 9/13; pause this week."
+  },
+  "r6-teamcc": {
+    "category": "item_change",
+    "customer_as_written": "Team CC",
+    "account_number": "2058-1-00000",
+    "summary": "Customer stopped a 3x10 and a 3x5; driver thinks they meant the 4x6.",
+    "changes": [
+      {
+        "action": "stop",
+        "item": "3x10 mat"
+      }
+    ],
+    "questions_for_driver": [
+      "Which mat should be stopped with the 3x10: the 3x5 or the 4x6? Who at Team CC can confirm?"
+    ]
+  },
+  "r6-heritage": {
+    "category": "item_change",
+    "customer_as_written": "AK Native Heritage Center",
+    "account_number": "1761-1-00000",
+    "summary": "Add one 4x6 Waterhog, every other week.",
+    "changes": [
+      {
+        "action": "add",
+        "item": "4x6 Waterhog mat",
+        "quantity": 1,
+        "frequency": "every other week"
+      }
+    ]
+  },
+  "r6-bsi": {
+    "category": "item_change",
+    "customer_as_written": "BSI",
+    "account_number": "1003-1-00000",
+    "summary": "Stop mop heads.",
+    "changes": [
+      {
+        "action": "stop",
+        "item": "mop heads"
+      }
+    ]
+  },
+  "r7-midas-jordan": {
+    "category": "wearer_change",
+    "customer_as_written": "Midas",
+    "account_number": "1205-1-00001",
+    "summary": "New wearer Jordan, 11 sets.",
+    "changes": [
+      {
+        "action": "add",
+        "item": "shirts",
+        "quantity": 11,
+        "wearer": "Jordan",
+        "size": "2XL"
+      },
+      {
+        "action": "add",
+        "item": "pants",
+        "quantity": 11,
+        "wearer": "Jordan",
+        "size": "42x34"
+      }
+    ]
+  }
 }

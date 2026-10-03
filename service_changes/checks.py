@@ -6,30 +6,61 @@ from .context import Alliant
 from .schema import Action, Category, Change, ParsedMessage
 
 
+# Driver wording -> Alliant wording, applied before comparing words.
+SYNONYMS = [
+    (r"(\d+)\s*x\s*(\d+)", r"\1x\2"),             # "4 x 6" -> "4x6"
+    (r"(\d+)\s*oz\b", r"\1oz"),                   # "24 oz" -> "24oz"
+    (r"\b(?:orange|blue)\s+(?=\d+\s*oz|mop|wet)", ""),  # mop head colors just mark the size (24oz orange, 16oz blue)
+    (r"\bmop ?heads?\b|\bwet ?mops?\b", "mop wet"),
+    (r"\bbar ?mops?\b", "bar mop"),
+    (r"\bwater ?hogs?\b", "waterhog"),
+    (r"\bmicro ?fibers?\b", "microfiber"),
+    (r"\btable ?cloths?\b", "t/c"),
+    (r"\bbrandy ?wine\b", "brandywine"),
+]
+FILLER = {"mat", "towel", "the", "a", "of", "and", "s"}  # too generic to tell lines apart on their own
+
+
 def _words(s: str) -> set[str]:
-    return {w[:-1] if w.endswith("s") and len(w) > 3 else w for w in re.findall(r"[a-z0-9]+", s.lower().replace(" x ", "x"))}
+    s = s.lower()
+    for pat, rep in SYNONYMS:
+        s = re.sub(pat, rep, s)
+    return {w[:-1] if w.endswith("s") and len(w) > 3 else w for w in re.findall(r"[a-z0-9/]+", s)}
 
 
-def _joined(s: str) -> str:
-    return "".join(sorted(_words(s), key=s.lower().find))
+_VOCAB: dict[int, set[str]] = {}
 
 
-def _matches(driver_item: str, alliant_item: str) -> bool:
-    # "3x10 mat" fits "3x10 Charcoal Heather Mat"; "barmops" fits "Bar Mops".
-    want, have = _words(driver_item), _words(alliant_item)
-    return bool(want) and (want <= have or _joined(driver_item) == _joined(alliant_item))
+def alliant_vocab(alliant: Alliant) -> set[str]:
+    """Every word used in any Alliant item name."""
+    key = id(alliant.items)
+    if key not in _VOCAB:
+        _VOCAB[key] = set().union(*(_words(n) for lines in alliant.items.values() for n in lines))
+    return _VOCAB[key]
 
 
 def current_qty(alliant: Alliant, account: str | None, item: str) -> tuple[str, int] | None:
-    """Find the account's line item that matches `item`. Returns None unless exactly one matches."""
+    """The account's line item that `item` refers to, or None unless exactly one fits.
+
+    Every word the driver used must appear in the Alliant item, except words that appear nowhere
+    in Alliant ("please", "new"). A real color like "brandywine" is kept, so "4x6 brandywine"
+    won't match a charcoal 4x6.
+    """
     lines = alliant.items.get(account or "", {})
-    hits = [(name, qty) for name, qty in lines.items() if _matches(item, name)]
+    if item in lines:
+        return item, lines[item]
+    known = _words(item) & alliant_vocab(alliant)
+    if not known - FILLER:
+        return None
+    hits = [(n, q) for n, q in lines.items() if known <= _words(n)]
     return hits[0] if len(hits) == 1 else None
 
 
 @dataclass
 class CheckedChange:
     change: Change
+    alliant_item: str | None = None
+    already_done: bool = False
     current: int | None = None
     new_total: int | None = None
     questions: list[str] = field(default_factory=list)
@@ -55,9 +86,9 @@ def check(parsed: ParsedMessage, alliant: Alliant) -> Result:
     out = []
     for ch in parsed.changes:
         cc = CheckedChange(ch)
-        found = current_qty(alliant, parsed.account_number, ch.item) if not ch.wearer else None
+        found = current_qty(alliant, parsed.account_number, ch.alliant_item or ch.item) if not ch.wearer else None
         if found:
-            cc.current = found[1]
+            cc.alliant_item, cc.current = found
         q = ch.quantity
 
         if ch.action == Action.stop:
@@ -67,7 +98,16 @@ def check(parsed: ParsedMessage, alliant: Alliant) -> Result:
         elif ch.action in (Action.add, Action.decrease) and q is not None and cc.current is not None:
             cc.new_total = cc.current + q if ch.action == Action.add else cc.current - q
 
-        if cc.current is not None and ch.action == Action.decrease and q is not None and q > cc.current:
+        target = ch.stated_total if ch.stated_total is not None else (q if ch.action == Action.set else None)
+        if cc.current is not None and target is not None and cc.current == target:
+            # Alliant already shows what the driver asked for: entered already, or a repeat request.
+            cc.already_done = True
+            cc.new_total = cc.current
+            cc.notes.append(f"Alliant already shows {cc.current}; may already be entered")
+        elif cc.current == 0 and ch.action == Action.stop:
+            cc.already_done = True
+            cc.notes.append("Already 0 in Alliant")
+        elif cc.current is not None and ch.action == Action.decrease and q is not None and q > cc.current:
             cc.questions.append(f"{who} only has {cc.current} {ch.item} now. Decrease by {q}? What should the total be?")
         elif cc.current is not None and ch.stated_total is not None and cc.new_total is not None and ch.stated_total != cc.new_total:
             verb = {Action.add: "Adding", Action.decrease: "Decreasing", Action.set: "Setting to", Action.stop: "Stopping"}.get(ch.action, "This")
@@ -80,8 +120,8 @@ def check(parsed: ParsedMessage, alliant: Alliant) -> Result:
 
         if ch.action in (Action.add, Action.decrease) and ch.stated_total is None and not ch.wearer:
             cc.notes.append("No total given")
-        if cc.current is None and not ch.wearer and parsed.account_number:
-            cc.notes.append("Item not found on account; check by hand")
+        if cc.current is None and not ch.wearer and parsed.account_number and alliant.items:
+            cc.notes.append("Not on this account in Alliant" + (" (may already be stopped)" if ch.action == Action.stop else "; check by hand"))
         out.append(cc)
     return Result(parsed, out)
 

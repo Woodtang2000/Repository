@@ -20,6 +20,8 @@ Claude only reads and classifies the message (`parser.py`). The arithmetic and t
 | `context.py` | Route and service day, plus loading the Alliant CSV exports |
 | `checks.py` | Quantity checks against Alliant, driver questions, readback text |
 | `run.py` | Command line: runs a batch of messages and prints the report |
+| `alliant_report.py` | Converts Alliant's Item Usage report (Excel) into the CSVs below |
+| `slack_manifest.yaml` | Slack app definition for the Service Desk bot |
 | `examples/messages.json` | 27 real messages from the route channels (Jul–Oct 2026) |
 | `examples/labels.json` | Hand-checked correct reading of each message, used to score the parser |
 | `examples/demo_*.csv` | **Demo data only.** Placeholder accounts. Quantities were inferred from the Slack threads, not taken from Alliant |
@@ -45,15 +47,26 @@ python -m service_changes.run service_changes/examples/messages.json \
   --eval service_changes/examples/labels.json
 ```
 
-## Alliant exports it expects
+## Alliant data
 
-Extra columns are ignored.
+Export Alliant's **Item Usage** report (All SKU Groups, customer/employee order) to Excel, then:
 
-- `customers.csv`: `account, name, route, service_days`, where service_days looks like `Mon;Thu`
-- `current_items.csv`: `account, item, quantity`
+```bash
+python -m service_changes.alliant_report Alliant_Item_Usage_Report.xlsx --out service_changes/data
+```
+
+This writes `customers.csv` (account, name, route, service_days, frequency), `current_items.csv`
+(account, item, quantity, sku, days, frequency, unit_price, delivery_unit) and `garments.csv`
+(account, employee number, sku, size, item, quantity). `service_changes/data/` is kept out of git
+because it holds customer pricing.
+
+Run the parser against it with `--customers service_changes/data/customers.csv --items service_changes/data/current_items.csv`.
+
+When Alliant already shows the total the driver asked for, the change is reported as "already entered"
+rather than raised as a question.
 
 ## Not built yet
 
-- Wearer lists (garments and sizes per employee), for checking garment changes
+- Employee names for garment checks (the Item Usage report has employee numbers only)
 - Watching Slack live and replying in threads
 - Writing changes into Alliant
