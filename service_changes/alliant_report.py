@@ -4,7 +4,7 @@
 
 Writes:
   customers.csv      account, name, route, service_days, frequency
-  current_items.csv  account, item, quantity, sku, days, frequency, unit_price, delivery_unit
+  current_items.csv  account, item, quantity (inventory), autocount, sku, days, frequency, unit_price, delivery_unit
   garments.csv       account, employee, sku, size, item, quantity, days, frequency
   wearers.csv        account, employee, first, last, department   (from the Wearer Alpha List, --wearers)
 
@@ -57,12 +57,40 @@ def parse(path):
             unit = str(r.get(C_UNIT_NAME, ""))
         elif cur and C_DESC in r and C_QTY in r and isinstance(r[C_QTY], (int, float)):
             line = {"account": cur, "sku": str(r.get(C_SKU, "")), "item": r[C_DESC], "quantity": int(r[C_QTY]),
-                    "days": ";".join(decode_days(r.get(C_DAYS))), "frequency": str(r.get(C_FREQ, ""))}
+                    "days": ";".join(decode_days(r.get(C_DAYS))), "frequency": str(r.get(C_FREQ, "")),
+                    "_seq": len(items) + len(garments), "_empl": str(r.get(C_EMPL, ""))}
             if C_EMPL in r:
                 garments.append({**line, "employee": str(r[C_EMPL]), "size": str(r.get(C_SIZE, ""))})
             else:
                 items.append({**line, "unit_price": r.get(C_UNIT_PRICE, ""), "delivery_unit": unit})
     return customers, items, garments
+
+
+def add_autocount(items, garments, cards_path):
+    """Fill in each item's autocount from Alliant's Customer Record Cards export.
+
+    The cards list the same lines in the same order as the Item Usage report, but the PDF-to-Excel
+    conversion drops every card's header after the first, so lines can't be tied to accounts directly.
+    Line the two lists up instead (SKU, description, inventory and wearer number must all agree, in runs
+    of 3 or more) and copy the Auto Count across. Lines that don't line up are left blank.
+    Returns (lines matched, total lines).
+    """
+    import difflib
+
+    cards = []
+    for r in _rows(cards_path):
+        if 18 in r and 69 in r and 5 in r and isinstance(r.get(55), (int, float)):
+            cards.append(((str(r[5]), str(r[18]), int(r[55]), str(r.get(1, ""))), int(r[69])))
+    ordered = sorted(items + garments, key=lambda line: line["_seq"])
+    keys = [(line["sku"], line["item"], line["quantity"], line["_empl"]) for line in ordered]
+    matcher = difflib.SequenceMatcher(None, [k for k, _ in cards], keys, autojunk=False)
+    matched = 0
+    for block in matcher.get_matching_blocks():
+        if block.size >= 3:
+            for k in range(block.size):
+                ordered[block.b + k]["autocount"] = cards[block.a + k][1]
+            matched += block.size
+    return matched, len(ordered)
 
 
 def parse_wearers(path):
@@ -107,7 +135,7 @@ def write(customers, items, garments, out_dir):
 
     for name, rows, cols in [
         ("customers.csv", customers, ["account", "name", "route", "service_days", "frequency"]),
-        ("current_items.csv", items, ["account", "item", "quantity", "sku", "days", "frequency", "unit_price", "delivery_unit"]),
+        ("current_items.csv", items, ["account", "item", "quantity", "autocount", "sku", "days", "frequency", "unit_price", "delivery_unit"]),
         ("garments.csv", garments, ["account", "employee", "sku", "size", "item", "quantity", "days", "frequency"]),
     ]:
         with open(os.path.join(out_dir, name), "w", newline="") as f:
@@ -120,10 +148,14 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("report", nargs="?", help="Item Usage report (.xlsx)")
     ap.add_argument("--wearers", help="Wearer Alpha List (.xlsx)")
+    ap.add_argument("--cards", help="Customer Record Cards (.xlsx), for each item's autocount")
     ap.add_argument("--out", default="data")
     args = ap.parse_args()
     if args.report:
         customers, items, garments = parse(args.report)
+        if args.cards:
+            matched, total = add_autocount(items, garments, args.cards)
+            print(f"autocount found for {matched} of {total} lines")
         write(customers, items, garments, args.out)
         print(f"{len(customers)} customers, {len(items)} item lines, {len(garments)} garment lines -> {args.out}/")
     if args.wearers:

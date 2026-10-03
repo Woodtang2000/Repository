@@ -49,12 +49,12 @@ python -m service_changes.run service_changes/examples/messages.json \
 
 ## Alliant data
 
-Export two Alliant reports to Excel: **Item Usage** (All SKU Groups, customer/employee order) and the
-**Wearer Alpha List**. Then:
+Export three Alliant reports to Excel: **Item Usage** (All SKU Groups, customer/employee order), the
+**Wearer Alpha List**, and the **Customer Record Cards** (for each item's autocount). Then:
 
 ```bash
 python -m service_changes.alliant_report Alliant_Item_Usage_Report.xlsx \
-  --wearers Wearer_Alpha_List.xlsx --out service_changes/data
+  --wearers Wearer_Alpha_List.xlsx --cards Alliant_Customer_Record_Cards.xlsx --out service_changes/data
 ```
 
 This writes `customers.csv` (account, name, route, service_days, frequency), `current_items.csv`
@@ -68,10 +68,10 @@ Run the parser against it with `--data service_changes/data`.
 When Alliant already shows the total the driver asked for, the change is reported as "already entered"
 rather than raised as a question.
 
-Drivers talk about the **autocount** (what gets delivered). The Item Usage report only has inventory, which
-on some accounts is double the autocount. Until an autocount export is added (an `autocount` column in
-`current_items.csv` is picked up automatically), the checks accept either reading when it fits the
-driver's numbers and note which one they used.
+Drivers talk about the **autocount** (what gets delivered). Inventory on some accounts is double the
+autocount. The autocount comes from the record cards; the PDF-to-Excel conversion keeps only the first
+card's header, so lines are matched to the Item Usage report by order (about 89% of item lines). Where no
+autocount was found, the checks accept inventory or half of it, whichever fits the driver's numbers.
 
 ## Not built yet
 
