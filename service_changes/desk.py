@@ -444,6 +444,10 @@ class Desk:
                 for ch, ts, attempt in items:  # announced but not returned by history yet: look again shortly
                     if ts and ts not in self.fetched.get(ch, set()) and attempt < 10:
                         threading.Timer(1.0, todo.put, [(ch, ts, attempt + 1)]).start()
+                    elif not ts and attempt == 0:
+                        # A ✅, an office "done" or a thread reply can't be checked the same way: look twice more.
+                        for delay in (2.0, 6.0):
+                            threading.Timer(delay, todo.put, [(ch, None, 1)]).start()
                 if any(counts[k] for k in ("asked", "ticket", "readback", "answered")):
                     print(time.strftime("%H:%M"), ", ".join(f"{v} {k}" for k, v in counts.items()), flush=True)
             except Exception as e:  # keep listening through a Slack or API hiccup
