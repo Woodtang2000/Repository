@@ -307,7 +307,9 @@ def test_driver_question_is_answered_from_alliant(setup, monkeypatch):
     [a] = slack.bot_posts("C1", "answer")
     assert a["text"].startswith("<@U1> *WENDY'S #4412*: 4 3x10 charcoal mats per delivery")
     assert "MAT CHARCOAL HEATHER 3X10: 4 per delivery" in asked[0][1]
-    assert not slack.bot_posts("D1", "ticket")  # the office isn't bothered
+    assert not slack.bot_posts("D1", "ticket")  # nothing for the office to do...
+    [log] = slack.bot_posts("D1", "lookup_log")  # ...but they see what was asked and answered
+    assert "*Mike Driver* asked about *W1* WENDY'S #4412" in log["text"] and "4 3x10 charcoal mats" in log["text"]
 
     # A follow-up in the channel is read with the first question; one the data can't answer goes to the office.
     slack.say("C1", "U1", "and shop towels?")
@@ -316,3 +318,19 @@ def test_driver_question_is_answered_from_alliant(setup, monkeypatch):
     assert "I've asked the office" in slack.bot_posts("C1", "answer")[-1]["text"]
     [t] = slack.bot_posts("D1", "ticket")
     assert "Driver question I couldn't answer" in t["text"]
+
+
+def test_too_many_lookups_in_a_day_are_held_and_flagged(setup, monkeypatch):
+    import service_changes.parser as parser
+    from .parser import Answer
+    slack, d = setup
+    monkeypatch.setattr(desk, "MAX_LOOKUPS_PER_DAY", 2)
+    monkeypatch.setattr(parser, "answer_lookup", lambda c, q, f: Answer(answer="4 mats", found=True))
+    for i in range(3):
+        slack.say("C1", "U1", f"new: how many mats does wendys get {i}?")
+        d.run_once()
+    answers = slack.bot_posts("C1", "answer")
+    assert len(answers) == 3 and "passed this one to the office" in answers[-1]["text"]
+    assert len(slack.bot_posts("D1", "lookup_log")) == 2
+    [flag] = slack.bot_posts("D1", "lookup_limit")
+    assert "*Mike Driver* has asked about accounts 2 times today" in flag["text"]

@@ -42,6 +42,7 @@ WORKING = "hourglass_flowing_sand"  # put on by the listener the moment a messag
 DONE_REACTIONS = {"white_check_mark", "heavy_check_mark", "ballot_box_with_check"}
 DONE_WORDS = re.compile(r"^\s*(done|changed|entered|complete[d]?|made|updated|ok(ay)?|got it|all set|finished)\b[\s.!]*$", re.I)
 MAX_ASKS = 2
+MAX_LOOKUPS_PER_DAY = 15  # per person: past this the bot stops answering and tells the office
 ACTIONABLE = {Category.item_change, Category.wearer_change, Category.hold_or_closure, Category.special_order}
 DONE_ANY = re.compile(r"\b(done|entered|changed|complete[d]?|all set|finished)\b", re.I)
 ACCOUNT = re.compile(r"\b\d{4}-\d-\d{5}\b")
@@ -209,19 +210,38 @@ class Desk:
         return did
 
     def answer(self, route_name, channel, src, author, parsed, replies, bot_posts) -> str:
-        """A driver's question about an account, answered from the Alliant export. If the data doesn't say, the
-        driver is told so and the office gets an FYI ticket."""
-        from .context import account_facts
+        """A driver's question about an account, answered from the Alliant export. Every answer is logged in the
+        office channel; if the data doesn't say, the office gets a ticket instead; past MAX_LOOKUPS_PER_DAY for one
+        person the bot stops answering and flags it."""
+        from .context import ALASKA, account_facts
         from .parser import answer_lookup
+        from datetime import datetime
         acct = parsed.account_number
-        ans = answer_lookup(self.claude, parsed.summary or src.get("text", ""), account_facts(self.alliant, acct))
         name = next((c.name for c in self.alliant.customers if c.account == acct), parsed.customer_as_written or acct)
+        link = self.slack.chat_getPermalink(channel=channel, message_ts=src["ts"])["permalink"]
+        midnight = datetime.now(ALASKA).replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
+        today = sum(1 for b in bot_posts if (meta(b) or {}).get("kind") == "answer"
+                    and meta(b).get("driver_id") == src.get("user") and float(b["ts"]) >= midnight)
+        if today >= MAX_LOOKUPS_PER_DAY:
+            # Lots of lookups in one day: stop answering and let the office decide.
+            self.post(channel, f"<@{src.get('user')}> I've passed this one to the office.",
+                      {"kind": "answer", "src_ts": src["ts"], "driver_id": src.get("user"), "msgs": replies, "held": True},
+                      bot_posts)
+            self.post(self.desk_id, f"⚠️ *{author}* has asked about accounts {today} times today in #{route_name}; "
+                                    f"I've stopped answering. Latest: _{_short(src.get('text', ''), 120)}_ "
+                                    f"(<{link}|#{route_name}>)", {"kind": "lookup_limit", "driver_id": src.get("user")})
+            return "answered"
+        ans = answer_lookup(self.claude, parsed.summary or src.get("text", ""), account_facts(self.alliant, acct))
         as_of = f" _(Alliant as of {self.alliant.as_of})_" if self.alliant.as_of else ""
         text = f"<@{src.get('user')}> *{name}*: {ans.answer}{as_of}"
-        if not ans.found:
+        if ans.found:
+            # The office sees every answer the bot gives out: who asked, about which account, and what they got.
+            self.post(self.desk_id, f"🔎 *{author}* asked about *{acct}* {name} (<{link}|#{route_name}>): "
+                                    f"_{_short(src.get('text', ''), 120)}_\n↳ {_short(ans.answer, 200)}",
+                      {"kind": "lookup_log", "driver_id": src.get("user"), "account": acct})
+        else:
             text += "\nI've asked the office."
             lines = [f"*{acct}*  {name}", f"❓ *Driver question I couldn't answer*: {parsed.summary}"]
-            link = self.slack.chat_getPermalink(channel=channel, message_ts=src["ts"])["permalink"]
             self.post(self.desk_id, "\n".join(lines + ["", _quote(_short(src.get("text", ""), 300)),
                                                      f"<{link}|#{route_name}> · Answer the driver there, then react ✅"]),
                       {"kind": "ticket", "src_channel": channel, "src_ts": src["ts"], "readback": "",
