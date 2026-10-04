@@ -365,3 +365,13 @@ def test_at_most_three_questions_at_once(setup, monkeypatch):
     assert d.run_once()["asked"] == 1
     [q] = slack.bot_posts("C1", "question")
     assert q["text"].count("•") == 3 and "Question 3?" in q["text"] and "Question 4?" not in q["text"]
+
+
+def test_checkmark_from_the_event_before_history_shows_it(setup):
+    slack, d = setup
+    slack.say("C1", "U1", "wendys mats to 6: 6")
+    d.run_once()
+    [t] = slack.bot_posts("D1", "ticket")
+    d.done_events[t["ts"]] = "U2"  # Slack's reaction_added event arrived; history has no ✅ yet
+    assert d.run_once()["readback"] == 1
+    assert d.done_events == {} and d.run_once()["readback"] == 0

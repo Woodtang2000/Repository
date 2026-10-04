@@ -87,6 +87,8 @@ class Desk:
         self.links: dict[tuple[str, str], set[str]] = {}  # (channel, request ts) -> main-channel replies read with it
         self.listening = False
         self.fetched: dict[str, set[str]] = {}  # per route channel: the top-level messages the last pass saw
+        # Office ✅ reactions straight from Slack's event (ticket ts -> who), for when history doesn't show them yet.
+        self.done_events: dict[str, str] = {}
         channels = {}
         cursor = None
         while True:
@@ -332,7 +334,7 @@ class Desk:
         done: dict[str, tuple[str, list[str]]] = {}
         for t in tickets:
             who = next((u for r in t.get("reactions", []) if r.get("name") in DONE_REACTIONS
-                        for u in r.get("users", []) if u != self.me), None)
+                        for u in r.get("users", []) if u != self.me), None) or self.done_events.pop(t["ts"], None)
             people = [r for r in self.thread(self.desk_id, t)[1:] if not _is_bot(r, self.me)]
             who = who or next((r.get("user") for r in people if DONE_WORDS.match(r.get("text", ""))), None)
             if who:
@@ -416,6 +418,12 @@ class Desk:
                     quick.reactions_add(channel=channel, timestamp=ev["ts"], name=WORKING)
                 except Exception:
                     pass
+            if ev.get("type") == "reaction_added" and channel == self.desk_id and ev.get("user") != self.me \
+                    and ev.get("reaction") in DONE_REACTIONS:
+                self.done_events[ev.get("item", {}).get("ts")] = ev["user"]
+                print(time.strftime("%H:%M"), "✅ from", ev["user"], flush=True)
+            if ev.get("type") == "reaction_removed" and channel == self.desk_id:  # tapped ✅ by mistake
+                self.done_events.pop(ev.get("item", {}).get("ts"), None)
             if ev.get("type") in ("message", "reaction_added") and ev.get("user") != self.me:
                 new_top = (ev.get("type") == "message" and ev.get("subtype") is None and channel != self.desk_id
                            and ev.get("thread_ts") in (None, ev.get("ts")))
@@ -447,7 +455,7 @@ class Desk:
                         threading.Timer(1.0, todo.put, [(ch, ts, attempt + 1)]).start()
                     elif not ts and attempt == 0:
                         # A ✅, an office "done" or a thread reply can't be checked the same way: look twice more.
-                        for delay in (2.0, 6.0):
+                        for delay in (2.0, 6.0, 20.0):
                             threading.Timer(delay, todo.put, [(ch, None, 1)]).start()
                 if any(counts[k] for k in ("asked", "ticket", "readback", "answered")):
                     print(time.strftime("%H:%M"), ", ".join(f"{v} {k}" for k, v in counts.items()), flush=True)
