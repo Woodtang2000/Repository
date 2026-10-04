@@ -107,6 +107,9 @@ def fake_parse(client, text, channel, ts, alliant, author="", office=False, prev
     last = text.splitlines()[-1].lower()
     if "thanks" in last:
         return ParsedMessage(category=Category.not_a_request, summary="thanks")
+    if "how many" in last or "and shop towels" in last:
+        return ParsedMessage(category=Category.lookup, customer_as_written="Wendy's", account_number="W1",
+                             summary=text.splitlines()[-1].split(": ", 1)[-1])
     acct = "4000-1-01606" if "safeway" in text.lower() else "W1"
     mats = lambda n: ParsedMessage(category=Category.item_change, customer_as_written="Wendy's", account_number=acct,
                                    summary=f"mats to {n}", changes=[Change(action=Action.set, item="3x10 mats", quantity=n)])
@@ -135,7 +138,7 @@ def setup(monkeypatch):
     return slack, desk.Desk(slack, None, ALLIANT, "service-desk-test", ["route-1-test"])
 
 
-NOTHING = {"asked": 0, "ticket": 0, "read": 0, "readback": 0}
+NOTHING = {"asked": 0, "ticket": 0, "read": 0, "readback": 0, "answered": 0}
 
 
 def test_main_channel_loop(setup):
@@ -285,3 +288,31 @@ def test_short_answer_skips_the_reply_check(setup, monkeypatch):
     d.run_once()
     slack.say("C1", "U1", "6")
     assert d.run_once()["ticket"] == 1 and calls == []
+
+
+def test_driver_question_is_answered_from_alliant(setup, monkeypatch):
+    import service_changes.parser as parser
+    from .parser import Answer
+    slack, d = setup
+    asked = []
+
+    def fake_answer(client, question, facts):
+        asked.append((question, facts))
+        found = "towels" not in question
+        return Answer(answer="4 3x10 charcoal mats per delivery" if found else "No shop towels on this account.", found=found)
+
+    monkeypatch.setattr(parser, "answer_lookup", fake_answer)
+    slack.say("C1", "U1", "how many mats does wendys get?")
+    assert d.run_once()["answered"] == 1
+    [a] = slack.bot_posts("C1", "answer")
+    assert a["text"].startswith("<@U1> *WENDY'S #4412*: 4 3x10 charcoal mats per delivery")
+    assert "MAT CHARCOAL HEATHER 3X10: 4 per delivery" in asked[0][1]
+    assert not slack.bot_posts("D1", "ticket")  # the office isn't bothered
+
+    # A follow-up in the channel is read with the first question; one the data can't answer goes to the office.
+    slack.say("C1", "U1", "and shop towels?")
+    assert d.run_once()["answered"] == 1
+    assert "Service Desk answered:" in CALLS[-1]
+    assert "I've asked the office" in slack.bot_posts("C1", "answer")[-1]["text"]
+    [t] = slack.bot_posts("D1", "ticket")
+    assert "Driver question I couldn't answer" in t["text"]

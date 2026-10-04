@@ -146,7 +146,11 @@ has to use threads.
    number if several tickets are open). Words after "done" go to the driver as a note.
 5. The bot posts the readback in the route channel, @mentioning the driver, and marks the ticket
    "✅ Entered by <name> · readback sent".
-6. A correction after the readback comes back as a 🔁 correction ticket; a change before the office finished
+6. Drivers can also ask about an account ("how many bar mops does Humpy's get?"). The bot answers in the channel
+   from the Alliant export (items with per-delivery autocount and frequency, wearers and sizes, stop, contact, card
+   note; never prices or contract terms) and says which export date it used. If the data doesn't say, the office
+   gets a ❓ ticket.
+7. A correction after the readback comes back as a 🔁 correction ticket; a change before the office finished
    marks the open ticket 🚫 Replaced.
 
 ```bash

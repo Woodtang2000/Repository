@@ -12,6 +12,7 @@ class Category(str, Enum):
     special_order = "special_order"          # one-time delivery, not on the standing invoice
     route_or_schedule = "route_or_schedule"  # stop order, service day move, redate
     operational_issue = "operational_issue"  # missing/wrong items, damage, truck, pricing question
+    lookup = "lookup"                        # a question about the account: "how many bar mops does Humpy's get?"
     not_a_request = "not_a_request"          # confirmations, plant completion posts, chatter
 
 

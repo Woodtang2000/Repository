@@ -51,6 +51,10 @@ Classify the message and extract every change in it. Rules:
 - A message that only makes sense with the previous one ("Actually cancel the special", "make that 6") applies to
   that previous request: say what it changes, using the customer from the previous message.
 - Plant completion posts ("You're 100% complete with the linens"), "ok", "done", and other replies are not_a_request.
+- A question asking what a customer has or gets ("how many bar mops does Humpy's get?", "what size is Juan?",
+  "what's their stop number?", "when do they get mats?") is lookup with no changes: fill the customer and account and
+  put the question in summary. A question that asks the office to do something ("can you call them?") is not lookup.
+  After Service Desk answered a lookup, a follow-up ("and shop towels?") is another lookup for the same customer.
 - The message may be a whole thread: the original request, questions Service Desk asked, and the driver's answers,
   sometimes followed by what the office entered and the driver's reply to that. Read it as one request as it stands
   now: answers fill in or override the original. Only ask again about what is still unanswered. If the driver's last
@@ -85,6 +89,29 @@ def prompt_parts(text: str, channel: str, ts: str, alliant: Alliant, author: str
 
 def build_prompt(*args, **kw) -> str:
     return "\n\n".join(prompt_parts(*args, **kw))
+
+
+class Answer(BaseModel):
+    answer: str = Field(description="Short plain answer for a route driver, from the account data only.")
+    found: bool = Field(description="False if the account data doesn't contain what was asked.")
+
+
+def answer_lookup(client: anthropic.Anthropic, question: str, facts: str) -> Answer:
+    """Answer a driver's question about one account from its Alliant data (items, wearers, stop, notes)."""
+    prompt = (f"Alliant data for one customer account:\n{facts}\n\nA route driver asks:\n{question}\n\n"
+              "Answer in one or two short lines a driver can read on a phone, with the numbers they need "
+              "(per-delivery count and how often). Use only the data above; if it doesn't say, set found to false "
+              "and say what you couldn't find.")
+    response = client.beta.messages.parse(
+        model=MODEL,
+        max_tokens=4000,
+        messages=[{"role": "user", "content": prompt}],
+        output_format=Answer,
+        output_config={"effort": "low"},
+        betas=["server-side-fallback-2026-07-01"],
+        fallbacks="default",
+    )
+    return response.parsed_output or Answer(answer="", found=False)
 
 
 class ItemMatch(BaseModel):

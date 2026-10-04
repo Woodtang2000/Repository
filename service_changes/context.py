@@ -68,6 +68,7 @@ class Alliant:
     aliases: dict[str, list[str]] = field(default_factory=dict)  # account -> other names drivers use ("BSI")
     sku: dict[tuple, str] = field(default_factory=dict)  # (account, item) or (account, wearer#, "ITEM SIZE") -> Alliant SKU
     cards: dict[str, dict] = field(default_factory=dict)  # account -> record card header (stop_sequence, special_instructions, ...)
+    as_of: str = ""  # date of the export the data came from, e.g. "Oct 3"
 
     @classmethod
     def from_dir(cls, data_dir: str) -> "Alliant":
@@ -76,6 +77,8 @@ class Alliant:
         f = lambda n: os.path.join(data_dir, n) if os.path.exists(os.path.join(data_dir, n)) else None
         data = cls.load(f("customers.csv"), f("current_items.csv"), f("garments.csv"), f("wearers.csv"))
         data.load_aliases(f("aliases.csv") or os.path.join(os.path.dirname(__file__), "aliases.csv"))
+        if f("customers.csv"):
+            data.as_of = datetime.fromtimestamp(os.path.getmtime(f("customers.csv")), ALASKA).strftime("%b %-d")
         if f("customer_cards.csv"):
             with open(f("customer_cards.csv"), newline="") as fh:
                 data.cards = {row["account"]: row for row in csv.DictReader(fh)}
@@ -164,3 +167,31 @@ class Alliant:
         The whole route stays in: drivers sometimes post a day after the stop."""
         on_route = [c for c in self.customers if route is None or c.route == route] or self.customers
         return sorted(on_route, key=lambda c: day not in c.service_days)
+
+
+def account_facts(alliant: "Alliant", account: str) -> str:
+    """What a driver may be told about an account: stop, contact, notes, items and wearers. No prices or contract terms."""
+    cust = next((c for c in alliant.customers if c.account == account), None)
+    card = alliant.cards.get(account, {})
+    out = [f"{account} {cust.name if cust else card.get('name', '')}"]
+    if card.get("stop_sequence") or cust:
+        out.append(f"Route {cust.route if cust else card.get('route', '')} · stops: "
+                   + (card.get("stop_sequence") or ", ".join(cust.service_days if cust else [])))
+    if card.get("contact") or card.get("phone"):
+        out.append(f"Contact: {' '.join(x for x in [card.get('contact'), card.get('phone')] if x)}")
+    if (card.get("special_instructions") or "").strip() and "Remittance" not in card["special_instructions"]:
+        out.append(f"Card note: {card['special_instructions'].strip()}")
+    items = alliant.items.get(account, {})
+    if items:
+        out.append("Items (per-delivery autocount; inventory; how often):")
+        for item, inv in items.items():
+            auto = alliant.autocount.get(account, {}).get(item)
+            freq = frequency_label(alliant.frequency.get(account, {}).get(item))
+            out.append(f"- {item}: {auto if auto is not None else inv} per delivery; inventory {inv}" + (f"; {freq}" if freq else ""))
+    wearers = alliant.wearers.get(account, [])
+    if wearers:
+        out.append("Wearers (number, name: garments size x qty):")
+        for w in wearers:
+            g = alliant.garments.get((account, w.employee), {})
+            out.append(f"- #{w.employee} {w.name}: " + (", ".join(f"{k} x{v}" for k, v in g.items()) or "no garments"))
+    return "\n".join(out)

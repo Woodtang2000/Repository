@@ -145,6 +145,8 @@ class Desk:
                     lines.append(f"Service Desk asked: {text}")
                 elif kind == "readback":
                     lines.append(f"Office entered it and confirmed: {text}")
+                elif kind == "answer":
+                    lines.append(f"Service Desk answered: {text}")
             elif i == 0:
                 lines.append(f"{self.name(m.get('user'))} (original request): {text}")
             else:
@@ -164,7 +166,7 @@ class Desk:
     def addressed_to(self, bot_posts: list[dict], m: dict) -> dict | None:
         """The bot's latest question or readback to this person before their message, if recent."""
         mine = [b for b in bot_posts if (meta(b) or {}).get("driver_id") == m.get("user")
-                and meta(b).get("kind") in ("question", "readback") and float(b["ts"]) < float(m["ts"])]
+                and meta(b).get("kind") in ("question", "readback", "answer") and float(b["ts"]) < float(m["ts"])]
         b = max(mine, key=lambda b: float(b["ts"]), default=None)
         return b if b and float(m["ts"]) - float(b["ts"]) < 86400 else None
 
@@ -190,7 +192,9 @@ class Desk:
         did = "read"
         if parsed.category == Category.not_a_request:
             pass
-        elif result.questions and asks < MAX_ASKS and parsed.category in ACTIONABLE:
+        elif parsed.category == Category.lookup and parsed.account_number and not parsed.questions_for_driver:
+            did = self.answer(route_name, channel, src, author, parsed, replies, bot_posts)
+        elif result.questions and asks < MAX_ASKS and (parsed.category in ACTIONABLE or parsed.category == Category.lookup):
             qs = "\n".join(f"• {q}" for q in result.questions)
             # A normal channel message with an @mention, so it pushes to the driver's phone.
             self.post(channel, f"<@{src.get('user')}> Quick check on _{_short(src.get('text', ''), 60)}_\n{qs}",
@@ -203,6 +207,28 @@ class Desk:
             did = "ticket"
         self.mark_seen(channel, todo)
         return did
+
+    def answer(self, route_name, channel, src, author, parsed, replies, bot_posts) -> str:
+        """A driver's question about an account, answered from the Alliant export. If the data doesn't say, the
+        driver is told so and the office gets an FYI ticket."""
+        from .context import account_facts
+        from .parser import answer_lookup
+        acct = parsed.account_number
+        ans = answer_lookup(self.claude, parsed.summary or src.get("text", ""), account_facts(self.alliant, acct))
+        name = next((c.name for c in self.alliant.customers if c.account == acct), parsed.customer_as_written or acct)
+        as_of = f" _(Alliant as of {self.alliant.as_of})_" if self.alliant.as_of else ""
+        text = f"<@{src.get('user')}> *{name}*: {ans.answer}{as_of}"
+        if not ans.found:
+            text += "\nI've asked the office."
+            lines = [f"*{acct}*  {name}", f"❓ *Driver question I couldn't answer*: {parsed.summary}"]
+            link = self.slack.chat_getPermalink(channel=channel, message_ts=src["ts"])["permalink"]
+            self.post(self.desk_id, "\n".join(lines + ["", _quote(_short(src.get("text", ""), 300)),
+                                                     f"<{link}|#{route_name}> · Answer the driver there, then react ✅"]),
+                      {"kind": "ticket", "src_channel": channel, "src_ts": src["ts"], "readback": "",
+                       "driver": author, "driver_id": src.get("user"), "account": acct, "msgs": replies})
+        self.post(channel, text, {"kind": "answer", "src_ts": src["ts"], "driver_id": src.get("user"), "msgs": replies},
+                  bot_posts)
+        return "answered"
 
     def post_ticket(self, route_name, channel, src, author, parsed, result, replies, correction, replaces) -> str:
         link = self.slack.chat_getPermalink(channel=channel, message_ts=src["ts"])["permalink"]
@@ -316,7 +342,7 @@ class Desk:
     def run_once(self, since_minutes: int = 4320, ticket_days: int = 14, only: set[str] | None = None) -> dict:
         """One pass over the office channel and the route channels (or just the ones in `only`)."""
         now = time.time()
-        counts = {"asked": 0, "ticket": 0, "read": 0, "readback": 0}
+        counts = {"asked": 0, "ticket": 0, "read": 0, "readback": 0, "answered": 0}
         open_t = self.desk_pass(now - ticket_days * 86400, counts)
         for name, cid in sorted(self.routes.items()):
             if only is None or cid in only:
@@ -378,7 +404,7 @@ class Desk:
                 counts = self.run_once(since_minutes, only=None if full else batch - {self.desk_id})
                 if full:
                     last_full = time.time()
-                if any(counts[k] for k in ("asked", "ticket", "readback")):
+                if any(counts[k] for k in ("asked", "ticket", "readback", "answered")):
                     print(time.strftime("%H:%M"), ", ".join(f"{v} {k}" for k, v in counts.items()), flush=True)
             except Exception as e:  # keep listening through a Slack or API hiccup
                 print(time.strftime("%H:%M"), "error:", e, flush=True)
@@ -423,7 +449,7 @@ def main():
         try:
             reload()
             counts = desk.run_once(args.since_minutes)
-            if any(counts[k] for k in ("asked", "ticket", "readback")) or not args.watch:
+            if any(counts[k] for k in ("asked", "ticket", "readback", "answered")) or not args.watch:
                 print(time.strftime("%H:%M"), ", ".join(f"{v} {k}" for k, v in counts.items()), flush=True)
         except Exception as e:  # keep watching through a Slack or API hiccup
             if not args.watch:
