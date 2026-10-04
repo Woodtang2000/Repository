@@ -68,7 +68,7 @@ def test_already_entered_is_not_a_question():
 def test_stated_total_matches():
     r = check(msg("A3", Change(action=Action.add, item="3x10 mat", quantity=4, stated_total=6), customer="Tacos Cancun"), ALLIANT)
     assert r.ready and r.changes[0].current == 2 and r.changes[0].new_total == 6
-    assert readback(r) == "✅ Tacos Cancun – 4 3x10 mat added – total now 6"
+    assert readback(r) == "✅ A3 Tacos Cancun – 4 3x10 mat added – total now 6"
 
 
 def test_stated_total_mismatch_asks_driver():
@@ -81,7 +81,7 @@ def test_stated_total_mismatch_asks_driver():
 def test_set_shows_previous_quantity():
     r = check(msg("A1", Change(action=Action.set, item="wet mops", quantity=28), customer="Denali Brewing"), ALLIANT)
     assert r.ready and r.changes[0].new_total == 28
-    assert readback(r) == "✅ Denali Brewing – wet mops set to 28 (was 16)"
+    assert readback(r) == "✅ A1 Denali Brewing Company – wet mops set to 28 (was 16)"
 
 
 def test_decrease_below_zero_asks_driver():
@@ -290,7 +290,7 @@ def test_office_ticket():
         "*K1*  KOBUK COFFEE",
         "_📝 Back door only_",
         "➖ *Remove 40*  TOWEL BAR MOP GOLD STRIPE `5-01-01` · 80 → *40* · weekly",
-        "Readback when done: ✅ Kobuk – 40 bar mops decreased – total now 40"]
+        "Readback when done: ✅ K1 KOBUK COFFEE – 40 bar mops decreased – total now 40"]
 
 
 def test_add_matching_current_asks():

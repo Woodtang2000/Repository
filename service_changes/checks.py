@@ -97,6 +97,7 @@ def _topic(q: str) -> set[str]:
 class Result:
     parsed: ParsedMessage
     changes: list[CheckedChange]
+    customer_name: str | None = None  # Alliant's name for parsed.account_number, when it's a known account
 
     @property
     def questions(self) -> list[str]:
@@ -225,7 +226,8 @@ def check(parsed: ParsedMessage, alliant: Alliant) -> Result:
         if cc.current is None and not ch.wearer and parsed.account_number and alliant.items:
             cc.notes.append("Not on this account in Alliant" + (" (may already be stopped)" if ch.action == Action.stop else "; check by hand"))
         out.append(cc)
-    return Result(parsed, out)
+    cust = next((c for c in alliant.customers if c.account == parsed.account_number), None) if parsed.account_number else None
+    return Result(parsed, out, cust.name if cust else None)
 
 
 VERBS = {Action.add: "added", Action.decrease: "decreased", Action.stop: "stopped", Action.restart: "restarted",
@@ -261,8 +263,10 @@ def _tail(cc: CheckedChange) -> str:
 def readback(result: Result) -> str:
     """Tower-style confirmation for staff to post after entering the change in Alliant."""
     p = result.parsed
+    # The account and Alliant's name for it, so the driver can see which customer was actually changed.
+    who = f"{p.account_number} {result.customer_name}" if result.customer_name else p.customer_as_written
     if p.category == Category.hold_or_closure and not result.changes:
-        return f"✅ {p.customer_as_written} – {p.summary}"
+        return f"✅ {who} – {p.summary}"
     parts: list[str] = []
     i = 0
     while i < len(result.changes):
@@ -285,7 +289,7 @@ def readback(result: Result) -> str:
         verb = f"set to {ch.quantity}" if ch.action == Action.set else VERBS.get(ch.action, "changed")
         parts.append(f"{_what(ch)} {verb}{_tail(cc)}")
         i += 1
-    return f"✅ {p.customer_as_written} – " + "; ".join(parts) if parts else ""
+    return f"✅ {who} – " + "; ".join(parts) if parts else ""
 
 
 ICONS = {Action.add: "➕", Action.decrease: "➖", Action.set: "🔢", Action.stop: "⛔", Action.restart: "🔄",
