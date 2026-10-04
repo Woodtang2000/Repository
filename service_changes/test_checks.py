@@ -316,3 +316,13 @@ def test_named_color_must_match():
     assert colors_agree("4x6 charcoal mat", "MAT CHARCOAL HEATHER 4X6")
     assert colors_agree("4x6 mat", "MAT CHARCOAL HEATHER 4X6")
     assert colors_agree("24oz orange mop heads", "MOP WET 24 OZ")
+
+
+def test_same_question_is_not_asked_twice():
+    from .checks import CheckedChange, Result
+    p = msg("A1", Change(action=Action.add, item="shirts", wearer="Tim"))
+    p.questions_for_driver = ["What shirt size does Tim need?", "Which 3x5 mat?"]
+    cc = CheckedChange(change=p.changes[0])
+    cc.questions = ["What size shirts for Tim?", "Midas has 1 3x5 mat now. Add 1 more (total 2), or should they have 1 total?"]
+    assert Result(p, [cc]).questions == ["What shirt size does Tim need?", "Which 3x5 mat?",
+                                         "Midas has 1 3x5 mat now. Add 1 more (total 2), or should they have 1 total?"]

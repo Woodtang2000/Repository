@@ -83,6 +83,16 @@ class CheckedChange:
     notes: list[str] = field(default_factory=list)
 
 
+_FILLER = {"what", "which", "does", "do", "did", "the", "for", "and", "need", "needs", "should", "they", "have",
+           "has", "get", "gets", "is", "are", "a", "an", "of", "to", "on", "or", "be", "will", "you", "it", "this"}
+
+
+def _topic(q: str) -> set[str]:
+    """The words of a question that matter, singular: "What size shirts for Tim?" -> {size, shirt, tim}."""
+    words = re.findall(r"[a-z0-9]+", q.lower())
+    return {w[:-1] if len(w) > 3 and w.endswith("s") else w for w in words if w not in _FILLER}
+
+
 @dataclass
 class Result:
     parsed: ParsedMessage
@@ -90,7 +100,13 @@ class Result:
 
     @property
     def questions(self) -> list[str]:
-        return self.parsed.questions_for_driver + [q for c in self.changes for q in c.questions]
+        asked = list(self.parsed.questions_for_driver)
+        for q in (q for c in self.changes for q in c.questions):
+            # Claude often already asked it in its own words ("What shirt size does Tim need?" vs our
+            # "What size shirts for Tim?"): skip ours when every word that matters is already in one of theirs.
+            if not any(_topic(q) <= _topic(a) for a in asked):
+                asked.append(q)
+        return asked
 
     @property
     def ready(self) -> bool:
