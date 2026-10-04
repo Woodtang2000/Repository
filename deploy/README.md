@@ -79,6 +79,11 @@ Customers text a Twilio number; each number is pinned to its account(s) in
 sees that number's accounts, so a customer can't ask about or change anyone else's. Tickets land in the office
 channel marked as a customer text; ✅ texts the readback back.
 
+A number that isn't on the list is asked for a name and business; the office gets a card in the office channel
+with the best-matching account and approves it with ✅. Office can also type `add 907-555-1234 to <account or
+name>` or `remove 907-555-1234` there; drivers can type `add …` in their route channel, which sends the office a
+card to approve. Nothing about any account goes to a number until the office has approved it.
+
 Put `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` and `TWILIO_NUMBER` in `/etc/service-desk.env`, then
 `sudo bash deploy/sms_setup.sh`. Log: `journalctl -u service-desk-sms -f`. Stop: `sudo bash deploy/sms_setup.sh off`.
 

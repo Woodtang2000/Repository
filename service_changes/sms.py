@@ -37,8 +37,18 @@ MAX_ASKS = 2
 MAX_QUESTIONS = 3
 CONVO_MINUTES = 60  # a text within this long of our last question is read as the answer
 MAX_TEXTS_PER_DAY = 30  # per number; past this the office is told and the bot stops answering that number today
-NOT_SET_UP = ("Hi, this is Snow White Linen. This number isn't set up for service requests yet. "
-              "Please ask your route driver or call the office.")
+WHO_ARE_YOU = "Hi, this is Snow White Linen. So we can set you up, what's your name and which business are you with?"
+WAITING = "Thanks! The office will confirm your account shortly, then we'll take care of your request."
+SET_UP = "You're all set. Text this number any time with changes for {names}."
+DONE_REACTIONS = {"white_check_mark", "heavy_check_mark", "ballot_box_with_check"}
+PHONE = r"(\+?1?[\s.-]*\(?\d{3}\)?[\s.-]*\d{3}[\s.-]*\d{4})"
+# "add 907-555-1234 to Midas Fairbanks", "add (907) 555-1234 for 1205-1-00004", "remove 907 555 1234"
+ADD_CMD = re.compile(rf"^\s*(?:add|approve)\s+{PHONE}\s+(?:to|for)\s+(.+?)\s*$", re.I | re.S)
+REMOVE_CMD = re.compile(rf"^\s*(?:remove|delete)\s+{PHONE}\s*$", re.I)
+
+
+def is_phone_command(text: str) -> bool:
+    return bool(ADD_CMD.match(text or "") or REMOVE_CMD.match(text or ""))
 
 
 # ---- Twilio (standard library only) ---------------------------------------------------------------------------
@@ -93,6 +103,62 @@ def load_phones(path: str) -> dict[str, dict]:
                 if phone_key(row.get("phone", "")) and accts:
                     out[phone_key(row["phone"])] = {"accounts": accts, "name": (row.get("name") or "").strip()}
     return out
+
+
+def save_phone(path: str, phone: str, accounts: list[str], name: str) -> list[str]:
+    """Add (or extend) a number's accounts in customer_phones.csv; returns its accounts now."""
+    rows = []
+    if os.path.exists(path):
+        with open(path, newline="") as f:
+            rows = [r for r in csv.DictReader(f)]
+    key = phone_key(phone)
+    row = next((r for r in rows if phone_key(r.get("phone", "")) == key), None)
+    if row is None:
+        row = {"phone": "+1" + key, "accounts": "", "name": name}
+        rows.append(row)
+    have = [a for a in re.split(r"[;,\s]+", row.get("accounts", "")) if a]
+    row["accounts"] = ";".join(have + [a for a in accounts if a not in have])
+    row["name"] = row.get("name") or name
+    _write_phones(path, rows)
+    return row["accounts"].split(";")
+
+
+def remove_phone(path: str, phone: str) -> bool:
+    if not os.path.exists(path):
+        return False
+    with open(path, newline="") as f:
+        rows = [r for r in csv.DictReader(f)]
+    keep = [r for r in rows if phone_key(r.get("phone", "")) != phone_key(phone)]
+    _write_phones(path, keep)
+    return len(keep) < len(rows)
+
+
+def _write_phones(path: str, rows: list[dict]) -> None:
+    tmp = path + ".tmp"
+    with open(tmp, "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=["phone", "accounts", "name"], extrasaction="ignore")
+        w.writeheader()
+        w.writerows(rows)
+    os.replace(tmp, path)
+
+
+def signup_card(slack, desk_id: str, alliant: Alliant, phone: str, who: str, said: str, accounts: list[str],
+                by: str = "") -> None:
+    """Ask the office to approve a number for an account: ✅ approves the best match."""
+    name = lambda a: next((c.name for c in alliant.customers if c.account == a), "")
+    pretty = f"({phone_key(phone)[:3]}) {phone_key(phone)[3:6]}-{phone_key(phone)[6:]}"
+    head = (f"📱 *{by}* asks to set up {pretty} for texting" if by else f"📱 *New texter* {pretty}")
+    lines = [head + (f": {who}" if who else ""), f"_{said[:200]}_"]
+    if accounts:
+        lines.append(f"Best match: *{accounts[0]}* {name(accounts[0])}")
+        if accounts[1:]:
+            lines.append("Could also be: " + ", ".join(f"{a} {name(a)}" for a in accounts[1:]))
+        lines.append(f"React ✅ to approve the best match, or type `add {phone_key(phone)} to <account number>`.")
+    else:
+        lines.append(f"I couldn't tell which customer. Type `add {phone_key(phone)} to <account number>` to approve.")
+    slack.chat_postMessage(channel=desk_id, text="\n".join(lines), unfurl_links=False, metadata={
+        "event_type": KIND, "event_payload": {"kind": "sms_signup", "phone": "+1" + phone_key(phone),
+                                              "accounts": accounts[:1], "name": who}})
 
 
 def only(alliant: Alliant, accounts: list[str]) -> Alliant:
@@ -168,7 +234,7 @@ class TextDesk:
         """Handle new texts. On the very first run, existing texts are only marked as seen, never answered."""
         since = datetime.now(timezone.utc) - timedelta(days=1)
         new = [m for m in inbound(since) if m["sid"] not in self.state["seen"]]
-        handled = 0
+        handled = self.office_pass() if not first else 0
         for m in new:
             self.state["seen"].append(m["sid"])
             if not first:
@@ -186,11 +252,7 @@ class TextDesk:
         self.state["counts"] = {k: v for k, v in self.state["counts"].items() if k.startswith(today)}
         masked = f"(…{phone_key(phone)[-4:]})"
         if not who:
-            if n == 1:  # once a day per unknown number
-                self.send(phone, NOT_SET_UP)
-                self.office(f"📱 Text from a number that isn't set up {masked}: _{body[:200]}_\n"
-                            "Add it to customer_phones.csv if it's a customer.", {"kind": "sms_unknown"})
-            return
+            return self.sign_up(phone, body, sid, n)
         if n > MAX_TEXTS_PER_DAY:
             if n == MAX_TEXTS_PER_DAY + 1:
                 self.office(f"⚠️ {who['name'] or 'A customer'} {masked} has texted {MAX_TEXTS_PER_DAY} times today; "
@@ -253,6 +315,87 @@ class TextDesk:
                      "driver_id": "", "account": acct, "msgs": [], "sms_to": phone})
         self.send(phone, "Got it, thanks. We'll text you when it's done.")
         self.state["convos"].pop(phone_key(phone), None)
+
+    # ---- sign-up: an unknown number tells us who they are, the office approves --------------------------------
+
+    def sign_up(self, phone: str, body: str, sid: str, n: int) -> None:
+        key = phone_key(phone)
+        p = self.state.setdefault("pending", {}).get(key)
+        if n > MAX_TEXTS_PER_DAY:
+            return
+        if p is None:  # first text: hold it and ask who they are
+            self.state["pending"][key] = {"phone": phone, "stage": "asked", "held": [[body, sid]], "at": time.time()}
+            self.send(phone, WHO_ARE_YOU)
+            return
+        if p["stage"] == "asked":  # their answer: suggest an account to the office
+            from .parser import identify_customer
+            found = identify_customer(self.claude, body, self.alliant.customers)
+            p.update(stage="waiting", intro=body, name=found.person_name or "")
+            signup_card(self.slack, self.desk_id, self.alliant, phone, found.person_name or "", body, found.accounts)
+            self.send(phone, WAITING)
+            return
+        p["held"].append([body, sid])  # waiting for the office: keep it for after approval
+
+    def office_pass(self) -> int:
+        """Office side: ✅ on a sign-up card approves it; `add <phone> to <account or name>` and `remove <phone>`
+        typed in the office channel (or a driver's add, forwarded by desk.py as a card) change the phone list."""
+        path = os.path.join(self.data_dir, "customer_phones.csv")
+        done = set(self.state.setdefault("cmds", []))
+        r = self.slack.conversations_history(channel=self.desk_id, oldest=str(time.time() - 14 * 86400), limit=200,
+                                             include_all_metadata=True)
+        changed = 0
+        for m in reversed(r["messages"]):
+            pl = ((m.get("metadata") or {}).get("event_payload") or {})
+            if m["ts"] in done:
+                continue
+            if pl.get("kind") == "sms_signup" and pl.get("accounts"):
+                who = next((u for x in m.get("reactions", []) if x.get("name") in DONE_REACTIONS
+                            for u in x.get("users", []) if not m.get("user") or u != m.get("user")), None)
+                if who:
+                    self.approve(pl["phone"], pl["accounts"], pl.get("name", ""), path)
+                    self.slack.chat_update(channel=self.desk_id, ts=m["ts"], text=m["text"] + "\n✅ *Approved*",
+                                           metadata={"event_type": KIND, "event_payload": {**pl, "kind": "sms_approved"}})
+                    done.add(m["ts"])
+                    changed += 1
+                continue
+            if m.get("bot_id") or m.get("subtype"):
+                continue
+            text = m.get("text", "")
+            add, rem = ADD_CMD.match(text), REMOVE_CMD.match(text)
+            if rem:
+                ok = remove_phone(path, rem.group(1))
+                self.state.get("pending", {}).pop(phone_key(rem.group(1)), None)
+                self.office(f"📱 {'Removed' if ok else 'No texting set up for'} {rem.group(1).strip()}.", {"kind": "sms_admin"})
+                changed += 1
+            elif add:
+                ids = {c.account for c in self.alliant.customers}
+                known = [t for t in re.split(r"[;,\s]+", add.group(2)) if t in ids]
+                if known:
+                    self.approve(add.group(1), known, "", path)
+                    self.office(f"📱 {add.group(1).strip()} can now text for " +
+                                ", ".join(f"{a} {self.name(self.alliant, a)}" for a in known) + ".", {"kind": "sms_admin"})
+                else:  # a name, not an account number: suggest, and let a ✅ confirm which
+                    from .parser import identify_customer
+                    found = identify_customer(self.claude, add.group(2), self.alliant.customers)
+                    signup_card(self.slack, self.desk_id, self.alliant, add.group(1), "", add.group(2), found.accounts,
+                                by="Office")
+                changed += 1
+            else:
+                continue
+            done.add(m["ts"])
+        self.state["cmds"] = list(done)[-500:]
+        return changed
+
+    def approve(self, phone: str, accounts: list[str], name: str, path: str) -> None:
+        key = phone_key(phone)
+        p = self.state.get("pending", {}).pop(key, None)
+        name = name or (p or {}).get("name", "")
+        now = save_phone(path, "+1" + key, accounts, name)
+        to = (p or {}).get("phone") or "+1" + key
+        names = " and ".join(self.name(self.alliant, a) for a in now)
+        self.send(to, SET_UP.format(names=names))
+        for body, sid in (p or {}).get("held", []):  # what they texted before being set up
+            self.handle(to, body, sid)
 
     def ask(self, phone: str, lines: list[str], questions: list[str], convo: dict | None) -> None:
         msg = "Quick question: " + questions[0] if len(questions) == 1 else \

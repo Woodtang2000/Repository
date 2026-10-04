@@ -24,8 +24,24 @@ class FakeSlack:
         return [{"channels": [{"id": "D1", "name": "service-desk-test"}]}]
 
     def chat_postMessage(self, channel, text, metadata=None, **kw):
-        self.posts.append({"channel": channel, "text": text, "meta": metadata["event_payload"]})
-        return {"ts": "1.0"}
+        m = {"channel": channel, "ts": f"{len(self.posts) + 1}.0", "text": text, "user": "UBOT", "bot_id": "B1",
+             "metadata": metadata, "meta": (metadata or {}).get("event_payload", {})}
+        self.posts.append(m)
+        return {"ts": m["ts"]}
+
+    def say(self, text, user="U2"):  # a person typing in the office channel
+        self.posts.append({"channel": "D1", "ts": f"{len(self.posts) + 1}.0", "text": text, "user": user, "meta": {}})
+
+    def react(self, ts, user="U2"):
+        m = next(p for p in self.posts if p["ts"] == ts)
+        m.setdefault("reactions", []).append({"name": "white_check_mark", "users": [user]})
+
+    def conversations_history(self, channel, **kw):
+        return {"messages": list(reversed([p for p in self.posts if p["channel"] == channel]))}
+
+    def chat_update(self, channel, ts, text, metadata=None):
+        m = next(p for p in self.posts if p["ts"] == ts)
+        m.update(text=text, metadata=metadata, meta=metadata["event_payload"])
 
 
 @pytest.fixture
@@ -113,12 +129,45 @@ def test_two_locations_asks_which(desk):
     assert "COSTCO" not in texts[-1][1]
 
 
-def test_unknown_number_gets_one_polite_reply_and_the_office_is_told(desk):
+def test_new_number_signs_up_and_the_office_approves(desk, monkeypatch):
+    import service_changes.parser as parser
+    from .parser import Identified
     td, slack, texts, seen = desk
-    td.handle("+15551110000", "add mats", "S1")
-    td.handle("+15551110000", "hello?", "S2")
-    assert texts == [("+15551110000", sms.NOT_SET_UP)] and "seen" not in seen
-    assert [p["meta"]["kind"] for p in slack.posts] == ["sms_unknown"]
+    monkeypatch.setattr(parser, "identify_customer", lambda c, text, customers: Identified(
+        person_name="Bob", accounts=["M8", "M4"] if "palmer" in text.lower() else []))
+    td.handle("+15551110000", "add 200 more towels", "S1")  # held: nothing about any account goes out
+    assert texts == [("+15551110000", sms.WHO_ARE_YOU)] and "alliant" not in seen
+    td.handle("+15551110000", "Bob, Midas in Palmer", "S2")
+    [card] = [p for p in slack.posts if p["meta"].get("kind") == "sms_signup"]
+    assert "Best match: *M8* MIDAS #8 (PALMER)" in card["text"] and "Could also be: M4" in card["text"]
+    assert texts[-1][1] == sms.WAITING
+    td.handle("+15551110000", "hello?", "S3")  # still waiting: held, no reply
+    assert len(texts) == 2
+
+    slack.react(card["ts"])
+    assert td.office_pass() == 1
+    assert "+15551110000,M8,Bob" in open(td.data_dir + "/customer_phones.csv").read()
+    assert texts[2] == ("+15551110000", sms.SET_UP.format(names="MIDAS #8 (PALMER)"))
+    assert [c.account for c in seen["alliant"].customers] == ["M8"]  # the held request ran, for M8 only
+    assert card["meta"]["kind"] == "sms_approved" and td.office_pass() == 0
+
+
+def test_office_commands_in_the_channel(desk, monkeypatch):
+    td, slack, texts, seen = desk
+    slack.say("add (907) 555-7777 to M4")
+    slack.say("remove 907-555-1234")
+    assert td.office_pass() == 2
+    phones = sms.load_phones(td.data_dir + "/customer_phones.csv")
+    assert phones["9075557777"]["accounts"] == ["M4"] and "9075551234" not in phones
+    assert texts[-1] == ("+19075557777", sms.SET_UP.format(names="MIDAS #4 (FAIRBANKS)"))
+    assert td.office_pass() == 0  # each command once
+
+
+def test_phone_commands_are_recognised():
+    assert sms.is_phone_command("add 907-555-1234 to Midas Fairbanks")
+    assert sms.is_phone_command("Add +1 (907) 555 1234 for 1205-1-00004")
+    assert sms.is_phone_command("remove 9075551234")
+    assert not sms.is_phone_command("add 200 shop towels to Midas")
 
 
 def test_plain_text_for_phones():

@@ -298,7 +298,9 @@ class Desk:
             if m.get("subtype") or _is_bot(m, self.me):
                 continue
             key = (cid, m["ts"])
-            if not _seen(m, self.me):
+            if not _seen(m, self.me) and self.phone_add(name, cid, m):
+                counts["read"] += 1
+            elif not _seen(m, self.me):
                 # A main-channel message right after the bot asked or read back to this person may be the answer.
                 b = self.addressed_to(bot_posts, m)
                 src = next((x for x in top if b and x["ts"] == meta(b)["src_ts"]), None)
@@ -317,6 +319,32 @@ class Desk:
                 if todo:  # the driver answered in the thread instead
                     counts[self.handle(name, cid, m, self.convo(cid, m, top, bot_posts, []), todo, open_t, bot_posts)] += 1
             self.replies_seen[key] = m.get("latest_reply")
+
+    def phone_add(self, route_name: str, cid: str, m: dict) -> bool:
+        """A driver's "add 907-555-1234 to Midas Fairbanks": the office gets a card to approve with ✅. Drivers can
+        only suggest; the link between a phone and an account is always made by the office."""
+        from .sms import ADD_CMD, REMOVE_CMD, signup_card
+        text = m.get("text", "")
+        add = ADD_CMD.match(text)
+        if not add:
+            if REMOVE_CMD.match(text):
+                self.post(cid, f"<@{m.get('user')}> Only the office can remove a texting number. I've let them know.",
+                          {"kind": "answer", "src_ts": m["ts"], "driver_id": m.get("user")})
+                self.post(self.desk_id, f"📱 *{self.name(m.get('user'))}* in #{route_name} asks: _{text[:120]}_",
+                          {"kind": "sms_admin"})
+                self.mark_seen(cid, [m])
+                return True
+            return False
+        from .parser import identify_customer
+        route = route_from_channel(route_name)
+        on_route = [c for c in self.alliant.customers if not route or c.route == route] or self.alliant.customers
+        found = identify_customer(self.claude, add.group(2), on_route)
+        signup_card(self.slack, self.desk_id, self.alliant, add.group(1), "", add.group(2), found.accounts,
+                    by=f"{self.name(m.get('user'))} in #{route_name}")
+        self.post(cid, f"<@{m.get('user')}> Thanks, I've sent that to the office to approve.",
+                  {"kind": "answer", "src_ts": m["ts"], "driver_id": m.get("user")})
+        self.mark_seen(cid, [m])
+        return True
 
     def _answers(self, t: dict, src: dict) -> bool:
         """A thread reply the bot should read: from whoever posted, or anyone not in the office, not yet 👀."""
@@ -343,6 +371,10 @@ class Desk:
             if _is_bot(h, self.me) or h.get("subtype") or _seen(h, self.me):
                 continue
             text = h.get("text", "")
+            from .sms import is_phone_command
+            if is_phone_command(text):  # "add 907-555-1234 to Midas": the texting service (sms.py) handles it
+                self.mark_seen(self.desk_id, [h])
+                continue
             if DONE_ANY.search(text):
                 accts = ACCOUNT.findall(text)
                 cands = [t for t in tickets if t["ts"] not in done and (not accts or meta(t).get("account") in accts)]

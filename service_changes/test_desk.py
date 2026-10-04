@@ -427,3 +427,18 @@ def test_checkmark_on_a_customer_text_ticket_texts_the_readback(setup, monkeypat
     assert d.run_once()["readback"] == 1
     assert sent == [("+19075551234", "Snow White Linen: ✅ W1 WENDY'S #4412 – 200 shop towels added – entered by Sonja Burke")]
     assert "sms" not in slack.msgs  # nothing posted to Slack for it
+
+
+def test_driver_can_ask_to_add_a_texting_number(setup, monkeypatch):
+    import service_changes.parser as parser
+    from .parser import Identified
+    slack, d = setup
+    monkeypatch.setattr(parser, "identify_customer", lambda c, text, customers: Identified(accounts=["W1"]))
+    slack.say("C1", "U1", "add 907-555-1234 to wendys")
+    slack.say("D1", "U2", "add 907-555-9999 to W1")  # office command: left for sms.py, not read as a question
+    d.run_once()
+    [card] = slack.bot_posts("D1", "sms_signup")
+    assert "*Mike Driver in #route-1-test* asks to set up (907) 555-1234" in card["text"] and "Best match: *W1*" in card["text"]
+    assert not slack.bot_posts("D1", "ticket") and not slack.bot_posts("C1", "question")
+    assert "sent that to the office" in slack.bot_posts("C1", "answer")[0]["text"]
+    assert not slack.bot_posts("D1", "answer") and len(CALLS) == 0

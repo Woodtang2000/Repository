@@ -182,3 +182,30 @@ def parse_message(client: anthropic.Anthropic, text: str, channel: str, ts: str,
     if response.stop_reason == "refusal" or response.parsed_output is None:
         raise RuntimeError(f"Could not parse message (stop_reason={response.stop_reason})")
     return response.parsed_output
+
+
+class Identified(BaseModel):
+    person_name: Optional[str] = Field(None, description="The texter's own name, if they gave it.")
+    accounts: list[str] = Field(default_factory=list, description=(
+        "Account numbers from the list that the business could be, best match first, at most 3. Empty if none fits."))
+
+
+def identify_customer(client: anthropic.Anthropic, text: str, customers: list) -> Identified:
+    """Which customer account(s) someone means by "Jane, Midas in Fairbanks". Only the office sees the result:
+    it is a suggestion for a person to approve, never access by itself."""
+    listing = "\n".join(f"{c.account} | {c.name}" for c in customers)
+    prompt = (f"Customer accounts (account | name):\n{listing}\n\nSomeone texting us wrote:\n{text}\n\n"
+              "Which account(s) could their business be? Use only account numbers from the list.")
+    response = client.beta.messages.parse(
+        model=MODEL,
+        max_tokens=2000,
+        messages=[{"role": "user", "content": prompt}],
+        output_format=Identified,
+        output_config={"effort": "low"},
+        betas=["server-side-fallback-2026-07-01"],
+        fallbacks="default",
+    )
+    found = response.parsed_output or Identified()
+    known = {c.account for c in customers}
+    found.accounts = [a for a in found.accounts if a in known][:3]
+    return found
