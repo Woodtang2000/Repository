@@ -222,6 +222,17 @@ class Desk:
         midnight = datetime.now(ALASKA).replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
         today = sum(1 for b in bot_posts if (meta(b) or {}).get("kind") == "answer"
                     and meta(b).get("driver_id") == src.get("user") and float(b["ts"]) >= midnight)
+        cust = next((c for c in self.alliant.customers if c.account == acct), None)
+        here = route_from_channel(route_name)
+        if cust and here and cust.route != here and not self.is_office(src.get("user")):
+            # Only customers on this channel's route are answered; anything else goes to the office.
+            self.post(channel, f"<@{src.get('user')}> That customer isn't on route {here}, so I've passed this to the office.",
+                      {"kind": "answer", "src_ts": src["ts"], "driver_id": src.get("user"), "msgs": replies, "held": True},
+                      bot_posts)
+            self.post(self.desk_id, f"⚠️ *{author}* in #{route_name} asked about *{acct}* {name}, which is on route "
+                                    f"{cust.route}. I didn't answer. _{_short(src.get('text', ''), 120)}_ "
+                                    f"(<{link}|#{route_name}>)", {"kind": "lookup_off_route", "driver_id": src.get("user")})
+            return "answered"
         if today >= MAX_LOOKUPS_PER_DAY:
             # Lots of lookups in one day: stop answering and let the office decide.
             self.post(channel, f"<@{src.get('user')}> I've passed this one to the office.",

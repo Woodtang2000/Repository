@@ -334,3 +334,19 @@ def test_too_many_lookups_in_a_day_are_held_and_flagged(setup, monkeypatch):
     assert len(slack.bot_posts("D1", "lookup_log")) == 2
     [flag] = slack.bot_posts("D1", "lookup_limit")
     assert "*Mike Driver* has asked about accounts 2 times today" in flag["text"]
+
+
+def test_lookup_about_another_route_goes_to_the_office(setup, monkeypatch):
+    import service_changes.parser as parser
+    slack, d = setup
+    called = []
+    monkeypatch.setattr(parser, "answer_lookup", lambda *a: called.append(a))
+    monkeypatch.setattr(d.alliant, "customers", d.alliant.customers + [Customer("R9", "OTHER ROUTE CAFE", "9", ALL_DAYS)])
+    monkeypatch.setattr(parser, "parse_message", lambda *a, **k: ParsedMessage(
+        category=Category.lookup, customer_as_written="Other Route Cafe", account_number="R9", summary="how many mats"))
+    slack.say("C1", "U1", "how many mats does other route cafe get?")
+    d.run_once()
+    assert not called
+    assert "isn't on route 1" in slack.bot_posts("C1", "answer")[0]["text"]
+    [flag] = slack.bot_posts("D1", "lookup_off_route")
+    assert "which is on route 9" in flag["text"]
