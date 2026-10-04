@@ -10,6 +10,7 @@ Standard library only, so it runs with the system python3.
 """
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -57,12 +58,15 @@ def access_token(conf):
 
 def setup():
     print("Dropbox app details (from dropbox.com/developers/apps -> your app -> Settings).")
-    key = input("App key: ").strip()
-    secret = input("App secret: ").strip()
+    # The browser terminal's paste can slip in invisible characters; keys, secrets and codes are plain ASCII.
+    clean = lambda v: re.sub(r"[^A-Za-z0-9_-]", "", v)
+    key = clean(input("App key: "))
+    secret = clean(input("App secret: "))
+    print(f"(key {len(key)} characters, secret {len(secret)} characters; Dropbox's are usually 15)")
     print("\nOpen this link, click Allow, and copy the code Dropbox shows:\n")
     print("https://www.dropbox.com/oauth2/authorize?" + urllib.parse.urlencode(
         {"client_id": key, "response_type": "code", "token_access_type": "offline"}))
-    code = input("\nCode: ").strip()
+    code = clean(input("\nCode: "))
     try:
         raw, _ = post("https://api.dropboxapi.com/oauth2/token",
                       {"code": code, "grant_type": "authorization_code", "client_id": key, "client_secret": secret})
