@@ -1,0 +1,58 @@
+"""Make the "Text Snow White Linen" flyer (PDF + PNG) for toll-free verification and for customers.
+  python3 make_flyer.py "(888) 555-0123"
+"""
+import sys, pathlib
+from playwright.sync_api import sync_playwright
+
+number = sys.argv[1] if len(sys.argv) > 1 else "(8XX) XXX-XXXX"
+html = f"""<!doctype html><html><head><meta charset="utf-8"><style>
+@page {{ size: Letter; margin: 0 }}
+* {{ box-sizing: border-box }}
+body {{ margin:0; font-family: 'Helvetica Neue', Arial, sans-serif; color:#1d2a36; }}
+.page {{ width: 8.5in; height: 11in; padding: 0.75in 0.85in; display:flex; flex-direction:column; }}
+.top {{ border-bottom: 3px solid #1f4e79; padding-bottom: 14px; }}
+.brand {{ font-size: 15pt; letter-spacing: 3px; text-transform: uppercase; color:#1f4e79; font-weight:700; }}
+h1 {{ font-size: 40pt; margin: 34px 0 6px; line-height:1.05; }}
+.sub {{ font-size: 15pt; color:#45576a; margin:0 0 30px; }}
+.number {{ background:#1f4e79; color:#fff; border-radius:14px; padding: 26px 30px; text-align:center; }}
+.number .label {{ font-size: 13pt; opacity:.85; letter-spacing:1px; text-transform:uppercase; }}
+.number .digits {{ font-size: 46pt; font-weight:700; margin-top:6px; letter-spacing:1px; }}
+h2 {{ font-size: 16pt; margin: 34px 0 10px; color:#1f4e79; }}
+ul {{ margin:0; padding-left: 22px; font-size: 13.5pt; line-height:1.6; }}
+.steps li {{ margin-bottom: 4px; }}
+.example {{ margin-top: 14px; background:#f1f5f9; border-left: 4px solid #1f4e79; padding: 12px 16px; font-size:12.5pt; color:#334; }}
+.fine {{ margin-top:auto; border-top: 1px solid #c9d3dd; padding-top: 14px; font-size: 10.5pt; color:#4a5866; line-height:1.55; }}
+.fine b {{ color:#1d2a36 }}
+</style></head><body><div class="page">
+<div class="top"><div class="brand">Snow White Linen</div></div>
+<h1>Text us your service changes</h1>
+<p class="sub">Add or remove items, set up new employees and uniforms, or put deliveries on hold, by text.</p>
+<div class="number"><div class="label">Text</div><div class="digits">{number}</div></div>
+<h2>How it works</h2>
+<ul class="steps">
+<li><b>You text us first.</b> We only reply to messages you send.</li>
+<li>The first time, we'll ask your name and business so our office can link your number to your account.</li>
+<li>We'll text back if we need details, and confirm when your change is entered.</li>
+<li>Your number is only ever linked to your own account(s).</li>
+</ul>
+<div class="example">Example: “Please add 2 more 3x5 mats starting next week.”</div>
+<h2>Good to know</h2>
+<ul>
+<li>Message frequency varies with your requests. Message and data rates may apply.</li>
+<li>Reply <b>STOP</b> at any time to stop receiving texts. Reply <b>HELP</b> for help.</li>
+<li>For urgent issues, please call our office.</li>
+</ul>
+<div class="fine"><b>Privacy:</b> Snow White Linen uses your mobile number only to respond to your service requests.
+We do not sell, rent or share your number or text messages with third parties for marketing purposes.
+Consent to receive texts is not a condition of service. Carriers are not liable for delayed or undelivered messages.</div>
+</div></body></html>"""
+out = pathlib.Path(__file__).parent
+(out / "flyer.html").write_text(html)
+with sync_playwright() as p:
+    b = p.chromium.launch(executable_path="/opt/pw-browsers/chromium-1194/chrome-linux/chrome")
+    pg = b.new_page(viewport={"width": 816, "height": 1056}, device_scale_factor=2)
+    pg.set_content(html)
+    pg.pdf(path=str(out / "Text-Snow-White-Linen.pdf"), format="Letter", print_background=True)
+    pg.screenshot(path=str(out / "Text-Snow-White-Linen.png"), full_page=True)
+    b.close()
+print("wrote", out / "Text-Snow-White-Linen.pdf", out / "Text-Snow-White-Linen.png")
