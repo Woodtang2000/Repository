@@ -85,6 +85,7 @@ class Desk:
         self.replies_seen: dict[tuple[str, str], str] = {}  # (channel, ts) -> latest_reply already looked at
         self.links: dict[tuple[str, str], set[str]] = {}  # (channel, request ts) -> main-channel replies read with it
         self.listening = False
+        self.fetched: dict[str, set[str]] = {}  # per route channel: the top-level messages the last pass saw
         channels = {}
         cursor = None
         while True:
@@ -288,6 +289,7 @@ class Desk:
 
     def route_pass(self, name: str, cid: str, oldest: float, open_t: dict, counts: dict) -> None:
         top = list(reversed(list(_messages(self.slack, cid, oldest, include_all_metadata=True))))
+        self.fetched[cid] = {m["ts"] for m in top}
         bot_posts = [m for m in top if _is_bot(m, self.me) and meta(m)]
         for m in top:
             if m.get("subtype") or _is_bot(m, self.me):
@@ -393,7 +395,9 @@ class Desk:
 
         self.listening = True
         quick = WebClient(token=bot_token)  # the listener's own client, so it never waits on the worker
-        todo: "queue.Queue[str | None]" = queue.Queue()
+        # (channel, ts of a new top-level driver message or None, attempt). Slack can announce a message a moment
+        # before conversations.history returns it; a pass that didn't see it tries again a second later.
+        todo: "queue.Queue[tuple[str, str | None, int]]" = queue.Queue()
         watched = set(self.routes.values()) | {self.desk_id}
 
         def on_event(client, req):
@@ -412,7 +416,9 @@ class Desk:
                 except Exception:
                     pass
             if ev.get("type") in ("message", "reaction_added") and ev.get("user") != self.me:
-                todo.put(channel)
+                new_top = (ev.get("type") == "message" and ev.get("subtype") is None and channel != self.desk_id
+                           and ev.get("thread_ts") in (None, ev.get("ts")))
+                todo.put((channel, ev.get("ts") if new_top else None, 0))
 
         sm = SocketModeClient(app_token=app_token, web_client=quick)
         sm.socket_mode_request_listeners.append(on_event)
@@ -421,12 +427,12 @@ class Desk:
         last_full = 0.0
         while True:
             try:
-                channel = todo.get(timeout=5)
+                items = [todo.get(timeout=5)]
             except queue.Empty:
-                channel = None
-            batch = {channel} if channel else set()
+                items = []
             while not todo.empty():  # several events at once: one pass covers them
-                batch.add(todo.get_nowait())
+                items.append(todo.get_nowait())
+            batch = {ch for ch, _, _ in items}
             full = time.time() - last_full > backup_seconds
             if not batch and not full:
                 continue
@@ -435,6 +441,9 @@ class Desk:
                 counts = self.run_once(since_minutes, only=None if full else batch - {self.desk_id})
                 if full:
                     last_full = time.time()
+                for ch, ts, attempt in items:  # announced but not returned by history yet: look again shortly
+                    if ts and ts not in self.fetched.get(ch, set()) and attempt < 10:
+                        threading.Timer(1.0, todo.put, [(ch, ts, attempt + 1)]).start()
                 if any(counts[k] for k in ("asked", "ticket", "readback", "answered")):
                     print(time.strftime("%H:%M"), ", ".join(f"{v} {k}" for k, v in counts.items()), flush=True)
             except Exception as e:  # keep listening through a Slack or API hiccup
