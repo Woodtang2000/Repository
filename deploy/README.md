@@ -66,6 +66,12 @@ The server can check Dropbox every hour and rebuild the data whenever the Record
 From then on, replacing the PDF in that folder is all it takes; the desk has the new data within the hour.
 Check what it did with `tail ~/dropbox_sync.log`.
 
+## Silent review before go-live (optional)
+
+`sudo bash deploy/review_setup.sh` runs `bot.py` at 5 past every hour: it reads the real `#route-N` channels the
+bot is in and posts what it would have done to `#service-desk-review`. Drivers see nothing. React 👎 on anything
+wrong. `sudo bash deploy/review_setup.sh off` stops it.
+
 ## 5. Start it
 
 ```bash

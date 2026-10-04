@@ -73,7 +73,8 @@ def _messages(client, channel_id: str, oldest: float, **kw):
             return
 
 
-def run_once(slack, claude, alliant: Alliant, since_minutes: int, live: bool, dry_run: bool = False) -> int:
+def run_once(slack, claude, alliant: Alliant, since_minutes: int, live: bool, dry_run: bool = False,
+             to: str = TEST_CHANNEL) -> int:
     from .parser import parse_message
     from .run import fill_item_matches, fix_department
 
@@ -86,11 +87,11 @@ def run_once(slack, claude, alliant: Alliant, since_minutes: int, live: bool, dr
         if not cursor:
             break
     routes = {name: cid for name, cid in channels.items() if re.fullmatch(r"route-\d+", name)}
-    test_id = channels.get(TEST_CHANNEL)
+    test_id = channels.get(to)
     if not routes:
         sys.exit("The bot isn't in any #route-N channel yet: /invite @Service Desk in each one.")
     if not live and not test_id:
-        sys.exit(f"Create #{TEST_CHANNEL} and /invite @Service Desk, or run with --live.")
+        sys.exit(f"Create #{to} and /invite @Service Desk, or run with --live.")
 
     oldest = time.time() - since_minutes * 60
     done = set()  # source messages already handled by an earlier run
@@ -146,6 +147,7 @@ def main():
     ap.add_argument("--since-minutes", type=int, default=70)
     ap.add_argument("--live", action="store_true", help="reply in the drivers' threads instead of #service-desk-test")
     ap.add_argument("--dry-run", action="store_true", help="print the posts instead of sending them")
+    ap.add_argument("--to", default=TEST_CHANNEL, help="channel for silent-mode posts, e.g. service-desk-review")
     args = ap.parse_args()
 
     slack = WebClient(token=os.environ["SLACK_BOT_TOKEN"])
@@ -154,7 +156,7 @@ def main():
     if args.live and os.environ.get("SERVICE_DESK_LIVE") != "1":
         # Safety lock: replying in the drivers' channels takes a setting in the environment, not just a flag.
         sys.exit("--live needs SERVICE_DESK_LIVE=1 in the environment. Until then the bot only posts to #service-desk-test.")
-    n = run_once(slack, claude, alliant, args.since_minutes, args.live, args.dry_run)
+    n = run_once(slack, claude, alliant, args.since_minutes, args.live, args.dry_run, args.to.lstrip("#"))
     print(f"{n} post(s)")
 
 
