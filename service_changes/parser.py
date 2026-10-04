@@ -59,8 +59,9 @@ Classify the message and extract every change in it. Rules:
 """
 
 
-def build_prompt(text: str, channel: str, ts: str, alliant: Alliant, author: str = "", office: bool = False,
-                 previous: str = "") -> str:
+def prompt_parts(text: str, channel: str, ts: str, alliant: Alliant, author: str = "", office: bool = False,
+                 previous: str = "") -> tuple[str, str]:
+    """(route context, this message). The context is the same for every message on a route and day, so it is cached."""
     route = route_from_channel(channel)
     day = service_day(ts)
     lines = [f"Channel: #{channel} (route {route or 'unknown'}), posted {day}."]
@@ -73,12 +74,17 @@ def build_prompt(text: str, channel: str, ts: str, alliant: Alliant, author: str
                   for c in cands]
     else:
         lines.append("No customer list loaded; leave account_number null.")
+    rest = []
     if previous:
-        lines += ["", "Previous message in the channel (context only, already handled):", previous]
+        rest += ["Previous message in the channel (context only, already handled):", previous, ""]
     if author:
-        lines += ["", f"Posted by: {author} ({'office staff' if office else 'driver or sales'})"]
-    lines += ["", "Message:", text]
-    return "\n".join(lines)
+        rest += [f"Posted by: {author} ({'office staff' if office else 'driver or sales'})", ""]
+    rest += ["Message:", text]
+    return "\n".join(lines), "\n".join(rest)
+
+
+def build_prompt(*args, **kw) -> str:
+    return "\n\n".join(prompt_parts(*args, **kw))
 
 
 class ItemMatch(BaseModel):
@@ -132,11 +138,15 @@ def is_reply(client: anthropic.Anthropic, bot_said: str, request: str, message: 
 
 def parse_message(client: anthropic.Anthropic, text: str, channel: str, ts: str, alliant: Alliant,
                   author: str = "", office: bool = False, previous: str = "") -> ParsedMessage:
+    context, message = prompt_parts(text, channel, ts, alliant, author, office, previous)
     response = client.beta.messages.parse(
         model=MODEL,
         max_tokens=16000,
-        system=SYSTEM,
-        messages=[{"role": "user", "content": build_prompt(text, channel, ts, alliant, author, office, previous)}],
+        # Cache the instructions and the route's customer list: only the message itself changes between calls.
+        system=[{"type": "text", "text": SYSTEM, "cache_control": {"type": "ephemeral"}}],
+        messages=[{"role": "user", "content": [
+            {"type": "text", "text": context, "cache_control": {"type": "ephemeral"}},
+            {"type": "text", "text": message}]}],
         output_format=ParsedMessage,
         output_config={"effort": "medium"},
         betas=["server-side-fallback-2026-07-01"],

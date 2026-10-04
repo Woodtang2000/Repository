@@ -151,8 +151,15 @@ has to use threads.
 
 ```bash
 # Test channels: create #route-12-test (route 12's customers), invite @Service Desk there and to #service-desk-test
+# Real time (needs SLACK_APP_TOKEN, the xapp- token): ⏳ within a second, full backup pass every 5 minutes
+python -m service_changes.desk --data service_changes/data --desk service-desk-test --routes route-12-test --listen
+# Or poll every 30 seconds (no app token needed)
 python -m service_changes.desk --data service_changes/data --desk service-desk-test --routes route-12-test --watch 30
 ```
+
+Speed: Slack pushes each message over Socket Mode, the bot reacts ⏳ at once and swaps it for 👀 when it has read the
+message. The instructions and each route's customer list are prompt-cached, so only the message itself is new to
+Claude, and a one- or two-word answer right after a question skips the "is this an answer?" check.
 
 State lives in Slack (👀 reactions and message metadata on the bot's posts), so a pass can rerun safely and
 `--watch N` repeats it every N seconds. Real `#route-N` channels need `SERVICE_DESK_LIVE=1`; `#route-N-anything`

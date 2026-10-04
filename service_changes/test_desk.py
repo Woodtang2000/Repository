@@ -80,6 +80,15 @@ class FakeSlack:
     def reactions_add(self, channel, timestamp, name):
         self.react(channel, timestamp, "UBOT", name)
 
+    def reactions_remove(self, channel, timestamp, name):
+        m = self.find(channel, timestamp)
+        r = next((r for r in m.get("reactions", []) if r["name"] == name and "UBOT" in r["users"]), None)
+        if r is None:
+            raise Exception("no_reaction")
+        r["users"].remove("UBOT")
+        if not r["users"]:
+            m["reactions"].remove(r)
+
     # --- helpers for asserts ---
     def bot_posts(self, channel, kind):
         return [m for m in self.msgs[channel] if desk.meta(m) and desk.meta(m)["kind"] == kind]
@@ -256,3 +265,23 @@ def test_real_route_channels_need_the_live_setting(monkeypatch):
     monkeypatch.delenv("SERVICE_DESK_LIVE", raising=False)
     with pytest.raises(SystemExit, match="#route-12 are real route channels"):
         desk.main()
+
+
+def test_hourglass_is_swapped_for_eyes(setup):
+    slack, d = setup
+    post = slack.say("C1", "U1", "wendys mats to 6: 6")
+    slack.react("C1", post["ts"], "UBOT", desk.WORKING)  # what the listener does on arrival
+    d.run_once(only={"C1"})
+    names = [r["name"] for r in slack.find("C1", post["ts"])["reactions"]]
+    assert names == ["eyes"]
+
+
+def test_short_answer_skips_the_reply_check(setup, monkeypatch):
+    import service_changes.parser as parser
+    slack, d = setup
+    calls = []
+    monkeypatch.setattr(parser, "is_reply", lambda *a: calls.append(a) or True)
+    slack.say("C1", "U1", "more mats at wendys")
+    d.run_once()
+    slack.say("C1", "U1", "6")
+    assert d.run_once()["ticket"] == 1 and calls == []

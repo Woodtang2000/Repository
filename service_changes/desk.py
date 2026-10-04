@@ -38,6 +38,7 @@ from .schema import Category
 
 KIND = "service_desk"
 SEEN = "eyes"
+WORKING = "hourglass_flowing_sand"  # put on by the listener the moment a message arrives, swapped for 👀 when read
 DONE_REACTIONS = {"white_check_mark", "heavy_check_mark", "ballot_box_with_check"}
 DONE_WORDS = re.compile(r"^\s*(done|changed|entered|complete[d]?|made|updated|ok(ay)?|got it|all set|finished)\b[\s.!]*$", re.I)
 MAX_ASKS = 2
@@ -82,6 +83,7 @@ class Desk:
         self.office = _office_staff()
         self.replies_seen: dict[tuple[str, str], str] = {}  # (channel, ts) -> latest_reply already looked at
         self.links: dict[tuple[str, str], set[str]] = {}  # (channel, request ts) -> main-channel replies read with it
+        self.listening = False
         channels = {}
         cursor = None
         while True:
@@ -124,6 +126,11 @@ class Desk:
             except Exception as e:  # already_reacted on a rerun is fine
                 if "already_reacted" not in str(e):
                     raise
+            if any(r.get("name") == WORKING for r in t.get("reactions", [])) or self.listening:
+                try:
+                    self.slack.reactions_remove(channel=channel, timestamp=t["ts"], name=WORKING)
+                except Exception:  # no_reaction: it was never put on
+                    pass
 
     # ---- driver side ----------------------------------------------------------------------------------------
 
@@ -234,7 +241,9 @@ class Desk:
                 b = self.addressed_to(bot_posts, m)
                 src = next((x for x in top if b and x["ts"] == meta(b)["src_ts"]), None)
                 from .parser import is_reply
-                if src and is_reply(self.claude, b.get("text", ""), src.get("text", ""), m.get("text", "")):
+                # A one- or two-word message right after a question ("1821", "6", "yes weekly") is the answer.
+                short = meta(b or {}) and meta(b)["kind"] == "question" and len(m.get("text", "").split()) <= 2
+                if src and (short or is_reply(self.claude, b.get("text", ""), src.get("text", ""), m.get("text", ""))):
                     did = self.handle(name, cid, src, self.convo(cid, src, top, bot_posts, [m]), [m], open_t, bot_posts)
                 else:
                     thread = self.thread(cid, m)
@@ -304,13 +313,75 @@ class Desk:
 
     # ---- one pass -------------------------------------------------------------------------------------------
 
-    def run_once(self, since_minutes: int = 4320, ticket_days: int = 14) -> dict:
+    def run_once(self, since_minutes: int = 4320, ticket_days: int = 14, only: set[str] | None = None) -> dict:
+        """One pass over the office channel and the route channels (or just the ones in `only`)."""
         now = time.time()
         counts = {"asked": 0, "ticket": 0, "read": 0, "readback": 0}
         open_t = self.desk_pass(now - ticket_days * 86400, counts)
         for name, cid in sorted(self.routes.items()):
-            self.route_pass(name, cid, now - since_minutes * 60, open_t, counts)
+            if only is None or cid in only:
+                self.route_pass(name, cid, now - since_minutes * 60, open_t, counts)
         return counts
+
+    def listen(self, app_token: str, bot_token: str, since_minutes: int, backup_seconds: int, reload) -> None:
+        """Real time: Slack pushes each event over Socket Mode. The listener puts ⏳ on a new message within a
+        second and queues its channel; one worker runs passes so nothing is handled twice. A full pass every
+        `backup_seconds` catches anything a dropped connection missed."""
+        import queue
+        import threading
+
+        from slack_sdk import WebClient
+        from slack_sdk.socket_mode import SocketModeClient
+        from slack_sdk.socket_mode.response import SocketModeResponse
+
+        self.listening = True
+        quick = WebClient(token=bot_token)  # the listener's own client, so it never waits on the worker
+        todo: "queue.Queue[str | None]" = queue.Queue()
+        watched = set(self.routes.values()) | {self.desk_id}
+
+        def on_event(client, req):
+            client.send_socket_mode_response(SocketModeResponse(envelope_id=req.envelope_id))
+            if req.type != "events_api":
+                return
+            ev = req.payload.get("event", {})
+            channel = ev.get("channel") or ev.get("item", {}).get("channel")
+            if channel not in watched:
+                return
+            if ev.get("type") == "message" and not ev.get("bot_id") and ev.get("subtype") in (None, "thread_broadcast") \
+                    and channel != self.desk_id and ev.get("user") != self.me \
+                    and not (ev.get("thread_ts") not in (None, ev.get("ts")) and self.is_office(ev.get("user"))):
+                try:
+                    quick.reactions_add(channel=channel, timestamp=ev["ts"], name=WORKING)
+                except Exception:
+                    pass
+            if ev.get("type") in ("message", "reaction_added") and ev.get("user") != self.me:
+                todo.put(channel)
+
+        sm = SocketModeClient(app_token=app_token, web_client=quick)
+        sm.socket_mode_request_listeners.append(on_event)
+        sm.connect()
+        print(time.strftime("%H:%M"), "listening", flush=True)
+        last_full = 0.0
+        while True:
+            try:
+                channel = todo.get(timeout=5)
+            except queue.Empty:
+                channel = None
+            batch = {channel} if channel else set()
+            while not todo.empty():  # several events at once: one pass covers them
+                batch.add(todo.get_nowait())
+            full = time.time() - last_full > backup_seconds
+            if not batch and not full:
+                continue
+            try:
+                reload()
+                counts = self.run_once(since_minutes, only=None if full else batch - {self.desk_id})
+                if full:
+                    last_full = time.time()
+                if any(counts[k] for k in ("asked", "ticket", "readback")):
+                    print(time.strftime("%H:%M"), ", ".join(f"{v} {k}" for k, v in counts.items()), flush=True)
+            except Exception as e:  # keep listening through a Slack or API hiccup
+                print(time.strftime("%H:%M"), "error:", e, flush=True)
 
 
 def main():
@@ -323,6 +394,8 @@ def main():
     ap.add_argument("--routes", required=True, help="comma-separated route channels, e.g. route-12-test or route-1,route-2")
     ap.add_argument("--since-minutes", type=int, default=4320, help="how far back to look for driver posts")
     ap.add_argument("--watch", type=int, default=0, help="repeat every N seconds (0 = one pass)")
+    ap.add_argument("--listen", action="store_true",
+                    help="real time over Slack Socket Mode (needs SLACK_APP_TOKEN); --watch sets the backup pass, default 300")
     args = ap.parse_args()
 
     routes = [r.strip().lstrip("#") for r in args.routes.split(",") if r.strip()]
@@ -330,15 +403,25 @@ def main():
     if live and os.environ.get("SERVICE_DESK_LIVE") != "1":
         sys.exit(f"{', '.join('#' + r for r in live)} are real route channels: that needs SERVICE_DESK_LIVE=1 "
                  "in the environment. Use test channels like #route-12-test until then.")
+    if args.listen and not os.environ.get("SLACK_APP_TOKEN"):
+        sys.exit("--listen needs SLACK_APP_TOKEN (the xapp- token from the Slack app's Basic Information page).")
 
     slack = WebClient(token=os.environ["SLACK_BOT_TOKEN"])
     claude = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("SERVICE_DESK_API_KEY"))
-    alliant, loaded = Alliant.from_dir(args.data), time.time()
-    desk = Desk(slack, claude, alliant, args.desk, routes)
+    desk = Desk(slack, claude, Alliant.from_dir(args.data), args.desk, routes)
+    loaded = [time.time()]
+
+    def reload():  # pick up a fresh export without restarting
+        if time.time() - loaded[0] > 3600:
+            desk.alliant, loaded[0] = Alliant.from_dir(args.data), time.time()
+
+    if args.listen:
+        desk.listen(os.environ["SLACK_APP_TOKEN"], os.environ["SLACK_BOT_TOKEN"], args.since_minutes,
+                    args.watch or 300, reload)
+        return
     while True:
         try:
-            if time.time() - loaded > 3600:  # pick up a fresh export without restarting
-                desk.alliant, loaded = Alliant.from_dir(args.data), time.time()
+            reload()
             counts = desk.run_once(args.since_minutes)
             if any(counts[k] for k in ("asked", "ticket", "readback")) or not args.watch:
                 print(time.strftime("%H:%M"), ", ".join(f"{v} {k}" for k, v in counts.items()), flush=True)
