@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Rebuild service_changes/data from the Alliant Customer Record Cards PDF.
 #   bash deploy/refresh_data.sh "Alliant Customer Record Cards.pdf"
-# The parser was written against Dropbox's text extraction, so this tries several PDF-to-text readers and
-# keeps the one the parser reads the most accounts and lines from.
+# The parser was written against Dropbox's text extraction. pypdf matches it exactly (866 accounts, 6175 lines
+# on the Oct 2026 PDF); pdftotext -raw is kept as a fallback. Whichever the parser reads more from is used.
 # The running desk picks the new data up within the hour; restart it to use it right away.
 # Refuses to replace the data if the new build finds far fewer accounts than the current one.
 set -euo pipefail
@@ -14,13 +14,10 @@ DATA="$REPO/service_changes/data"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
-"$PY" -c "import pypdf, pdfminer" 2>/dev/null || "$REPO/.venv/bin/pip" install -q pypdf pdfminer.six
+"$PY" -c "import pypdf" 2>/dev/null || "$REPO/.venv/bin/pip" install -q pypdf
 
-pdftotext "$PDF" "$TMP/poppler.txt"
 pdftotext -raw "$PDF" "$TMP/poppler-raw.txt"
-pdftotext -layout "$PDF" "$TMP/poppler-layout.txt"
 "$PY" -c "import sys, pypdf; print('\n'.join(p.extract_text() or '' for p in pypdf.PdfReader(sys.argv[1]).pages))" "$PDF" > "$TMP/pypdf.txt"
-"$PY" -c "import sys; from pdfminer.high_level import extract_text; print(extract_text(sys.argv[1]))" "$PDF" > "$TMP/pdfminer.txt"
 
 cd "$REPO"
 best="" best_score=0
