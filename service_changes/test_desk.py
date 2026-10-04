@@ -385,6 +385,31 @@ def test_office_can_ask_in_the_office_channel(setup, monkeypatch):
     q = slack.say("D1", "U2", "how many mats does wendys get?")
     assert d.run_once()["answered"] == 1
     [a] = slack.bot_posts("D1", "answer")
-    assert a["thread_ts"] == q["ts"] and a["text"].startswith("*W1* WENDY'S #4412: 4 3x10 mats weekly")
+    assert "thread_ts" not in a and a["text"].startswith("<@U2> *W1* WENDY'S #4412: 4 3x10 mats weekly")
     assert not slack.bot_posts("D1", "lookup_log") and desk._seen(slack.find("D1", q["ts"]), "UBOT")
     assert d.run_once()["answered"] == 0  # read once
+
+
+def test_office_answers_which_customer_in_the_channel(setup, monkeypatch):
+    import service_changes.parser as parser
+    from .parser import Answer
+    slack, d = setup
+    seen = []
+
+    def office_parse(client, text, channel, ts, alliant, author="", office=False, previous=""):
+        seen.append(text)
+        known = "fairbanks" in text.lower()
+        return ParsedMessage(category=Category.lookup, customer_as_written="Midas", summary="shop towels at Midas",
+                             account_number="W1" if known else None,
+                             questions_for_driver=[] if known else ["Which Midas store?"])
+    monkeypatch.setattr(parser, "parse_message", office_parse)
+    monkeypatch.setattr(parser, "answer_lookup", lambda c, q, f: Answer(answer="200 shop towels weekly", found=True))
+    slack.say("D1", "U2", "how many shop towels does midas get")
+    d.run_once()
+    [ask] = slack.bot_posts("D1", "office_ask")
+    assert ask["text"] == "<@U2> Which Midas store?" and "thread_ts" not in ask
+    slack.say("D1", "U2", "Fairbanks")
+    assert d.run_once()["answered"] == 1
+    assert "how many shop towels does midas get" in seen[-1] and "Answer: Fairbanks" in seen[-1]
+    [a] = slack.bot_posts("D1", "answer")
+    assert a["text"].startswith("<@U2> *W1*") and "200 shop towels weekly" in a["text"]
