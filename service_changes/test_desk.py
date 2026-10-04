@@ -350,3 +350,18 @@ def test_lookup_about_another_route_goes_to_the_office(setup, monkeypatch):
     assert "isn't on route 1" in slack.bot_posts("C1", "answer")[0]["text"]
     [flag] = slack.bot_posts("D1", "lookup_off_route")
     assert "which is on route 9" in flag["text"]
+
+
+def test_at_most_three_questions_at_once(setup, monkeypatch):
+    import service_changes.parser as parser
+    slack, d = setup
+
+    def many(*a, **k):
+        p = fake_parse(*a, **k)
+        p.questions_for_driver = [f"Question {i}?" for i in range(1, 6)]
+        return p
+    monkeypatch.setattr(parser, "parse_message", many)
+    slack.say("C1", "U1", "more mats at wendys")
+    assert d.run_once()["asked"] == 1
+    [q] = slack.bot_posts("C1", "question")
+    assert q["text"].count("•") == 3 and "Question 3?" in q["text"] and "Question 4?" not in q["text"]

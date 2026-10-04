@@ -42,6 +42,7 @@ WORKING = "hourglass_flowing_sand"  # put on by the listener the moment a messag
 DONE_REACTIONS = {"white_check_mark", "heavy_check_mark", "ballot_box_with_check"}
 DONE_WORDS = re.compile(r"^\s*(done|changed|entered|complete[d]?|made|updated|ok(ay)?|got it|all set|finished)\b[\s.!]*$", re.I)
 MAX_ASKS = 2
+MAX_QUESTIONS = 3  # per message to a driver; the rest come up again once they answer
 MAX_LOOKUPS_PER_DAY = 15  # per person: past this the bot stops answering and tells the office
 ACTIONABLE = {Category.item_change, Category.wearer_change, Category.hold_or_closure, Category.special_order}
 DONE_ANY = re.compile(r"\b(done|entered|changed|complete[d]?|all set|finished)\b", re.I)
@@ -197,7 +198,7 @@ class Desk:
         elif parsed.category == Category.lookup and parsed.account_number and not parsed.questions_for_driver:
             did = self.answer(route_name, channel, src, author, parsed, replies, bot_posts)
         elif result.questions and asks < MAX_ASKS and (parsed.category in ACTIONABLE or parsed.category == Category.lookup):
-            qs = "\n".join(f"• {q}" for q in result.questions)
+            qs = "\n".join(f"• {q}" for q in result.questions[:MAX_QUESTIONS])
             # A normal channel message with an @mention, so it pushes to the driver's phone.
             self.post(channel, f"<@{src.get('user')}> Quick check on _{_short(src.get('text', ''), 60)}_\n{qs}",
                       {"kind": "question", "src_ts": src["ts"], "driver_id": src.get("user"), "msgs": replies}, bot_posts)
