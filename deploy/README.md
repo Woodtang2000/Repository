@@ -50,6 +50,22 @@ cd ~/Repository && bash deploy/refresh_data.sh ~/"Alliant Customer Record Cards.
 It should report about 866 accounts. Do the same whenever the PDF is updated; the desk picks the new data up
 within the hour.
 
+## Automatic data updates from Dropbox (optional)
+
+The server can check Dropbox every hour and rebuild the data whenever the Record Cards PDF changes.
+
+1. Go to https://www.dropbox.com/developers/apps → **Create app** → **Scoped access** → **App folder**.
+   Name it e.g. `SWL Service Desk` → **Create app**. (App folder access means it can only see
+   `Dropbox/Apps/SWL Service Desk/`, nothing else in your Dropbox.)
+2. **Permissions** tab: tick `files.metadata.read` and `files.content.read` → **Submit**.
+3. Save the Alliant export as `Alliant Customer Record Cards.pdf` in `Dropbox/Apps/SWL Service Desk/`.
+4. On the server: `cd ~/Repository && python3 deploy/dropbox_sync.py setup`. It asks for the **App key** and
+   **App secret** (app's **Settings** tab), gives you a link to click **Allow**, then asks for the code Dropbox
+   shows. It installs the hourly check and runs the first one.
+
+From then on, replacing the PDF in that folder is all it takes; the desk has the new data within the hour.
+Check what it did with `tail ~/dropbox_sync.log`.
+
 ## 5. Start it
 
 ```bash
@@ -65,6 +81,7 @@ Ctrl+C stops watching the log, not the desk.
 | To | Run |
 |---|---|
 | See what it is doing | `journalctl -u service-desk -f` |
+| Last Dropbox data update | `tail ~/dropbox_sync.log` |
 | Get the latest code | `cd ~/Repository && bash deploy/update.sh` |
 | Stop it | `sudo systemctl stop service-desk` |
 | Go live | `sudo nano /etc/service-desk.env`: set `DESK_CHANNEL`, `ROUTE_CHANNELS` (e.g. `route-1,route-2`) and `SERVICE_DESK_LIVE=1`, then `sudo systemctl restart service-desk` |
