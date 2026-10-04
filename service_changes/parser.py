@@ -96,10 +96,10 @@ class Answer(BaseModel):
     found: bool = Field(description="False if the account data doesn't contain what was asked.")
 
 
-def answer_lookup(client: anthropic.Anthropic, question: str, facts: str) -> Answer:
-    """Answer a driver's question about one account from its Alliant data (items, wearers, stop, notes)."""
-    prompt = (f"Alliant data for one customer account:\n{facts}\n\nA route driver asks:\n{question}\n\n"
-              "Answer in one or two short lines a driver can read on a phone, with the numbers they need "
+def answer_lookup(client: anthropic.Anthropic, question: str, facts: str, asker: str = "route driver") -> Answer:
+    """Answer a driver's (or the customer's own) question about one account from its Alliant data."""
+    prompt = (f"Alliant data for one customer account:\n{facts}\n\nA {asker} asks:\n{question}\n\n"
+              f"Answer in one or two short lines a {asker.split()[-1]} can read on a phone, with the numbers they need "
               "(per-delivery count and how often). Use only the data above; if it doesn't say, set found to false "
               "and say what you couldn't find.")
     response = client.beta.messages.parse(

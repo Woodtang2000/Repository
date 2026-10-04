@@ -72,6 +72,16 @@ Check what it did with `tail ~/dropbox_sync.log`.
 bot is in and posts what it would have done to `#service-desk-review`. Drivers see nothing. React 👎 on anything
 wrong. `sudo bash deploy/review_setup.sh off` stops it.
 
+## Customer texting (optional)
+
+Customers text a Twilio number; each number is pinned to its account(s) in
+`service_changes/data/customer_phones.csv` (`phone,accounts,name`, accounts separated by `;`). The bot only ever
+sees that number's accounts, so a customer can't ask about or change anyone else's. Tickets land in the office
+channel marked as a customer text; ✅ texts the readback back.
+
+Put `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` and `TWILIO_NUMBER` in `/etc/service-desk.env`, then
+`sudo bash deploy/sms_setup.sh`. Log: `journalctl -u service-desk-sms -f`. Stop: `sudo bash deploy/sms_setup.sh off`.
+
 ## 5. Start it
 
 ```bash

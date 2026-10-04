@@ -413,3 +413,17 @@ def test_office_answers_which_customer_in_the_channel(setup, monkeypatch):
     assert "how many shop towels does midas get" in seen[-1] and "Answer: Fairbanks" in seen[-1]
     [a] = slack.bot_posts("D1", "answer")
     assert a["text"].startswith("<@U2> *W1*") and "200 shop towels weekly" in a["text"]
+
+
+def test_checkmark_on_a_customer_text_ticket_texts_the_readback(setup, monkeypatch):
+    import service_changes.sms as sms
+    slack, d = setup
+    sent = []
+    monkeypatch.setattr(sms, "send_sms", lambda to, body: sent.append((to, body)))
+    t = d.post("D1", "*W1* WENDY'S #4412\n➕ *Add 200* shop towels", {
+        "kind": "ticket", "src_channel": "sms", "src_ts": "SM1", "readback": "✅ W1 WENDY'S #4412 – 200 shop towels added",
+        "driver": "Jane", "driver_id": "", "account": "W1", "msgs": [], "sms_to": "+19075551234"})
+    slack.react("D1", t["ts"], "U2", "white_check_mark")
+    assert d.run_once()["readback"] == 1
+    assert sent == [("+19075551234", "Snow White Linen: ✅ W1 WENDY'S #4412 – 200 shop towels added – entered by Sonja Burke")]
+    assert "sms" not in slack.msgs  # nothing posted to Slack for it

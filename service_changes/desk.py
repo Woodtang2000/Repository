@@ -398,8 +398,12 @@ class Desk:
         who = self.name(user)
         msg = (f"<@{p['driver_id']}> " if p.get("driver_id") else "") + (p.get("readback") or "✅ Done") + f" – entered by {who}"
         msg += "".join(f"\nOffice note: {n}" for n in notes)
-        self.post(p["src_channel"], msg, {"kind": "readback", "src_ts": p["src_ts"], "driver_id": p.get("driver_id"),
-                                          "msgs": p.get("msgs", [])})
+        if p.get("sms_to"):  # a customer's text (sms.py): the readback goes back by text, not to Slack
+            from .sms import send_sms
+            send_sms(p["sms_to"], "Snow White Linen: " + msg)
+        else:
+            self.post(p["src_channel"], msg, {"kind": "readback", "src_ts": p["src_ts"], "driver_id": p.get("driver_id"),
+                                              "msgs": p.get("msgs", [])})
         self.slack.chat_update(channel=self.desk_id, ts=t["ts"], text=t["text"] + f"\n✅ *Entered by {who}* · readback sent",
                                metadata={"event_type": KIND, "event_payload": {**p, "kind": "done"}})
 
