@@ -37,7 +37,8 @@ MAX_ASKS = 2
 MAX_QUESTIONS = 3
 CONVO_MINUTES = 60  # a text within this long of our last question is read as the answer
 MAX_TEXTS_PER_DAY = 30  # per number; past this the office is told and the bot stops answering that number today
-WHO_ARE_YOU = "Hi, this is Snow White Linen. So we can set you up, what's your name and which business are you with?"
+WHO_ARE_YOU = ("Hi, this is Snow White Linen. So we can set you up, what's your name and which business are you with? "
+               "Msg & data rates may apply. Reply STOP to opt out, HELP for help.")
 WAITING = "Thanks! The office will confirm your account shortly, then we'll take care of your request."
 SET_UP = "You're all set. Text this number any time with changes for {names}."
 DONE_REACTIONS = {"white_check_mark", "heavy_check_mark", "ballot_box_with_check"}
