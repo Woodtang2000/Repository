@@ -63,8 +63,13 @@ def setup():
     print("https://www.dropbox.com/oauth2/authorize?" + urllib.parse.urlencode(
         {"client_id": key, "response_type": "code", "token_access_type": "offline"}))
     code = input("\nCode: ").strip()
-    raw, _ = post("https://api.dropboxapi.com/oauth2/token",
-                  {"code": code, "grant_type": "authorization_code", "client_id": key, "client_secret": secret})
+    try:
+        raw, _ = post("https://api.dropboxapi.com/oauth2/token",
+                      {"code": code, "grant_type": "authorization_code", "client_id": key, "client_secret": secret})
+    except urllib.error.HTTPError as e:
+        # invalid_grant: the code was already used or has expired (they last a few minutes, once).
+        # invalid_client: the app key or secret is wrong.
+        sys.exit(f"Dropbox said: {e.read().decode(errors='replace')}\nRun setup again and use a fresh code.")
     tok = json.loads(raw)
     if "refresh_token" not in tok:
         sys.exit(f"Dropbox didn't return a refresh token: {tok}")
