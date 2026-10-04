@@ -375,3 +375,16 @@ def test_checkmark_from_the_event_before_history_shows_it(setup):
     d.done_events[t["ts"]] = "U2"  # Slack's reaction_added event arrived; history has no ✅ yet
     assert d.run_once()["readback"] == 1
     assert d.done_events == {} and d.run_once()["readback"] == 0
+
+
+def test_office_can_ask_in_the_office_channel(setup, monkeypatch):
+    import service_changes.parser as parser
+    from .parser import Answer
+    slack, d = setup
+    monkeypatch.setattr(parser, "answer_lookup", lambda c, q, f: Answer(answer="4 3x10 mats weekly", found=True))
+    q = slack.say("D1", "U2", "how many mats does wendys get?")
+    assert d.run_once()["answered"] == 1
+    [a] = slack.bot_posts("D1", "answer")
+    assert a["thread_ts"] == q["ts"] and a["text"].startswith("*W1* WENDY'S #4412: 4 3x10 mats weekly")
+    assert not slack.bot_posts("D1", "lookup_log") and desk._seen(slack.find("D1", q["ts"]), "UBOT")
+    assert d.run_once()["answered"] == 0  # read once

@@ -100,7 +100,7 @@ class Desk:
         missing = [n for n in [desk, *routes] if n not in channels]
         if missing:
             sys.exit("Invite @Service Desk to " + ", ".join("#" + n for n in missing) + " first.")
-        self.desk_id = channels[desk]
+        self.desk_name, self.desk_id = desk, channels[desk]
         self.routes = {n: channels[n] for n in routes}
 
     def name(self, user: str | None) -> str:
@@ -352,6 +352,9 @@ class Desk:
                 elif cands:
                     self.post(self.desk_id, f"<@{h.get('user')}> Which one? React ✅ on the ticket, or type done "
                                             "with the account number.", {"kind": "which"})
+            elif not h.get("thread_ts"):
+                if self.office_lookup(h):
+                    counts["answered"] += 1
             self.mark_seen(self.desk_id, [h])
         for t in tickets:
             if t["ts"] in done:
@@ -362,6 +365,28 @@ class Desk:
             if t["ts"] not in done:
                 open_t.setdefault((meta(t)["src_channel"], meta(t)["src_ts"]), []).append(t["ts"])
         return open_t
+
+    def office_lookup(self, h: dict) -> bool:
+        """A question typed in the office channel ("how many shop towels does Midas get?"): answered from the Alliant
+        export in a thread under it. Any customer on any route; no daily limit and no log, since it is the office."""
+        from .context import account_facts
+        from .parser import answer_lookup, parse_message
+        text = h.get("text", "")
+        parsed = parse_message(self.claude, text, self.desk_name, h["ts"], self.alliant, author=self.name(h.get("user")),
+                               office=True)
+        if parsed.category != Category.lookup:
+            return False
+        if not parsed.account_number:
+            qs = parsed.questions_for_driver or ["Which customer? Add the account number or location."]
+            self.post(self.desk_id, f"<@{h.get('user')}> " + " ".join(qs), {"kind": "answer"}, thread_ts=h["ts"])
+            return True
+        acct = parsed.account_number
+        name = next((c.name for c in self.alliant.customers if c.account == acct), parsed.customer_as_written or acct)
+        ans = answer_lookup(self.claude, parsed.summary or text, account_facts(self.alliant, acct))
+        as_of = f" _(Alliant as of {self.alliant.as_of})_" if self.alliant.as_of else ""
+        self.post(self.desk_id, f"*{acct}* {name}: {ans.answer}{as_of}", {"kind": "answer", "account": acct},
+                  thread_ts=h["ts"])
+        return True
 
     def send_readback(self, t: dict, user: str, notes: list[str]) -> None:
         p = meta(t)
