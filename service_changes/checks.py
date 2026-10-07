@@ -341,6 +341,13 @@ def ticket(result: Result, alliant: Alliant, with_readback: bool = True) -> str:
             bits.append(ch.effective)
         if cc.already_done:
             bits.append("☑️ already in Alliant")
+        if cc.alliant_item and alliant.on_hold(acct, cc.alliant_item, sku):
+            bits.append("⏸️ on hold in Alliant")
+        elif not cc.alliant_item and not ch.wearer:
+            # Not an active line, but maybe a held one: taking it off hold beats adding a new line.
+            held = _find({h["item"]: 0 for h in alliant.on_hold(acct) if h.get("item")}, ch.item, alliant_vocab(alliant))
+            if held:
+                bits.append(f"⏸️ *{held[0]}* is on this account but on hold in Alliant")
         out.append(" · ".join(bits))
     if p.category == Category.hold_or_closure and not result.changes:
         out.append(f"⏸️ *{p.summary}*")

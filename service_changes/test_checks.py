@@ -326,3 +326,37 @@ def test_same_question_is_not_asked_twice():
     cc.questions = ["What size shirts for Tim?", "Midas has 1 3x5 mat now. Add 1 more (total 2), or should they have 1 total?"]
     assert Result(p, [cc]).questions == ["What shirt size does Tim need?", "Which 3x5 mat?",
                                          "Midas has 1 3x5 mat now. Add 1 more (total 2), or should they have 1 total?"]
+
+
+def test_loads_the_alliant_sql_feed(tmp_path):
+    from .context import account_facts
+    (tmp_path / "customers.csv").write_text("account,name,route,service_days\n2500-2-00000,HORIZON HOUSE,2,Tue;Fri\n"
+                                            "990001-1-00000,RTE 1 (DOWNTOWN),1,\n")
+    (tmp_path / "customer_cards.csv").write_text(
+        "account,name,route,service_days,stop_sequence,contact,phone,mobile,email,special_instructions,location_contact,location_email\n"
+        "2500-2-00000,HORIZON HOUSE,2,Tue;Fri,Tue:4;Fri:4,AP INBOX,(907)555-0100,,ap@horizon.com,Back door,Maria,\n")
+    (tmp_path / "current_items.csv").write_text("account,item,quantity,autocount,sku,days,frequency\n"
+                                                "2500-2-00000,TOWEL BATH 22X44,240,200,5-05-01,Tue;Fri,8\n"
+                                                "2500-2-00000,TOWEL BATH 22X44,160,0,5-05-01,Tue;Fri,8\n"
+                                                "2500-2-00000,MAT CHARCOAL HEATHER 3X5,2,2,10-07-03,Tue,7\n")
+    (tmp_path / "wearers.csv").write_text("account,employee,first,last,department,locker,added_date,stopped_date\n"
+                                          "2500-2-00000,1,Ann,Lee,,,2020-01-01,\n2500-2-00000,2,Bob,Gone,,,2019-01-01,2024-05-01\n")
+    (tmp_path / "garments.csv").write_text("account,employee,sku,size,item,quantity,autocount,days,frequency\n"
+                                           "2500-2-00000,1,2-SH,XL,SHIRT,11,11,Tue,7\n")
+    (tmp_path / "holds.csv").write_text("account,type,start,end,reason,employee,sku,size,item\n"
+                                        "2500-2-00000,hold,,,Item on hold,0,10-07-03,,MAT CHARCOAL HEATHER 3X5\n")
+    (tmp_path / "feed_done.txt").write_text("2026-10-06T20:48:40-0800\n")
+    a = Alliant.from_dir(str(tmp_path))
+    assert [c.account for c in a.customers] == ["2500-2-00000"]  # route placeholder accounts left out
+    assert a.items["2500-2-00000"]["TOWEL BATH 22X44"] == 400 and a.autocount["2500-2-00000"]["TOWEL BATH 22X44"] == 200
+    assert [w.name for w in a.wearers["2500-2-00000"]] == ["Ann Lee"]  # stopped wearers left out
+    assert a.as_of == "Oct 6" and a.exported_at.isoformat() == "2026-10-06T20:48:40-08:00"
+    facts = account_facts(a, "2500-2-00000")
+    assert "On-site contact: Maria (907)555-0100" in facts and "Invoice contact: AP INBOX ap@horizon.com" in facts
+    assert "On hold in Alliant: MAT CHARCOAL HEATHER 3X5" in facts
+    p = ParsedMessage(category=Category.item_change, account_number="2500-2-00000", summary="",
+                      changes=[Change(action=Action.add, item="3x5 charcoal heather mat", quantity=1)])
+    from .checks import ticket
+    assert "⏸️ on hold in Alliant" in ticket(check(p, a), a)
+    del a.items["2500-2-00000"]["MAT CHARCOAL HEATHER 3X5"]  # the feed lists active lines only; held ones are in holds.csv
+    assert "⏸️ *MAT CHARCOAL HEATHER 3X5* is on this account but on hold in Alliant" in ticket(check(p, a), a)

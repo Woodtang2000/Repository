@@ -52,7 +52,14 @@ within the hour.
 
 ## Automatic data updates from Dropbox (optional)
 
-The server can check Dropbox every hour and rebuild the data whenever the Record Cards PDF changes.
+**Primary source: the nightly Alliant SQL feed.** The plant Mac mini writes `customers.csv`, `customer_cards.csv`,
+`current_items.csv`, `garments.csv`, `wearers.csv`, `holds.csv` and, last, `feed_done.txt` to
+`Dropbox/Apps/SWL Service Desk/` at 11:45 PM. The hourly check installs a new set once `feed_done.txt` changes
+(after checking columns, and that it doesn't have far fewer customers than now) and restarts the desk.
+**Fallback: the Record Cards PDF**, used only when the feed is missing or more than 36 hours old.
+The desk posts a warning in the office channel when the data is more than 36 hours old, and again daily.
+
+The server can check Dropbox every hour and rebuild the data whenever these change.
 
 1. Go to https://www.dropbox.com/developers/apps → **Create app** → **Scoped access** → **App folder**.
    Name it e.g. `SWL Service Desk` → **Create app**. (App folder access means it can only see

@@ -80,6 +80,9 @@ def test_only_keeps_nothing_but_the_customers_accounts():
     mine = sms.only(ALLIANT, ["M4"])
     assert [c.account for c in mine.customers] == ["M4"]
     assert set(mine.items) == {"M4"} and set(mine.cards) == {"M4"} and list(mine.garments) == [("M4", "7")]
+    import dataclasses
+    assert all(f.name in ("as_of", "exported_at") or not getattr(mine, f.name) or f.name in ("customers",) or set(
+        k if isinstance(k, str) else k[0] for k in getattr(mine, f.name)) <= {"M4"} for f in dataclasses.fields(mine))
 
 
 def test_customer_facts_leave_out_inventory_notes_and_contacts():

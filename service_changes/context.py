@@ -69,6 +69,15 @@ class Alliant:
     sku: dict[tuple, str] = field(default_factory=dict)  # (account, item) or (account, wearer#, "ITEM SIZE") -> Alliant SKU
     cards: dict[str, dict] = field(default_factory=dict)  # account -> record card header (stop_sequence, special_instructions, ...)
     as_of: str = ""  # date of the export the data came from, e.g. "Oct 3"
+    exported_at: datetime | None = None  # when the data was exported from Alliant (feed_done.txt, else file time)
+    holds: dict[str, list[dict]] = field(default_factory=dict)  # account -> item-level holds (holds.csv)
+
+    def on_hold(self, account: str | None, item: str | None = None, sku: str | None = None) -> list[dict]:
+        """Holds on this account, or on this item / SKU on it."""
+        hs = self.holds.get(account or "", [])
+        if item or sku:
+            hs = [h for h in hs if (item and h.get("item", "").upper() == item.upper()) or (sku and h.get("sku") == sku)]
+        return hs
 
     @classmethod
     def from_dir(cls, data_dir: str) -> "Alliant":
@@ -77,8 +86,19 @@ class Alliant:
         f = lambda n: os.path.join(data_dir, n) if os.path.exists(os.path.join(data_dir, n)) else None
         data = cls.load(f("customers.csv"), f("current_items.csv"), f("garments.csv"), f("wearers.csv"))
         data.load_aliases(f("aliases.csv") or os.path.join(os.path.dirname(__file__), "aliases.csv"))
-        if f("customers.csv"):
-            data.as_of = datetime.fromtimestamp(os.path.getmtime(f("customers.csv")), ALASKA).strftime("%b %-d")
+        if f("feed_done.txt"):  # the nightly Alliant SQL feed: its export time, written last
+            try:
+                data.exported_at = datetime.strptime(open(f("feed_done.txt")).read().split()[0], "%Y-%m-%dT%H:%M:%S%z")
+            except (ValueError, IndexError):
+                pass
+        if f("customers.csv") and data.exported_at is None:
+            data.exported_at = datetime.fromtimestamp(os.path.getmtime(f("customers.csv")), ALASKA)
+        if data.exported_at:
+            data.as_of = data.exported_at.astimezone(ALASKA).strftime("%b %-d")
+        if f("holds.csv"):
+            with open(f("holds.csv"), newline="") as fh:
+                for row in csv.DictReader(fh):
+                    data.holds.setdefault(row["account"].strip(), []).append({k: (v or "").strip() for k, v in row.items()})
         if f("customer_cards.csv"):
             with open(f("customer_cards.csv"), newline="") as fh:
                 data.cards = {row["account"]: row for row in csv.DictReader(fh)}
@@ -125,30 +145,38 @@ class Alliant:
             with open(garments_csv, newline="") as f:
                 for row in csv.DictReader(f):
                     label = f'{row["item"].strip()} {row["size"].strip()}'.strip()
-                    data.garments.setdefault((row["account"], row["employee"]), {})[label] = int(row["quantity"])
+                    g = data.garments.setdefault((row["account"], row["employee"]), {})
+                    g[label] = g.get(label, 0) + int(row["quantity"])
                     if row.get("sku"):
                         data.sku[(row["account"], row["employee"], label)] = row["sku"].strip()
         if wearers_csv:
             with open(wearers_csv, newline="") as f:
                 for row in csv.DictReader(f):
+                    if (row.get("stopped_date") or "").strip():  # the feed lists stopped wearers too
+                        continue
                     data.wearers.setdefault(row["account"], []).append(
                         Wearer(row["employee"], row["first"].strip(), row["last"].strip(), row.get("department", "").strip()))
         if customers_csv:
             with open(customers_csv, newline="") as f:
                 for row in csv.DictReader(f):
+                    if re.match(r"99\d{4}-", row["account"].strip()):  # route placeholder accounts ("RTE 1 (DOWNTOWN)")
+                        continue
                     days = [d.strip()[:3].title() for d in re.split(r"[;,/ ]+", row.get("service_days", "")) if d.strip()]
                     data.customers.append(Customer(row["account"].strip(), row["name"].strip(), row["route"].strip(), days))
         if items_csv:
             with open(items_csv, newline="") as f:
                 for row in csv.DictReader(f):
                     acct, item = row["account"].strip(), row["item"].strip()
-                    data.items.setdefault(acct, {})[item] = int(row["quantity"])
+                    # The same item can sit on several lines of one account (240 + 160 bath towels): add them up.
+                    have = data.items.setdefault(acct, {})
+                    have[item] = have.get(item, 0) + int(row["quantity"])
                     if row.get("sku"):
                         data.sku[(acct, item)] = row["sku"].strip()
                     if row.get("frequency"):
                         data.frequency.setdefault(acct, {})[item] = row["frequency"].strip()
                     if (row.get("autocount") or "").strip():
-                        data.autocount.setdefault(acct, {})[item] = int(row["autocount"])
+                        auto = data.autocount.setdefault(acct, {})
+                        auto[item] = auto.get(item, 0) + int(row["autocount"])
         return data
 
     def match_account(self, name: str | None, route: str | None, day: str) -> str | None:
@@ -177,8 +205,11 @@ def account_facts(alliant: "Alliant", account: str) -> str:
     if card.get("stop_sequence") or cust:
         out.append(f"Route {cust.route if cust else card.get('route', '')} · stops: "
                    + (card.get("stop_sequence") or ", ".join(cust.service_days if cust else [])))
-    if card.get("contact") or card.get("phone"):
-        out.append(f"Contact: {' '.join(x for x in [card.get('contact'), card.get('phone')] if x)}")
+    on_site = " ".join(x for x in [card.get("location_contact"), card.get("phone")] if x)
+    if on_site:
+        out.append(f"On-site contact: {on_site}")
+    if card.get("contact") or card.get("email"):  # the feed's contact/email = who gets the invoices
+        out.append(f"Invoice contact: {' '.join(x for x in [card.get('contact'), card.get('email')] if x)}")
     if (card.get("special_instructions") or "").strip() and "Remittance" not in card["special_instructions"]:
         out.append(f"Card note: {card['special_instructions'].strip()}")
     items = alliant.items.get(account, {})
@@ -188,6 +219,10 @@ def account_facts(alliant: "Alliant", account: str) -> str:
             auto = alliant.autocount.get(account, {}).get(item)
             freq = frequency_label(alliant.frequency.get(account, {}).get(item))
             out.append(f"- {item}: {auto if auto is not None else inv} per delivery; inventory {inv}" + (f"; {freq}" if freq else ""))
+    holds = alliant.on_hold(account)
+    if holds:
+        out.append("On hold in Alliant: " + ", ".join(
+            h.get("item", "") + (f" (wearer #{h['employee']})" if h.get("employee") not in ("", "0") else "") for h in holds))
     wearers = alliant.wearers.get(account, [])
     if wearers:
         out.append("Wearers (number, name: garments size x qty):")

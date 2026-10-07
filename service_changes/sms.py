@@ -176,6 +176,7 @@ def only(alliant: Alliant, accounts: list[str]) -> Alliant:
         aliases={a: v for a, v in alliant.aliases.items() if a in keep},
         sku={k: v for k, v in alliant.sku.items() if k[0] in keep},
         cards={a: v for a, v in alliant.cards.items() if a in keep},
+        holds={a: v for a, v in alliant.holds.items() if a in keep},
     )
 
 

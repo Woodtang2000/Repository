@@ -442,3 +442,25 @@ def test_driver_can_ask_to_add_a_texting_number(setup, monkeypatch):
     assert not slack.bot_posts("D1", "ticket") and not slack.bot_posts("C1", "question")
     assert "sent that to the office" in slack.bot_posts("C1", "answer")[0]["text"]
     assert not slack.bot_posts("D1", "answer") and len(CALLS) == 0
+
+
+def test_stale_alliant_data_warns_the_office_once_then_daily(setup):
+    from datetime import datetime, timedelta, timezone
+    slack, d = setup
+    now = datetime.now(timezone.utc)
+    d.alliant.exported_at = now - timedelta(hours=40)
+    try:
+        d.run_once()
+        [w] = slack.bot_posts("D1", "stale_data")
+        assert "Alliant data is 40 hours old" in w["text"] and "Mac" in w["text"]
+        d.run_once()
+        assert len(slack.bot_posts("D1", "stale_data")) == 1  # not every pass
+        d.check_stale(now.timestamp() + 86401)
+        assert len(slack.bot_posts("D1", "stale_data")) == 2  # a reminder a day later
+        d.alliant.exported_at = now - timedelta(hours=2)  # the feed came back
+        d.run_once()
+        assert slack.bot_posts("D1", "stale_data")[-1]["text"] == "✅ Alliant data is current again."
+        d.run_once()
+        assert len(slack.bot_posts("D1", "stale_data")) == 3
+    finally:
+        d.alliant.exported_at = None

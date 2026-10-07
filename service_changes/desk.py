@@ -33,7 +33,7 @@ import time
 
 from .bot import _messages, _name, _office_staff
 from .checks import check, readback, ticket
-from .context import Alliant, route_from_channel, service_day
+from .context import ALASKA, Alliant, route_from_channel, service_day
 from .schema import Category
 
 KIND = "service_desk"
@@ -43,6 +43,7 @@ DONE_REACTIONS = {"white_check_mark", "heavy_check_mark", "ballot_box_with_check
 DONE_WORDS = re.compile(r"^\s*(done|changed|entered|complete[d]?|made|updated|ok(ay)?|got it|all set|finished)\b[\s.!]*$", re.I)
 MAX_ASKS = 2
 MAX_QUESTIONS = 3  # per message to a driver; the rest come up again once they answer
+STALE_HOURS = 36  # the Alliant feed runs nightly; older than this means it has stopped (e.g. the Mac restarted)
 MAX_LOOKUPS_PER_DAY = 15  # per person: past this the bot stops answering and tells the office
 ACTIONABLE = {Category.item_change, Category.wearer_change, Category.hold_or_closure, Category.special_order}
 DONE_ANY = re.compile(r"\b(done|entered|changed|complete[d]?|all set|finished)\b", re.I)
@@ -89,6 +90,7 @@ class Desk:
         self.fetched: dict[str, set[str]] = {}  # per route channel: the top-level messages the last pass saw
         # Office ✅ reactions straight from Slack's event (ticket ts -> who), for when history doesn't show them yet.
         self.done_events: dict[str, str] = {}
+        self.stale_warned: float | None = None  # when the office was last told the Alliant data is stale
         channels = {}
         cursor = None
         while True:
@@ -441,10 +443,29 @@ class Desk:
 
     # ---- one pass -------------------------------------------------------------------------------------------
 
+    def check_stale(self, now: float) -> None:
+        """Tell the office when the Alliant data is over STALE_HOURS old (once, then daily), and when it's back."""
+        exported = self.alliant.exported_at
+        if exported is None:
+            return
+        age = (now - exported.timestamp()) / 3600
+        if age > STALE_HOURS:
+            if self.stale_warned is None or now - self.stale_warned > 86400:
+                when = exported.astimezone(ALASKA).strftime("%a %b %-d %-I:%M %p")
+                self.post(self.desk_id, f"⚠️ *Alliant data is {age:.0f} hours old* (last export {when}). The nightly feed "
+                                        "from the plant Mac mini may have stopped, e.g. the Mac restarted and is waiting "
+                                        "for someone to log in. Counts in answers and tickets are as of that export.",
+                          {"kind": "stale_data"})
+                self.stale_warned = now
+        elif self.stale_warned is not None:
+            self.post(self.desk_id, "✅ Alliant data is current again.", {"kind": "stale_data"})
+            self.stale_warned = None
+
     def run_once(self, since_minutes: int = 4320, ticket_days: int = 14, only: set[str] | None = None) -> dict:
         """One pass over the office channel and the route channels (or just the ones in `only`)."""
         now = time.time()
         counts = {"asked": 0, "ticket": 0, "read": 0, "readback": 0, "answered": 0}
+        self.check_stale(now)
         open_t = self.desk_pass(now - ticket_days * 86400, counts)
         for name, cid in sorted(self.routes.items()):
             if only is None or cid in only:

@@ -11,6 +11,7 @@ Standard library only, so it runs with the system python3.
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -18,6 +19,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from datetime import datetime, timezone
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CONF_DIR = os.path.expanduser("~/.config/service-desk")
@@ -89,28 +91,118 @@ def setup():
     sync()
 
 
+FEED_FILES = ["customers.csv", "customer_cards.csv", "current_items.csv", "garments.csv", "wearers.csv", "holds.csv"]
+FEED_REQUIRED = {"customers.csv": {"account", "name", "route", "service_days"},
+                 "customer_cards.csv": {"account", "name"},
+                 "current_items.csv": {"account", "item", "quantity", "autocount", "sku"},
+                 "garments.csv": {"account", "employee", "item", "size", "quantity"},
+                 "wearers.csv": {"account", "employee", "first", "last"}}
+STALE_HOURS = 36
+DATA = os.path.join(REPO, "service_changes", "data")
+
+
+def _meta(auth, path):
+    try:
+        raw, _ = post("https://api.dropboxapi.com/2/files/get_metadata",
+                      headers={**auth, "Content-Type": "application/json"}, body=json.dumps({"path": path}).encode())
+        return json.loads(raw)
+    except urllib.error.HTTPError as e:
+        if e.code == 409:
+            return None
+        raise
+
+
+def _download(auth, path) -> bytes:
+    data, _ = post("https://content.dropboxapi.com/2/files/download",
+                   headers={**auth, "Dropbox-API-Arg": json.dumps({"path": path}),
+                            "Content-Type": "application/octet-stream"}, body=b"")
+    return data
+
+
+def _restart():
+    for svc in ("service-desk", "service-desk-sms"):
+        subprocess.run(["sudo", "-n", "systemctl", "try-restart", svc], check=False)
+
+
+def _rows(path):
+    import csv
+    with open(path, newline="", encoding="utf-8-sig") as f:
+        r = csv.DictReader(f)
+        return set(r.fieldnames or []), sum(1 for _ in r)
+
+
+def sync_feed(conf, auth, done_meta) -> bool:
+    """The nightly Alliant SQL feed (customers.csv … holds.csv, feed_done.txt written last). Returns True when the
+    desk's data is now from the feed (installed now or already current)."""
+    if done_meta["content_hash"] == conf.get("feed_hash"):
+        return True
+    log(f"New Alliant feed in Dropbox (feed_done.txt {done_meta.get('server_modified')}), downloading")
+    tmp = tempfile.mkdtemp()
+    try:
+        with open(os.path.join(tmp, "feed_done.txt"), "wb") as f:
+            f.write(_download(auth, "/feed_done.txt"))
+        for name in FEED_FILES:
+            if name == "holds.csv" and _meta(auth, "/holds.csv") is None:
+                continue
+            with open(os.path.join(tmp, name), "wb") as f:
+                f.write(_download(auth, "/" + name))
+        # Check before replacing anything: every file there with its columns, and not far fewer customers than now.
+        for name, need in FEED_REQUIRED.items():
+            cols, n = _rows(os.path.join(tmp, name))
+            if not need <= cols or n == 0:
+                log(f"Feed {name} is missing columns {sorted(need - cols)} or empty; keeping the current data.")
+                return False
+        new_n = _rows(os.path.join(tmp, "customers.csv"))[1]
+        old = os.path.join(DATA, "customers.csv")
+        old_n = _rows(old)[1] if os.path.exists(old) else 0
+        if new_n < old_n * 0.9:
+            log(f"Feed has {new_n} customers against {old_n} now; looks incomplete, keeping the current data.")
+            return False
+        os.makedirs(DATA, exist_ok=True)
+        for name in os.listdir(tmp):
+            shutil.copy(os.path.join(tmp, name), os.path.join(DATA, name + ".new"))
+            os.replace(os.path.join(DATA, name + ".new"), os.path.join(DATA, name))
+        # Built from the PDF only; it would override the feed's autocounts.
+        for stale in ("card_lines.csv",) + (() if "holds.csv" in os.listdir(tmp) else ("holds.csv",)):
+            if os.path.exists(os.path.join(DATA, stale)):
+                os.remove(os.path.join(DATA, stale))
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    conf["feed_hash"] = done_meta["content_hash"]
+    save(conf)
+    _restart()
+    log(f"Alliant feed installed ({new_n} customers) and desk restarted.")
+    return True
+
+
+def feed_age_hours(done_meta) -> float:
+    t = datetime.strptime(done_meta["server_modified"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+    return (datetime.now(timezone.utc) - t).total_seconds() / 3600
+
+
 def sync():
     conf = load()
     token = access_token(conf)
     auth = {"Authorization": f"Bearer {token}"}
-    try:
-        raw, _ = post("https://api.dropboxapi.com/2/files/get_metadata",
-                      headers={**auth, "Content-Type": "application/json"},
-                      body=json.dumps({"path": conf["path"]}).encode())
-    except urllib.error.HTTPError as e:
-        if e.code == 409:
-            log(f"No '{conf['path'][1:]}' in the app's Dropbox folder yet.")
-            return
-        raise
-    meta = json.loads(raw)
+    done = _meta(auth, "/feed_done.txt")
+    if done and sync_feed(conf, auth, done) and feed_age_hours(done) <= STALE_HOURS:
+        return  # the feed is current: the PDF is only a fallback
+    if done:
+        log(f"Alliant feed is {feed_age_hours(done):.0f} hours old; checking the PDF fallback.")
+    sync_pdf(conf, auth)
+
+
+def sync_pdf(conf, auth):
+    """Fallback: the Customer Record Cards PDF, used only when the feed is missing or stale."""
+    meta = _meta(auth, conf["path"])
+    if meta is None:
+        log(f"No '{conf['path'][1:]}' in the app's Dropbox folder.")
+        return
     if meta["content_hash"] == conf.get("last_hash"):
         return  # unchanged: stay quiet
     log(f"New PDF in Dropbox (modified {meta.get('server_modified')}), downloading")
-    data, _ = post("https://content.dropboxapi.com/2/files/download",
-                   headers={**auth, "Dropbox-API-Arg": json.dumps({"path": conf["path"]}),
-                            "Content-Type": "application/octet-stream"}, body=b"")
     with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
-        f.write(data)
+        f.write(_download(auth, conf["path"]))
         pdf = f.name
     try:
         r = subprocess.run(["bash", os.path.join(REPO, "deploy", "refresh_data.sh"), pdf],
@@ -121,10 +213,13 @@ def sync():
             return
     finally:
         os.unlink(pdf)
+    for feed_only in ("feed_done.txt", "holds.csv"):  # the data is the PDF's now, dated by its files
+        if os.path.exists(os.path.join(DATA, feed_only)):
+            os.remove(os.path.join(DATA, feed_only))
     conf["last_hash"] = meta["content_hash"]
     save(conf)
-    subprocess.run(["sudo", "-n", "systemctl", "restart", "service-desk"], check=False)
-    log("Data updated and desk restarted.")
+    _restart()
+    log("Data updated from the PDF and desk restarted.")
 
 
 if __name__ == "__main__":
