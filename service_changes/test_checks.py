@@ -360,3 +360,18 @@ def test_loads_the_alliant_sql_feed(tmp_path):
     assert "⏸️ on hold in Alliant" in ticket(check(p, a), a)
     del a.items["2500-2-00000"]["MAT CHARCOAL HEATHER 3X5"]  # the feed lists active lines only; held ones are in holds.csv
     assert "⏸️ *MAT CHARCOAL HEATHER 3X5* is on this account but on hold in Alliant" in ticket(check(p, a), a)
+
+
+def test_removing_something_the_account_doesnt_have_asks_instead_of_ticketing():
+    a = Alliant(customers=[Customer("7192-1-00001", "COSTCO PHARMACY", "12", ["Wed"]),
+                           Customer("7192-1-00005", "COSTCO DELI", "12", ["Wed"])],
+                items={"7192-1-00001": {"TOWEL SHOP": 10}, "7192-1-00005": {"TOWEL BAR MOP GOLD STRIPE": 800}},
+                autocount={"7192-1-00005": {"TOWEL BAR MOP GOLD STRIPE": 400}})
+    mats = msg("7192-1-00001", Change(action=Action.decrease, item="3x10 mats", quantity=2), customer="Costco")
+    assert check(mats, a).questions == [
+        "COSTCO PHARMACY doesn't have any 3x10 mats in Alliant at any of their locations. Which item did you mean?"]
+    mops = msg("7192-1-00001", Change(action=Action.decrease, item="bar mops", quantity=2), customer="Costco")
+    assert check(mops, a).questions == ["COSTCO PHARMACY doesn't have bar mops in Alliant. It's on COSTCO DELI "
+                                        "(400 per delivery). Which location is this for?"]
+    new = msg("7192-1-00001", Change(action=Action.add, item="3x10 mats", quantity=2), customer="Costco")
+    assert not check(new, a).questions  # adding a new item is fine

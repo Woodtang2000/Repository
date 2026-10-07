@@ -462,6 +462,14 @@ def test_stale_alliant_data_warns_the_office_once_then_daily(setup):
         assert slack.bot_posts("D1", "stale_data")[-1]["text"] == "✅ Alliant data is current again."
         d.run_once()
         assert len(slack.bot_posts("D1", "stale_data")) == 3
+        # A restart forgets, but the office channel remembers: no second warning the same day.
+        d.alliant.exported_at = now - timedelta(hours=40)
+        d.run_once()
+        assert len(slack.bot_posts("D1", "stale_data")) == 4
+        d2 = desk.Desk(slack, None, ALLIANT, "service-desk-test", ["route-1-test"])
+        d2.alliant = d.alliant
+        d2.run_once()
+        assert len(slack.bot_posts("D1", "stale_data")) == 4
     finally:
         d.alliant.exported_at = None
 

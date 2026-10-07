@@ -450,6 +450,13 @@ class Desk:
             return
         age = (now - exported.timestamp()) / 3600
         if age > STALE_HOURS:
+            if self.stale_warned is None:  # after a restart: was the office already told today?
+                posts = [m for m in _messages(self.slack, self.desk_id, now - 86400, include_all_metadata=True)
+                         if _is_bot(m, self.me) and (meta(m) or {}).get("kind") == "stale_data"]
+                back = max((float(m["ts"]) for m in posts if "current again" in m.get("text", "")), default=0.0)
+                warned = [float(m["ts"]) for m in posts if "current again" not in m.get("text", "") and float(m["ts"]) > back]
+                if warned:
+                    self.stale_warned = max(warned)
             if self.stale_warned is None or now - self.stale_warned > 86400:
                 when = exported.astimezone(ALASKA).strftime("%a %b %-d %-I:%M %p")
                 self.post(self.desk_id, f"⚠️ *Alliant data is {age:.0f} hours old* (last export {when}). The nightly feed "

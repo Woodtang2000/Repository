@@ -169,6 +169,32 @@ def _autocount(cc: CheckedChange, alliant: Alliant, account: str | None) -> int:
     return inventory
 
 
+def _not_here(cc: CheckedChange, account: str, alliant: Alliant) -> None:
+    """Remove / change an item the account doesn't have: look at the customer's other locations ("Costco" means
+    seven departments) and ask the driver, instead of sending the office a ticket for nothing."""
+    ch = cc.change
+    if alliant.on_hold(account) and _find({h["item"]: 0 for h in alliant.on_hold(account)}, ch.item, alliant_vocab(alliant)):
+        return  # it's there, on hold: the ticket says so
+    name = lambda a: next((c.name for c in alliant.customers if c.account == a), a)
+    base = account.rsplit("-", 1)[0]
+    hits = []
+    for c in alliant.customers:
+        if c.account != account and c.account.rsplit("-", 1)[0] == base:
+            found = current_qty(alliant, c.account, ch.item)
+            if found:
+                per = alliant.autocount.get(c.account, {}).get(found[0], found[1])
+                hits.append(f"{c.name} ({per} per delivery)")
+    if hits:
+        more = f" and {len(hits) - 3} more" if len(hits) > 3 else ""
+        cc.questions.append(f"{name(account)} doesn't have {ch.item} in Alliant. "
+                            + ("It's on " if len(hits) == 1 else "They're on ") + "; ".join(hits[:3]) + more
+                            + ". Which location is this for?")
+    elif ch.action != Action.stop:  # a stop for something not there is most likely already done
+        anywhere = " at any of their locations" if any(c.account.rsplit("-", 1)[0] == base and c.account != account
+                                                       for c in alliant.customers) else ""
+        cc.questions.append(f"{name(account)} doesn't have any {ch.item} in Alliant{anywhere}. Which item did you mean?")
+
+
 def check(parsed: ParsedMessage, alliant: Alliant) -> Result:
     who = parsed.customer_as_written or "this customer"
     out = []
@@ -225,6 +251,8 @@ def check(parsed: ParsedMessage, alliant: Alliant) -> Result:
             cc.notes.append("No total given")
         if cc.current is None and not ch.wearer and parsed.account_number and alliant.items:
             cc.notes.append("Not on this account in Alliant" + (" (may already be stopped)" if ch.action == Action.stop else "; check by hand"))
+            if ch.action in (Action.decrease, Action.set, Action.stop):
+                _not_here(cc, parsed.account_number, alliant)
         out.append(cc)
     cust = next((c for c in alliant.customers if c.account == parsed.account_number), None) if parsed.account_number else None
     return Result(parsed, out, cust.name if cust else None)
