@@ -66,7 +66,8 @@ def _name(slack, cache: dict, user: str | None) -> str:
 def _messages(client, channel_id: str, oldest: float, **kw):
     cursor = None
     while True:
-        r = client.conversations_history(channel=channel_id, oldest=str(oldest), limit=200, cursor=cursor, **kw)
+        # Slack returns nothing at all when `oldest` has more than 6 decimals (str(time.time()) often has 7).
+        r = client.conversations_history(channel=channel_id, oldest=f"{float(oldest):.6f}", limit=200, cursor=cursor, **kw)
         yield from r["messages"]
         cursor = r.get("response_metadata", {}).get("next_cursor")
         if not cursor:

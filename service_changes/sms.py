@@ -343,7 +343,7 @@ class TextDesk:
         typed in the office channel (or a driver's add, forwarded by desk.py as a card) change the phone list."""
         path = os.path.join(self.data_dir, "customer_phones.csv")
         done = set(self.state.setdefault("cmds", []))
-        r = self.slack.conversations_history(channel=self.desk_id, oldest=str(time.time() - 14 * 86400), limit=200,
+        r = self.slack.conversations_history(channel=self.desk_id, oldest=f"{time.time() - 14 * 86400:.6f}", limit=200,
                                              include_all_metadata=True)
         changed = 0
         for m in reversed(r["messages"]):

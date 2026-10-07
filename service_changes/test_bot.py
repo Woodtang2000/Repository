@@ -70,3 +70,16 @@ def test_bot_passes_author_and_previous_message(monkeypatch):
     bot.run_once(FakeSlack(), None, a, since_minutes=10**7, live=False)
     assert SEEN[0] == ("Kobuk decrease 40 barmops. Total 40", "Route 1", False, "")
     assert SEEN[1] == ("You're 100% complete with the linens", "Kirk", True, "Kobuk decrease 40 barmops. Total 40")
+
+
+def test_history_oldest_never_has_more_than_six_decimals():
+    # Slack silently returns no messages when `oldest` has 7 decimals, as str(time.time()) often does.
+    from .bot import _messages
+    seen = []
+
+    class Slack:
+        def conversations_history(self, **kw):
+            seen.append(kw["oldest"])
+            return {"messages": []}
+    list(_messages(Slack(), "C1", 1791351064.4902253))
+    assert seen == ["1791351064.490225"]
