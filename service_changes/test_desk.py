@@ -464,3 +464,50 @@ def test_stale_alliant_data_warns_the_office_once_then_daily(setup):
         assert len(slack.bot_posts("D1", "stale_data")) == 3
     finally:
         d.alliant.exported_at = None
+
+
+def test_routes_are_handled_in_parallel_and_each_message_once(monkeypatch):
+    import queue
+    import threading
+    import service_changes.parser as parser
+
+    class TwoRoutes(FakeSlack):
+        def __init__(self):
+            super().__init__()
+            self.msgs["C2"] = []
+            self.lock = threading.RLock()
+
+        def say(self, *a, **k):
+            with self.lock:
+                return super().say(*a, **k)
+
+        def conversations_list(self, **kw):
+            r = super().conversations_list()
+            r["channels"].append({"name": "route-2-test", "id": "C2", "is_member": True})
+            return r
+
+    def slow_parse(*a, **k):  # Claude takes a while to read each message
+        time.sleep(0.6)
+        return fake_parse(*a, **k)
+    monkeypatch.setattr(parser, "parse_message", slow_parse)
+    monkeypatch.setattr(parser, "is_reply", fake_is_reply)
+    monkeypatch.setattr(desk, "_office_staff", lambda: {"sonja burke"})
+    slack = TwoRoutes()
+    d = desk.Desk(slack, None, ALLIANT, "service-desk-test", ["route-1-test", "route-2-test"])
+    d.listening = True
+    slack.say("C1", "U1", "more mats at wendys")
+    slack.say("C2", "U1", "more mats at wendys")
+    todo, stop = queue.Queue(), threading.Event()
+    for item in [("C1", None, 1), ("C2", None, 1), ("C1", None, 1)]:  # C1 announced twice
+        todo.put(item)
+    t0 = time.time()
+    th = threading.Thread(target=d.serve, args=(todo, 4320, 10**9, lambda: None), kwargs={"stop": stop})
+    th.start()
+    while time.time() - t0 < 5 and not (slack.bot_posts("C1", "question") and slack.bot_posts("C2", "question")):
+        time.sleep(0.05)
+    took = time.time() - t0
+    time.sleep(1)  # let the queued second C1 pass finish
+    stop.set()
+    th.join(5)
+    assert len(slack.bot_posts("C1", "question")) == 1 and len(slack.bot_posts("C2", "question")) == 1
+    assert took < 1.1  # both routes read at the same time, not one after the other (2 x 0.6 s)

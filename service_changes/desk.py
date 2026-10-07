@@ -520,35 +520,88 @@ class Desk:
         sm.socket_mode_request_listeners.append(on_event)
         sm.connect()
         print(time.strftime("%H:%M"), "listening", flush=True)
-        last_full = 0.0
-        while True:
+        self.serve(todo, since_minutes, backup_seconds, reload)
+
+    def serve(self, todo, since_minutes: int, backup_seconds: int, reload, workers: int = 8, stop=None) -> None:
+        """Run passes for the queued channels in parallel, one pass per channel at a time: drivers on different
+        routes don't wait for each other. The office pass (✅ readbacks, open tickets) runs under one lock so
+        nothing is sent twice. An event for a channel that's mid-pass makes it run once more right after."""
+        import queue
+        import threading
+        from concurrent.futures import ThreadPoolExecutor
+
+        pool = ThreadPoolExecutor(max_workers=workers)
+        desk_lock, state = threading.Lock(), threading.Lock()
+        running: set[str] = set()
+        waiting: dict[str, list] = {}  # channel -> items that arrived while its pass was running
+        names = {cid: name for name, cid in self.routes.items()}
+        fresh: dict = {"open": {}, "at": 0.0}  # the latest office pass: open tickets, and when
+
+        def job(ch: str, items: list) -> None:
             try:
-                items = [todo.get(timeout=5)]
+                counts = {"asked": 0, "ticket": 0, "read": 0, "readback": 0, "answered": 0}
+                now = time.time()
+                with desk_lock:
+                    self.check_stale(now)
+                    # Route passes share an office pass from the last few seconds: during a burst of drivers they
+                    # don't queue up behind each other here. Office events (✅, "done") always get a fresh one.
+                    if ch not in names or time.time() - fresh["at"] > 3:
+                        fresh["open"], fresh["at"] = self.desk_pass(now - 14 * 86400, counts), time.time()
+                    open_t = fresh["open"]
+                if ch in names:
+                    self.route_pass(names[ch], ch, now - since_minutes * 60, open_t, counts)
+                for c, ts, attempt in items:  # announced but not returned by history yet: look again shortly
+                    if ts and ts not in self.fetched.get(c, set()) and attempt < 10:
+                        threading.Timer(1.0, todo.put, [(c, ts, attempt + 1)]).start()
+                    elif not ts and attempt == 0:
+                        # A ✅, an office "done" or a thread reply can't be checked the same way: look a few more times.
+                        for delay in (2.0, 6.0, 20.0):
+                            threading.Timer(delay, todo.put, [(c, None, 1)]).start()
+                if any(counts[k] for k in ("asked", "ticket", "readback", "answered")):
+                    where = f"#{names[ch]}" if ch in names else "office"
+                    print(time.strftime("%H:%M"), where + ":", ", ".join(f"{v} {k}" for k, v in counts.items()), flush=True)
+            except Exception as e:  # keep going through a Slack or API hiccup
+                print(time.strftime("%H:%M"), "error:", e, flush=True)
+            finally:
+                with state:
+                    again = waiting.pop(ch, None)
+                    if again is None:
+                        running.discard(ch)
+                if again is not None:
+                    pool.submit(job, ch, again)
+
+        def submit(ch: str, items: list) -> None:
+            with state:
+                if ch in running:
+                    waiting.setdefault(ch, []).extend(items)
+                    return
+                running.add(ch)
+            pool.submit(job, ch, items)
+
+        last_full = 0.0
+        while not (stop and stop.is_set()):
+            try:
+                items = [todo.get(timeout=1 if stop else 5)]
             except queue.Empty:
                 items = []
-            while not todo.empty():  # several events at once: one pass covers them
+            while not todo.empty():
                 items.append(todo.get_nowait())
-            batch = {ch for ch, _, _ in items}
-            full = time.time() - last_full > backup_seconds
-            if not batch and not full:
+            if time.time() - last_full > backup_seconds:  # backup pass over every channel
+                last_full = time.time()
+                for ch in list(names) + [self.desk_id]:
+                    items.append((ch, None, 1))
+            if not items:
                 continue
             try:
                 reload()
-                counts = self.run_once(since_minutes, only=None if full else batch - {self.desk_id})
-                if full:
-                    last_full = time.time()
-                for ch, ts, attempt in items:  # announced but not returned by history yet: look again shortly
-                    if ts and ts not in self.fetched.get(ch, set()) and attempt < 10:
-                        threading.Timer(1.0, todo.put, [(ch, ts, attempt + 1)]).start()
-                    elif not ts and attempt == 0:
-                        # A ✅, an office "done" or a thread reply can't be checked the same way: look twice more.
-                        for delay in (2.0, 6.0, 20.0):
-                            threading.Timer(delay, todo.put, [(ch, None, 1)]).start()
-                if any(counts[k] for k in ("asked", "ticket", "readback", "answered")):
-                    print(time.strftime("%H:%M"), ", ".join(f"{v} {k}" for k, v in counts.items()), flush=True)
-            except Exception as e:  # keep listening through a Slack or API hiccup
+            except Exception as e:
                 print(time.strftime("%H:%M"), "error:", e, flush=True)
-
+            by_channel: dict[str, list] = {}
+            for it in items:
+                by_channel.setdefault(it[0], []).append(it)
+            for ch, its in by_channel.items():
+                submit(ch, its)
+        pool.shutdown(wait=True)
 
 def main():
     import anthropic
