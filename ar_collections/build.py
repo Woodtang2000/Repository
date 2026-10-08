@@ -143,14 +143,16 @@ def main(data_dir, out_dir, today):
                 last_pay[p["cust_id"]] = pd
     pay_months = sorted(os.path.basename(p)[9:16] for p in glob.glob(os.path.join(data_dir, "payments_*.csv")))
 
-    # Unapplied credits (Alliant P/F items with a negative balance) by code, and what Alliant still shows
-    # open per invoice: a reminder never lists an invoice Alliant has closed since NetSuite was posted.
-    credits = defaultdict(float)
+    # Open credits (any Alliant AR item with a negative balance: unapplied payments, credit memos) by code,
+    # and what Alliant still shows open per invoice: a reminder never lists an invoice Alliant has closed
+    # since NetSuite was posted.
+    credits = defaultdict(list)
     alliant_open = defaultdict(float)
     for r in read_csv(os.path.join(data_dir, "open_ar.csv")):
         bal = float(r.get("balance") or 0)
-        if r.get("type") in ("P", "F") and bal < 0:
-            credits[r["cust_code"]] += -bal
+        if bal < -0.005:
+            credits[r["cust_code"]].append({"code": r["cust_code"], "name": r["name"], "invoice": r["invoice"],
+                                            "date": d(r["inv_date"]), "amount": -bal})
         else:
             alliant_open[(r["cust_code"], r["invoice"])] += bal
 
@@ -195,7 +197,7 @@ def main(data_dir, out_dir, today):
         lp = max((last_pay.get(code_to_id.get(c, ""), date.min) for c in codes), default=date.min)
         lp = None if lp == date.min else lp
         no_pay = lp is None or (today - lp).days >= 45
-        credit = sum(credits.get(c, 0) for c in codes)
+        credit = [c for code in sorted(codes) for c in credits.get(code, [])]
         # A bank receipt with no suggested account: hold any customer whose name shows up in the payer text.
         words = [w for w in re.findall(r"[A-Z]{5,}", name.upper()) if w not in GENERIC]
         for payer, what in unmatched_payers:
@@ -272,7 +274,7 @@ def main(data_dir, out_dir, today):
                "open_ar": round(open_amt, 2), "past_due": round(sum(i["balance"] for i in past_due), 2),
                "over_45": round(over45, 2), "over_90": round(over90, 2), "oldest_item": oldest,
                "last_payment": lp or f"none since {pay_months[0] if pay_months else '?'}",
-               "group": group, "unapplied_credit": round(credit, 2), "escalation_step": step,
+               "group": group, "unapplied_credit": round(sum(c["amount"] for c in credit), 2), "escalation_step": step,
                "suggested_action": action, "hold_reason": reason}
         work.append(row)
         if not delivery and active:
@@ -300,7 +302,7 @@ def main(data_dir, out_dir, today):
             m[0] = dict(m[0], name=m[0]["name"] + " / " + row["name"], account=m[0]["account"] + "+" + row["account"],
                         group=m[0]["group"] if m[0]["group"] == row["group"] else "paying, has old items")
             m[1] = m[1] + chase
-            m[2] += credit
+            m[2] = m[2] + credit
         else:
             merged[k] = [row, chase, credit]
     batch = list(merged.values())
@@ -340,15 +342,20 @@ def draft(row, chase, credit, today):
     co = row["company"]
     company = COMPANY[co]
     chase = sorted(chase, key=lambda i: i["date"])
+    credit = sorted(credit, key=lambda c: c["date"] or date.min)
     total = sum(i["balance"] for i in chase)
-    # Scott, 10/8: every email opens "Dear Valued Customer," and lists each past-due invoice and amount.
-    if len({i["code"] for i in chase}) == 1:
-        table = "| Invoice | Date | Amount past due |\n|---|---|---|\n" + "\n".join(
-            f"| {i['invoice']} | {i['date'].strftime('%m/%d/%Y')} | {money(i['balance'])} |" for i in chase)
+    credit_total = sum(c["amount"] for c in credit)
+    # Scott, 10/8: every email opens "Dear Valued Customer," and lists each past-due invoice and amount,
+    # and open credits are listed too (with their credit number) so customers can apply them.
+    rows = [(i["name"], i["invoice"], i["date"], money(i["balance"])) for i in chase]
+    rows += [(c["name"], f"Credit {c['invoice']}", c["date"], "-" + money(c["amount"])) for c in credit]
+    fmt = lambda dt: dt.strftime("%m/%d/%Y") if dt else ""
+    if len({i["code"] for i in chase} | {c["code"] for c in credit}) == 1:
+        table = "| Invoice | Date | Amount |\n|---|---|---|\n" + "\n".join(
+            f"| {inv} | {fmt(dt)} | {amt} |" for _, inv, dt, amt in rows)
     else:
-        table = "| Location | Invoice | Date | Amount past due |\n|---|---|---|---|\n" + "\n".join(
-            f"| {nice(i['name'])} | {i['invoice']} | {i['date'].strftime('%m/%d/%Y')} | {money(i['balance'])} |"
-            for i in chase)
+        table = "| Location | Invoice | Date | Amount |\n|---|---|---|---|\n" + "\n".join(
+            f"| {nice(nm)} | {inv} | {fmt(dt)} | {amt} |" for nm, inv, dt, amt in rows)
     subject_name = nice(row["name"])
     if row["suggested_action"] == "follow-up":
         subject = f"Following up: open invoices for {subject_name}"
@@ -362,8 +369,19 @@ def draft(row, chase, credit, today):
         subject = f"Open invoices for {subject_name} - copies available"
         opener = ("I'm reaching out because some invoices on your account are still showing open. "
                   "It's possible they never made it to the right inbox.")
-    credit_note = (f"\nThere is also an unapplied credit of {money(credit)} on your account, which brings the "
-                   f"amount due down to {money(max(total - credit, 0))}.\n" if credit > 0.005 else "")
+    if credit_total > 0.005:
+        net = total - credit_total
+        totals = (f"**Total past due: {money(total)}**\n**Open credits: -{money(credit_total)}**\n"
+                  f"**Balance due: {money(max(net, 0))}**\n\n")
+        if net > 0.005:
+            totals += ("The credits on your account are listed above with a minus sign. They haven't been applied "
+                       "to a specific invoice yet. You're welcome to take them off your payment, or let us know "
+                       "which invoices you'd like them applied to.\n")
+        else:
+            totals += ("The credits on your account are listed above with a minus sign and are enough to cover "
+                       "these invoices. Just let us know how you'd like them applied.\n")
+    else:
+        totals = f"**Total past due: {money(total)}**\n"
     return f"""<!-- To: {row['email']} | From: {MAILBOX[co]} | {row['suggested_action']} | {row['group']} -->
 **Subject:** {subject}
 
@@ -373,8 +391,7 @@ Dear Valued Customer,
 
 {table}
 
-**Total past due: {money(total)}**
-{credit_note}
+{totals}
 If you need copies of any of these, just reply and I'll send them right over. If they're already paid,
 please let me know the date and check or reference number so I can match it up.
 
@@ -416,12 +433,11 @@ def email_parts(md):
         if line.strip():
             para.append(line)
         elif para:
-            joined = " ".join(para) if not para[-1].startswith("Snow White") and len(para) < 4 else "<br>".join(para)
-            if para[0] == "Sonja Burke":
-                joined = "<br>".join(para)
+            # Signature and total lines keep their line breaks; wrapped prose joins into one paragraph.
+            keep_lines = para[0] == "Sonja Burke" or all(p.startswith("**") for p in para)
+            joined = ("<br>" if keep_lines else " ").join(para)
             html.append("<p>" + re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", joined) + "</p>")
-            text.append("\n".join(p.replace("**", "") for p in para) if para[0] == "Sonja Burke"
-                        else " ".join(p.replace("**", "") for p in para))
+            text.append(("\n" if keep_lines else " ").join(p.replace("**", "") for p in para))
             para = []
     return {"to": [a.strip() for a in meta.group(1).split(";") if a.strip()], "from": meta.group(2),
             "subject": subject, "text": "\n\n".join(text), "html": "\n".join(html)}
