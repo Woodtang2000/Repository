@@ -141,9 +141,11 @@ class Desk:
 
     # ---- driver side ----------------------------------------------------------------------------------------
 
-    def conversation(self, convo: list[dict]) -> str:
-        """Request, questions, answers, readback and replies as one message for the parser."""
+    def conversation(self, convo: list[dict], src: dict | None = None) -> str:
+        """Request, questions, answers, readback and replies as one message for the parser. When `src` isn't the
+        first message (a new request right after an answered lookup), the earlier exchange is marked as context."""
         lines = []
+        new = src is not None and convo and src is not convo[0]
         for i, m in enumerate(convo):
             text = m.get("text", "")
             if _is_bot(m, self.me):
@@ -154,8 +156,10 @@ class Desk:
                     lines.append(f"Office entered it and confirmed: {text}")
                 elif kind == "answer":
                     lines.append(f"Service Desk answered: {text}")
+            elif new and m is src:
+                lines.append(f"{self.name(m.get('user'))} (NEW message, read this one): {text}")
             elif i == 0:
-                lines.append(f"{self.name(m.get('user'))} (original request): {text}")
+                lines.append(f"{self.name(m.get('user'))} ({'earlier question, already answered' if new else 'original request'}): {text}")
             else:
                 lines.append(f"{self.name(m.get('user'))}{' (office)' if self.is_office(m.get('user')) else ''}: {text}")
         return "\n".join(lines)
@@ -182,7 +186,7 @@ class Desk:
         """Read one request as it stands and ask, ticket, or just mark it read."""
         last_readback = max((i for i, t in enumerate(convo) if (meta(t) or {}).get("kind") == "readback"), default=-1)
         asks = sum(1 for t in convo[last_readback + 1:] if (meta(t) or {}).get("kind") == "question")
-        text = src.get("text", "") if len(convo) == 1 else self.conversation(convo)
+        text = src.get("text", "") if len(convo) == 1 else self.conversation(convo, src)
         author = self.name(src.get("user"))
         replies = [t["ts"] for t in convo if t is not src and not _is_bot(t, self.me) and t.get("thread_ts") != src["ts"]]
         self.links.setdefault((channel, src["ts"]), set()).update(replies)
@@ -201,6 +205,10 @@ class Desk:
             pass
         elif parsed.category == Category.lookup and parsed.account_number and not parsed.questions_for_driver:
             did = self.answer(route_name, channel, src, author, parsed, replies, bot_posts)
+        elif (parsed.category == Category.lookup and not parsed.account_number and not parsed.questions_for_driver
+              and (group := self.customer_group(route_name, parsed.customer_as_written))):
+            # "All of them combined": every location of this customer on the driver's route (7 Costco departments).
+            did = self.answer(route_name, channel, src, author, parsed, replies, bot_posts, group=group)
         elif result.questions and asks < MAX_ASKS and (parsed.category in ACTIONABLE or parsed.category == Category.lookup):
             qs = "\n".join(f"• {q}" for q in result.questions[:MAX_QUESTIONS])
             # A normal channel message with an @mention, so it pushes to the driver's phone.
@@ -215,20 +223,33 @@ class Desk:
         self.mark_seen(channel, todo)
         return did
 
-    def answer(self, route_name, channel, src, author, parsed, replies, bot_posts) -> str:
+    def customer_group(self, route_name: str, as_written: str | None) -> list[str]:
+        """The accounts on this route whose name contains every word the driver used ("Costco 1342" -> its seven
+        departments). Empty unless there are 2-12 of them."""
+        words = re.findall(r"[a-z0-9]+", (as_written or "").lower())
+        if not words:
+            return []
+        route = route_from_channel(route_name)
+        hits = [c.account for c in self.alliant.customers if (not route or c.route == route)
+                and all(w in re.findall(r"[a-z0-9]+", c.name.lower()) for w in words)]
+        return hits if 2 <= len(hits) <= 12 else []
+
+    def answer(self, route_name, channel, src, author, parsed, replies, bot_posts, group: list[str] | None = None) -> str:
         """A driver's question about an account, answered from the Alliant export. Every answer is logged in the
         office channel; if the data doesn't say, the office gets a ticket instead; past MAX_LOOKUPS_PER_DAY for one
         person the bot stops answering and flags it."""
         from .context import ALASKA, account_facts
         from .parser import answer_lookup
         from datetime import datetime
-        acct = parsed.account_number
+        acct = parsed.account_number or (group or [""])[0]
         name = next((c.name for c in self.alliant.customers if c.account == acct), parsed.customer_as_written or acct)
+        if group:
+            acct, name = ", ".join(group), f"{(parsed.customer_as_written or name).upper()} ({len(group)} accounts)"
         link = self.slack.chat_getPermalink(channel=channel, message_ts=src["ts"])["permalink"]
         midnight = datetime.now(ALASKA).replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
         today = sum(1 for b in bot_posts if (meta(b) or {}).get("kind") == "answer"
                     and meta(b).get("driver_id") == src.get("user") and float(b["ts"]) >= midnight)
-        cust = next((c for c in self.alliant.customers if c.account == acct), None)
+        cust = None if group else next((c for c in self.alliant.customers if c.account == acct), None)
         here = route_from_channel(route_name)
         if cust and here and cust.route != here and not self.is_office(src.get("user")):
             # Only customers on this channel's route are answered; anything else goes to the office.
@@ -248,7 +269,8 @@ class Desk:
                                     f"I've stopped answering. Latest: _{_short(src.get('text', ''), 120)}_ "
                                     f"(<{link}|#{route_name}>)", {"kind": "lookup_limit", "driver_id": src.get("user")})
             return "answered"
-        ans = answer_lookup(self.claude, parsed.summary or src.get("text", ""), account_facts(self.alliant, acct))
+        facts = "\n\n".join(account_facts(self.alliant, a) for a in group) if group else account_facts(self.alliant, acct)
+        ans = answer_lookup(self.claude, parsed.summary or src.get("text", ""), facts)
         as_of = f" _(Alliant as of {self.alliant.as_of})_" if self.alliant.as_of else ""
         text = f"<@{src.get('user')}> *{name}*: {ans.answer}{as_of}"
         if ans.found:
@@ -309,7 +331,11 @@ class Desk:
                 from .parser import is_reply
                 # A one- or two-word message right after a question ("1821", "6", "yes weekly") is the answer.
                 short = meta(b or {}) and meta(b)["kind"] == "question" and len(m.get("text", "").split()) <= 2
-                if src and (short or is_reply(self.claude, b.get("text", ""), src.get("text", ""), m.get("text", ""))):
+                if src and meta(b)["kind"] == "answer":
+                    # After the bot answered a lookup, the next message is a request of its own ("add 2 mops to
+                    # Subway Steese"); the lookup and answer are kept only as context for "what about aprons?".
+                    did = self.handle(name, cid, m, self.convo(cid, src, top, bot_posts, [m]), [m], open_t, bot_posts)
+                elif src and (short or is_reply(self.claude, b.get("text", ""), src.get("text", ""), m.get("text", ""))):
                     did = self.handle(name, cid, src, self.convo(cid, src, top, bot_posts, [m]), [m], open_t, bot_posts)
                 else:
                     thread = self.thread(cid, m)

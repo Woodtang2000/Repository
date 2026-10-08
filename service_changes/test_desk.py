@@ -519,3 +519,37 @@ def test_routes_are_handled_in_parallel_and_each_message_once(monkeypatch):
     th.join(5)
     assert len(slack.bot_posts("C1", "question")) == 1 and len(slack.bot_posts("C2", "question")) == 1
     assert took < 1.1  # both routes read at the same time, not one after the other (2 x 0.6 s)
+
+
+def test_a_new_request_after_an_answer_is_its_own_request(setup, monkeypatch):
+    import service_changes.parser as parser
+    from .parser import Answer
+    slack, d = setup
+    monkeypatch.setattr(parser, "answer_lookup", lambda c, q, f: Answer(answer="4 3x10 mats", found=True))
+    monkeypatch.setattr(parser, "is_reply", lambda *a: pytest.fail("no reply check needed after an answer"))
+    slack.say("C1", "U1", "how many mats does wendys get?")
+    d.run_once()
+    slack.say("C1", "U1", "wendys mats to 6: 6")
+    assert d.run_once()["ticket"] == 1
+    [t] = slack.bot_posts("D1", "ticket")
+    assert "wendys mats to 6" in t["text"] and "how many mats" not in t["text"]  # quotes the new message
+    assert "(NEW message, read this one): wendys mats to 6" in CALLS[-1]
+
+
+def test_combined_lookup_across_a_customers_locations(setup, monkeypatch):
+    import service_changes.parser as parser
+    from .parser import Answer
+    slack, d = setup
+    d.alliant = Alliant(customers=[Customer("7192-1-00005", "COSTCO 1342 DELI 63", "1", ALL_DAYS),
+                                   Customer("7192-1-00006", "COSTCO 1342 BAKERY 62", "1", ALL_DAYS),
+                                   Customer("W1", "WENDY'S #4412", "1", ALL_DAYS)],
+                        items={"7192-1-00005": {"TOWEL BAR MOP": 800}, "7192-1-00006": {"TOWEL BAR MOP": 760}})
+    seen = {}
+    monkeypatch.setattr(parser, "parse_message", lambda *a, **k: ParsedMessage(
+        category=Category.lookup, customer_as_written="costco", summary="bar mops at Costco, all departments"))
+    monkeypatch.setattr(parser, "answer_lookup", lambda c, q, facts: (seen.update(facts=facts), Answer(answer="1,560 bar mops", found=True))[1])
+    slack.say("C1", "U1", "how many bar mops does costco get, all of them combined")
+    assert d.run_once()["answered"] == 1
+    assert "COSTCO 1342 DELI 63" in seen["facts"] and "COSTCO 1342 BAKERY 62" in seen["facts"] and "WENDY" not in seen["facts"]
+    [a] = slack.bot_posts("C1", "answer")
+    assert "*COSTCO (2 accounts)*: 1,560 bar mops" in a["text"] and not slack.bot_posts("D1", "ticket")
