@@ -121,7 +121,8 @@ def _download(auth, path) -> bytes:
 
 def _restart():
     for svc in ("service-desk", "service-desk-sms"):
-        subprocess.run(["sudo", "-n", "systemctl", "try-restart", svc], check=False)
+        subprocess.run(["sudo", "-n", "systemctl", "try-restart", svc], check=False,
+                       stderr=subprocess.DEVNULL)  # texting isn't installed until Twilio is set up
 
 
 def _rows(path):
