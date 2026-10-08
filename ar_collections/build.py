@@ -324,26 +324,14 @@ def draft(row, chase, credit, today):
     company = COMPANY[co]
     chase = sorted(chase, key=lambda i: i["date"])
     total = sum(i["balance"] for i in chase)
-    person = row["contact"].strip()
-    greet = f"Hi {person.split()[0].title()}," if person and "@" not in person and not re.search(
-        r"\b(AP|A/P|ACCOUNTS?|PAYABLES?|INBOX|BILLING|INVOIC\w*|ACCOUNTING|COPY|COPIES|OFFICE|MANAGER|DEPT|TEAM)\b",
-        person, re.I) else "Hello,"
-    if len(chase) <= 30 and len({i["code"] for i in chase}) == 1:
-        table = "| Invoice | Date | Balance |\n|---|---|---|\n" + "\n".join(
+    # Scott, 10/8: every email opens "Dear Valued Customer," and lists each past-due invoice and amount.
+    if len({i["code"] for i in chase}) == 1:
+        table = "| Invoice | Date | Amount past due |\n|---|---|---|\n" + "\n".join(
             f"| {i['invoice']} | {i['date'].strftime('%m/%d/%Y')} | {money(i['balance'])} |" for i in chase)
-    elif len(chase) <= 30:
-        table = "| Location | Invoice | Date | Balance |\n|---|---|---|---|\n" + "\n".join(
+    else:
+        table = "| Location | Invoice | Date | Amount past due |\n|---|---|---|---|\n" + "\n".join(
             f"| {nice(i['name'])} | {i['invoice']} | {i['date'].strftime('%m/%d/%Y')} | {money(i['balance'])} |"
             for i in chase)
-    else:
-        per = defaultdict(lambda: [0, 0.0, None])
-        for i in chase:
-            p = per[i["name"]]
-            p[0] += 1
-            p[1] += i["balance"]
-            p[2] = min(p[2] or i["date"], i["date"])
-        table = "| Location | Invoices | Oldest | Balance |\n|---|---|---|---|\n" + "\n".join(
-            f"| {nice(n)} | {c} | {o.strftime('%m/%d/%Y')} | {money(b)} |" for n, (c, b, o) in sorted(per.items()))
     subject_name = nice(row["name"])
     if row["suggested_action"] == "follow-up":
         subject = f"Following up: open invoices for {subject_name}"
@@ -357,29 +345,24 @@ def draft(row, chase, credit, today):
         subject = f"Open invoices for {subject_name} - copies available"
         opener = ("I'm reaching out because some invoices on your account are still showing open. "
                   "It's possible they never made it to the right inbox.")
-    if len(chase) > 30:
-        table += "\n\nI can send a full statement with every invoice listed; just let me know."
     credit_note = (f"\nThere is also an unapplied credit of {money(credit)} on your account, which brings the "
                    f"amount due down to {money(max(total - credit, 0))}.\n" if credit > 0.005 else "")
     return f"""<!-- To: {row['email']} | From: {MAILBOX[co]} | {row['suggested_action']} | {row['group']} -->
 **Subject:** {subject}
 
-{greet}
+Dear Valued Customer,
 
 {opener}
 
 {table}
 
-**Total: {money(total)}**
+**Total past due: {money(total)}**
 {credit_note}
 If you need copies of any of these, just reply and I'll send them right over. If they're already paid,
 please let me know the date and check or reference number so I can match it up.
 
-Paying is easy, whichever works best for you:
-- our online customer portal
-- credit card (call or reply and we'll take it over the phone)
-- ACH
-- check, mailed to our office
+You can make payments by check, ACH, or credit card. You can also go to our website and log into our
+customer portal to see all open invoices and make payments.
 
 Thank you for your business. We appreciate you!
 
