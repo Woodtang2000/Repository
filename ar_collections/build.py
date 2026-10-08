@@ -48,6 +48,8 @@ GENERIC = {"ALASKA", "ANCHORAGE", "RESTAURANT", "SERVICES", "SERVICE", "COMPANY"
 AGENCY = {
     ("SW", "7542"): "Stalk Steakhouse: no longer a customer; sent to collections (Scott, 10/8)",
 }
+# Companies whose customers get no reminder emails; their balances stay on the lists for Scott and Sonja.
+NO_EMAIL_COMPANIES = {"TLG": "The Laundry Group's customers are large accounts handled directly (Scott, 10/8)"}
 DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 WRITE_OFF_BEFORE = date(2025, 1, 1)  # items dated 2022-2024: list for Scott, don't chase
 
@@ -241,7 +243,9 @@ def main(data_dir, out_dir, today):
         step = len([w for w in contact_weeks if w < week_start(today)]) + 1
 
         reason = ""
-        if (co, acct) in AGENCY:
+        if co in NO_EMAIL_COMPANIES:
+            reason = "no collection emails: " + NO_EMAIL_COMPANIES[co]
+        elif (co, acct) in AGENCY:
             reason = "collections agency: " + AGENCY[(co, acct)]
         elif key in holds or name in holds:
             reason = "hold: " + (holds.get(key) or holds.get(name) or "Scott/Sonja hold")
@@ -311,6 +315,9 @@ def main(data_dir, out_dir, today):
                       "note": "billing email looks like an invoice-intake portal; a person may be better"
                       if re.search(r"@[^;, ]*(invoic|ghx|coupa|ariba|tungsten|basware)", row["email"], re.I) else ""})
     write(os.path.join(out_dir, f"batch_{today.isoformat()}.csv"), brows)
+    # The same emails ready for a mail connector (Gmail/Superhuman create-draft): one entry per email.
+    with open(os.path.join(out_dir, f"emails_{today.isoformat()}.json"), "w") as f:
+        json.dump([email_parts(open(os.path.join(ddir, b["draft"])).read()) for b in brows], f, indent=1)
     # Everything in one file too, for Sonja to work down when the drafts can't go into the mailbox.
     with open(os.path.join(ddir, f"All drafts {today.isoformat()}.md"), "w") as f:
         f.write(f"# Reminder drafts for {today:%A %-m/%-d/%Y} ({len(brows)})\n\n"
@@ -376,6 +383,44 @@ Sonja Burke
 Accounts Receivable
 {company}
 """
+
+
+def email_parts(md):
+    """Split a markdown draft into to/from/subject plus plain-text and HTML bodies."""
+    head, rest = md.split("\n", 1)
+    meta = re.match(r"<!-- To: (.*?) \| From: (\S+)", head)
+    lines = [l for l in rest.split("\n") if not l.startswith("<!--")]
+    subject = lines[0].replace("**Subject:** ", "")
+    body = "\n".join(lines[1:]).strip("\n")
+    html, text, table = [], [], []
+
+    def flush():
+        if table:
+            rows = [[c.strip() for c in r.strip("|").split("|")] for r in table if not r.startswith("|---")]
+            html.append('<table border="1" cellpadding="4" style="border-collapse:collapse">' + "".join(
+                "<tr>" + "".join(f"<{'th' if i == 0 else 'td'}>{c}</{'th' if i == 0 else 'td'}>" for c in r)
+                + "</tr>" for i, r in enumerate(rows)) + "</table>")
+            text.append("\n".join("   ".join(r) for r in rows))
+            table.clear()
+
+    para = []
+    for line in body.split("\n") + [""]:
+        if line.startswith("|"):
+            table.append(line)
+            continue
+        flush()
+        if line.strip():
+            para.append(line)
+        elif para:
+            joined = " ".join(para) if not para[-1].startswith("Snow White") and len(para) < 4 else "<br>".join(para)
+            if para[0] == "Sonja Burke":
+                joined = "<br>".join(para)
+            html.append("<p>" + re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", joined) + "</p>")
+            text.append("\n".join(p.replace("**", "") for p in para) if para[0] == "Sonja Burke"
+                        else " ".join(p.replace("**", "") for p in para))
+            para = []
+    return {"to": [a.strip() for a in meta.group(1).split(";") if a.strip()], "from": meta.group(2),
+            "subject": subject, "text": "\n\n".join(text), "html": "\n".join(html)}
 
 
 def write(path, rows):

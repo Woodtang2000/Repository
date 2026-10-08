@@ -22,7 +22,7 @@ The agent never writes to NetSuite or Alliant, and never sends email itself (unt
    - Dropbox `Accounting/AR Collections/`: every file in `log/` (into `log/`) and `holds.csv`.
 2. **Build:** `python3 -m ar_collections.build <data_dir> <out_dir> YYYY-MM-DD`
 3. **Deliver:**
-   - drafts → the accounting mailbox (Superhuman `create_or_update_draft` as accounting@…) when connected, else
+   - drafts → accounting@snowwhitelinen.com Gmail (Gmail connector `create_draft`, using `emails_YYYY-MM-DD.json`), else
      Dropbox `AR Collections/drafts/YYYY-MM-DD/`;
    - `log_YYYY-MM-DD.csv` → Dropbox `AR Collections/log/YYYY-MM-DD.csv` (the Dropbox connector can only create
      files, so the log is one file per day);
@@ -37,7 +37,7 @@ The agent never writes to NetSuite or Alliant, and never sends email itself (unt
 | Age by original Alliant date (opening invoices: date in the memo, due = +30); over-45 = invoice > 45 days old | `load_invoices`, `main` |
 | One message per parent account (NetSuite parent = Alliant account number), combined again when accounts share a billing email | `main` |
 | Last payment from Alliant payments (write-offs excluded), at parent level; 45+ days → "no payment" reminder, otherwise the "may have slipped through" note | `main`, `draft` |
-| Skip Unifirst accounts (Safeway, Costco, LSG; balances listed for Scott), accounts sent to a collection agency (`AGENCY`), COD remnants, holds, check-first accounts, receipts at the bank not yet applied, inactive customers | `UNIFIRST`, `COD_ACCOUNTS`, `CHECK_FIRST`, `main` |
+| No reminder emails for The Laundry Group (`NO_EMAIL_COMPANIES`); skip Unifirst accounts (Safeway, Costco, LSG; balances listed for Scott), accounts sent to a collection agency (`AGENCY`), COD remnants, holds, check-first accounts, receipts at the bank not yet applied, inactive customers | `UNIFIRST`, `COD_ACCOUNTS`, `CHECK_FIRST`, `main` |
 | Items dated 2022-2024 are listed as write-off candidates, never chased | `WRITE_OFF_BEFORE` |
 | A reminder only lists invoices Alliant still shows open, at the lower of the two balances | `alliant_open` |
 | Contact the business day before the first delivery day of the week; no day → Monday batch (Friday contact) and on Sonja's fix list | `contact_day` |
