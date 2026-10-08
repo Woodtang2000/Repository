@@ -44,6 +44,10 @@ CHECK_FIRST = {
 }
 GENERIC = {"ALASKA", "ANCHORAGE", "RESTAURANT", "SERVICES", "SERVICE", "COMPANY", "HOTEL", "FOODS", "GROUP",
            "CORPORATION", "PAYMENT", "CREDIT", "PREAUTHORIZED", "GENERAL", "NORTH", "SOUTH", "COFFEE", "SUPPLY"}
+# Former customers Scott has sent to an outside collection agency: never contact, keep the balance listed.
+AGENCY = {
+    ("SW", "7542"): "Stalk Steakhouse: no longer a customer; sent to collections (Scott, 10/8)",
+}
 DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 WRITE_OFF_BEFORE = date(2025, 1, 1)  # items dated 2022-2024: list for Scott, don't chase
 
@@ -237,7 +241,9 @@ def main(data_dir, out_dir, today):
         step = len([w for w in contact_weeks if w < week_start(today)]) + 1
 
         reason = ""
-        if key in holds or name in holds:
+        if (co, acct) in AGENCY:
+            reason = "collections agency: " + AGENCY[(co, acct)]
+        elif key in holds or name in holds:
             reason = "hold: " + (holds.get(key) or holds.get(name) or "Scott/Sonja hold")
         elif acct in CHECK_FIRST:
             reason = "check first: " + CHECK_FIRST[acct]
