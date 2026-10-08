@@ -10,7 +10,7 @@
   payments_YYYY-MM.csv  Alliant Feed: last payment date (any months present are used)
   receipts_to_post.csv  Alliant Feed: Sonja's list (bank receipts not yet applied)
   log/*.csv, log.csv    AR Collections log (optional): customer,date,action,amount,response
-  holds.csv             AR Collections/holds.csv (optional): customer,reason  (Scott/Sonja holds)
+  holds.csv, holds/*.csv  AR Collections holds (optional): customer,reason  (Scott/Sonja holds, Slack requests)
 
 Rules are the ones in "AR Collections Agent - brief 2026-10-08.md" and its v2. Nothing here writes to
 NetSuite or Alliant; output is files for Sonja and Scott.
@@ -166,7 +166,11 @@ def main(data_dir, out_dir, today):
         if not codes:
             unmatched_payers.append((r["payer"].upper(), f"{r['date']} {money(float(r['amount']))}"))
 
-    holds = {row["customer"].strip(): row.get("reason", "") for row in read_csv(os.path.join(data_dir, "holds.csv"))}
+    # Holds Sonja/Scott keep in holds.csv, plus holds/YYYY-MM-DD.csv files the agent writes from Slack requests.
+    hold_rows = read_csv(os.path.join(data_dir, "holds.csv"))
+    for path in sorted(glob.glob(os.path.join(data_dir, "holds", "*.csv"))):
+        hold_rows += read_csv(path)
+    holds = {row["customer"].strip(): row.get("reason", "") for row in hold_rows if row.get("customer")}
     # The Dropbox connector can only create files, so the log is one file per day in log/ (plus log.csv if
     # someone keeps one by hand).
     log = read_csv(os.path.join(data_dir, "log.csv"))
