@@ -62,7 +62,8 @@ KEEP_UPPER = {"MV", "US", "AK", "LLC", "ER", "II", "III", "DOI", "SCF", "ANTHC",
 
 
 def nice(name):
-    return " ".join(w if w.strip("().,#&'") in KEEP_UPPER else w.title() for w in name.split())
+    return " ".join(w if w.strip("().,#&'") in KEEP_UPPER else re.sub(r"[A-Za-z]+('[A-Za-z]+)?", lambda m: m.group(0).capitalize(), w)
+                    for w in name.split())
 
 
 def money(x):
@@ -191,7 +192,9 @@ def main(data_dir, out_dir, today):
             if any(w in payer for w in words):
                 pending[(co, acct)].append(what + " (matched by name)")
 
-        if UNIFIRST.search(name) or any(UNIFIRST.search(i["name"]) for i in items):
+        billing_emails = " ".join(cust[c]["email"] for c in codes if c in cust)
+        if (UNIFIRST.search(name) or any(UNIFIRST.search(i["name"]) for i in items)
+                or re.search(r"@unifirst\.com", billing_emails, re.I)):
             unifirst.append({"company": co, "account": acct, "name": name, "open_ar": round(open_amt, 2),
                              "over_45": round(over45, 2), "over_90": round(over90, 2), "oldest_item": oldest})
             continue
@@ -302,6 +305,12 @@ def main(data_dir, out_dir, today):
                       "note": "billing email looks like an invoice-intake portal; a person may be better"
                       if re.search(r"@[^;, ]*(invoic|ghx|coupa|ariba|tungsten|basware)", row["email"], re.I) else ""})
     write(os.path.join(out_dir, f"batch_{today.isoformat()}.csv"), brows)
+    # Everything in one file too, for Sonja to work down when the drafts can't go into the mailbox.
+    with open(os.path.join(ddir, f"All drafts {today.isoformat()}.md"), "w") as f:
+        f.write(f"# Reminder drafts for {today:%A %-m/%-d/%Y} ({len(brows)})\n\n"
+                "Review each one, then send it from the accounting mailbox shown. Tell me about any replies.\n")
+        for b in brows:
+            f.write("\n---\n\n" + open(os.path.join(ddir, b["draft"])).read())
     write(os.path.join(out_dir, f"log_{today.isoformat()}.csv"), [
         {"customer": f"{b['company']} {a}", "date": today.isoformat(),
          "action": "reminder" if b["step"] == "friendly reminder" else b["step"],
@@ -317,7 +326,7 @@ def draft(row, chase, credit, today):
     total = sum(i["balance"] for i in chase)
     person = row["contact"].strip()
     greet = f"Hi {person.split()[0].title()}," if person and "@" not in person and not re.search(
-        r"\b(AP|A/P|ACCOUNTS?|PAYABLES?|INBOX|BILLING|INVOICES?|ACCOUNTING|OFFICE|MANAGER|DEPT|TEAM)\b",
+        r"\b(AP|A/P|ACCOUNTS?|PAYABLES?|INBOX|BILLING|INVOIC\w*|ACCOUNTING|COPY|COPIES|OFFICE|MANAGER|DEPT|TEAM)\b",
         person, re.I) else "Hello,"
     if len(chase) <= 30 and len({i["code"] for i in chase}) == 1:
         table = "| Invoice | Date | Balance |\n|---|---|---|\n" + "\n".join(
@@ -350,8 +359,8 @@ def draft(row, chase, credit, today):
                   "It's possible they never made it to the right inbox.")
     if len(chase) > 30:
         table += "\n\nI can send a full statement with every invoice listed; just let me know."
-    credit_note = (f"\nI also see an unapplied credit of {money(credit)} on your account. I'll make sure it's "
-                   f"applied, which brings the total down.\n" if credit > 0.005 else "")
+    credit_note = (f"\nThere is also an unapplied credit of {money(credit)} on your account, which brings the "
+                   f"amount due down to {money(max(total - credit, 0))}.\n" if credit > 0.005 else "")
     return f"""<!-- To: {row['email']} | From: {MAILBOX[co]} | {row['suggested_action']} | {row['group']} -->
 **Subject:** {subject}
 
