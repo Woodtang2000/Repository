@@ -276,6 +276,8 @@ class TextDesk:
         # Isolation: only this number's accounts, whatever the message or the model says.
         if parsed.account_number not in accounts:
             parsed.account_number = accounts[0] if len(accounts) == 1 else None
+        for c in parsed.changes:  # a text is one request for one of this number's accounts; never a per-change one
+            c.account_number = None
         acct = parsed.account_number
 
         if parsed.category == Category.not_a_request:

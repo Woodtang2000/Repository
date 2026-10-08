@@ -36,6 +36,9 @@ class Change(BaseModel):
     size: Optional[str] = Field(None, description="Garment size, e.g. 'L', '2XL', '42x32'.")
     effective: Optional[str] = Field(None, description="When it starts if the driver said so, e.g. 'next week', 'this Friday'.")
     alliant_item: Optional[str] = Field(None, description="Exact Alliant item name from the account's item list, when one was provided and one clearly fits.")
+    account_number: Optional[str] = Field(None, description=(
+        "Only when the message covers more than one account (two departments or stores): this change's own account "
+        "from the candidate list. Null when the whole message is for one account."))
 
 
 class ParsedMessage(BaseModel):

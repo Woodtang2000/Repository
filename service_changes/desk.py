@@ -32,7 +32,7 @@ import sys
 import time
 
 from .bot import _messages, _name, _office_staff
-from .checks import check, readback, ticket
+from .checks import check, readback, split_by_account, ticket
 from .context import ALASKA, Alliant, route_from_channel, service_day
 from .schema import Category
 
@@ -195,10 +195,15 @@ class Desk:
         from .run import fill_item_matches, fix_department
         parsed = parse_message(self.claude, text, route_name, src["ts"], self.alliant, author=author,
                                office=self.is_office(src.get("user")))
+        # A message for several accounts ("bar mops for the bakery, a new wearer in tire") becomes one part per
+        # account: questions are asked together, then each part gets its own ticket and readback.
+        parts = split_by_account(parsed) if parsed.category in ACTIONABLE else [parsed]
         if parsed.category != Category.not_a_request:
-            fix_department(parsed, self.alliant, route_from_channel(route_name), service_day(src["ts"]))
-            fill_item_matches(self.claude, parsed, self.alliant)
-        result = check(parsed, self.alliant)
+            for part in parts:
+                fix_department(part, self.alliant, route_from_channel(route_name), service_day(src["ts"]))
+                fill_item_matches(self.claude, part, self.alliant)
+        results = [check(part, self.alliant) for part in parts]
+        questions = list(dict.fromkeys(q for r in results for q in r.questions))
 
         did = "read"
         if parsed.category == Category.not_a_request:
@@ -209,16 +214,18 @@ class Desk:
               and (group := self.customer_group(route_name, parsed.customer_as_written))):
             # "All of them combined": every location of this customer on the driver's route (7 Costco departments).
             did = self.answer(route_name, channel, src, author, parsed, replies, bot_posts, group=group)
-        elif result.questions and asks < MAX_ASKS and (parsed.category in ACTIONABLE or parsed.category == Category.lookup):
-            qs = "\n".join(f"• {q}" for q in result.questions[:MAX_QUESTIONS])
+        elif questions and asks < MAX_ASKS and (parsed.category in ACTIONABLE or parsed.category == Category.lookup):
+            qs = "\n".join(f"• {q}" for q in questions[:MAX_QUESTIONS])
             # A normal channel message with an @mention, so it pushes to the driver's phone.
             self.post(channel, f"<@{src.get('user')}> Quick check on _{_short(src.get('text', ''), 60)}_\n{qs}",
                       {"kind": "question", "src_ts": src["ts"], "driver_id": src.get("user"), "msgs": replies}, bot_posts)
             did = "asked"
         else:
             key = (channel, src["ts"])
-            open_tickets[key] = [self.post_ticket(route_name, channel, src, author, parsed, result, replies,
-                                                  correction=last_readback >= 0, replaces=open_tickets.get(key, []))]
+            old = open_tickets.get(key, [])
+            open_tickets[key] = [self.post_ticket(route_name, channel, src, author, part, r, replies,
+                                                  correction=last_readback >= 0, replaces=old if i == 0 else [])
+                                 for i, (part, r) in enumerate(zip(parts, results))]
             did = "ticket"
         self.mark_seen(channel, todo)
         return did

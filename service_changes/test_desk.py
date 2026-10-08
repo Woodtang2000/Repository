@@ -553,3 +553,33 @@ def test_combined_lookup_across_a_customers_locations(setup, monkeypatch):
     assert "COSTCO 1342 DELI 63" in seen["facts"] and "COSTCO 1342 BAKERY 62" in seen["facts"] and "WENDY" not in seen["facts"]
     [a] = slack.bot_posts("C1", "answer")
     assert "*COSTCO (2 accounts)*: 1,560 bar mops" in a["text"] and not slack.bot_posts("D1", "ticket")
+
+
+def test_one_message_for_two_accounts_makes_two_tickets(setup, monkeypatch):
+    import service_changes.parser as parser
+    slack, d = setup
+    monkeypatch.setattr(parser, "parse_message", lambda *a, **k: ParsedMessage(
+        category=Category.item_change, customer_as_written="wendys and safeway", summary="mats at two stores",
+        changes=[Change(action=Action.set, item="3x10 mats", quantity=6, account_number="W1"),
+                 Change(action=Action.set, item="3x10 mats", quantity=3, account_number="4000-1-01606")]))
+    slack.say("C1", "U1", "wendys mats to 6 and safeway bakery mats to 3")
+    assert d.run_once()["ticket"] == 1
+    t1, t2 = slack.bot_posts("D1", "ticket")
+    assert t1["text"].startswith("*W1*") and "4 → *6*" in t1["text"]
+    assert t2["text"].startswith("*4000-1-01606*") and "2 → *3*" in t2["text"]
+    # Each ✅ sends its own readback.
+    slack.react("D1", t2["ts"], "U2", "white_check_mark")
+    d.run_once()
+    [rb] = slack.bot_posts("C1", "readback")
+    assert "4000-1-01606 SAFEWAY 1821 (BAKERY)" in rb["text"] and "W1" not in rb["text"]
+    assert d.run_once()["ticket"] == 0  # the request isn't read again
+
+
+def test_split_by_account_keeps_single_account_messages_whole():
+    from .checks import split_by_account
+    one = ParsedMessage(category=Category.item_change, account_number="W1", summary="",
+                        changes=[Change(action=Action.add, item="mats", quantity=1)])
+    assert split_by_account(one) == [one]
+    named = ParsedMessage(category=Category.item_change, summary="",
+                          changes=[Change(action=Action.add, item="mats", quantity=1, account_number="W1")])
+    assert [p.account_number for p in split_by_account(named)] == ["W1"]

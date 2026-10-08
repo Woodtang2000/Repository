@@ -195,6 +195,25 @@ def _not_here(cc: CheckedChange, account: str, alliant: Alliant) -> None:
         cc.questions.append(f"{name(account)} doesn't have any {ch.item} in Alliant{anywhere}. Which item did you mean?")
 
 
+def split_by_account(parsed: ParsedMessage) -> list[ParsedMessage]:
+    """One request per account when the changes name different accounts (bakery bar mops + a tire wearer):
+    each becomes its own ticket with its own readback. Changes without their own account stay with the
+    message's account. The driver's questions go with the first part only."""
+    own = {c.account_number for c in parsed.changes if c.account_number}
+    if len(own | ({parsed.account_number} if parsed.account_number and any(not c.account_number for c in parsed.changes) else set())) <= 1:
+        if own and not parsed.account_number:
+            parsed.account_number = own.pop()
+        return [parsed]
+    groups: dict[str | None, list[Change]] = {}
+    for c in parsed.changes:
+        groups.setdefault(c.account_number or parsed.account_number, []).append(c)
+    parts = []
+    for i, (acct, changes) in enumerate(groups.items()):
+        parts.append(parsed.model_copy(update={"account_number": acct, "changes": changes,
+                                               "questions_for_driver": parsed.questions_for_driver if i == 0 else []}))
+    return parts
+
+
 def check(parsed: ParsedMessage, alliant: Alliant) -> Result:
     who = parsed.customer_as_written or "this customer"
     out = []

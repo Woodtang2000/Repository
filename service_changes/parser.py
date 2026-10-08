@@ -44,6 +44,9 @@ Classify the message and extract every change in it. Rules:
 - Record what the driver is asking the office to do, not everything mentioned. If a customer stopped two mats but
   the driver thinks only one should go, that is a question for the driver, not two stops.
 - Garments for a department (meat, deli, bakery, seafood) belong to that department's account when one exists.
+- One message can cover several accounts ("20 bar mops for the bakery and a new employee John in tire",
+  "add a mat at Safeway 1817 and 1821"). Then give each change its own account_number and leave the message's
+  account_number null. When everything is for one account, leave the changes' account_number null.
 - The list may show other names a customer goes by ("also called: BSI"); use them to match.
 - Office staff confirm changes in the channel ("added 2 more", "stopped wet mops", "decrease 40 bar mops" right
   after a driver asked for it, "done", "ok"). A message from office staff that confirms or repeats the previous
