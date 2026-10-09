@@ -8,6 +8,9 @@ the rule says otherwise.
 
 - Mark payments, remittances and deposits Done. Superhuman keeps them
   searchable, so they don't need to sit in the inbox.
+- Google Group "Moderator's spam report" digests
+  (noreply-spamdigest@google.com), for every account. Scotty doesn't check
+  them.
 
 ## Always keep
 

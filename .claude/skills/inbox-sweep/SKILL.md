@@ -112,8 +112,6 @@ Any one of these keeps the thread, even if it looks automated:
 - **Security alerts he didn't cause:** a sign-in from an unexpected device or
   place, or an alert that doesn't fit what he was doing. Alerts from his own
   account-linking are DONE.
-- **Google Group spam-moderation digests:** real customer mail can be held
-  there.
 - **Anything you can't classify with confidence.** List these separately in
   the preview as judgment calls so Scotty can decide, and add his answer to
   `rules.md`.
