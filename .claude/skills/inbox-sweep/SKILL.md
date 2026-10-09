@@ -76,6 +76,15 @@ marketing platforms) **and** the message only informs. Typical:
 - **Repeat reminders:** when the same automated reminder appears several times
   (e.g. four "your practitioner needs additional information"), keep the newest
   and mark the older copies Done.
+- **Already handled elsewhere:** a reminder for something another email shows
+  is done (a "donations due" notice when a donation receipt is in the inbox; an
+  "approve your child's account" after the "thanks for approving" email).
+- **Acknowledgment-only replies:** a person replying only "received, I'll get
+  back to you" to something Scotty sent. Nothing is waiting on him. Leave it
+  if the thread carries a snooze or reminder label he set; mention the label
+  in the report.
+- **Events that have already happened:** invitations, reminders and
+  registrations for dates in the past.
 - **Copies of his own automation:** form-submission echoes and
   CustomerConnect confirmations sent from his own service@ addresses.
 
@@ -103,7 +112,11 @@ Any one of these keeps the thread, even if it looks automated:
 - **Security alerts he didn't cause:** a sign-in from an unexpected device or
   place, or an alert that doesn't fit what he was doing. Alerts from his own
   account-linking are DONE.
-- **Anything you can't classify with confidence.**
+- **Google Group spam-moderation digests:** real customer mail can be held
+  there.
+- **Anything you can't classify with confidence.** List these separately in
+  the preview as judgment calls so Scotty can decide, and add his answer to
+  `rules.md`.
 
 ## Tone of the report
 
