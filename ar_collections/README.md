@@ -19,13 +19,18 @@ The agent never writes to NetSuite or Alliant, and never sends email itself (unt
    - Dropbox `Accounting/Alliant Feed/`: `customer_detail.csv`, `open_ar.csv`, `receipts_to_post.csv`, and
      `payments_YYYY-MM.csv` for the last 3-4 months (Dropbox `fetch`; direct download links are blocked by the
      network policy).
-   - Dropbox `Accounting/AR Collections/`: every file in `log/` (into `log/`) and `holds.csv`.
+   - Private Dropbox `/Scott Woodland/Accounting/AR Collections/`: `holds.csv` and `holds/`.
+   - Shared Dropbox `/Accounting/AR Collections/`: every file in `log/` (into `log/`). Older logs (before 10/9)
+     are also in the private `log/`; both formats are read.
 2. **Build:** `python3 -m ar_collections.build <data_dir> <out_dir> YYYY-MM-DD`
 3. **Deliver:**
    - drafts → accounting@snowwhitelinen.com Gmail (Gmail connector `create_draft`, using `emails_YYYY-MM-DD.json`), else
-     Dropbox `AR Collections/drafts/YYYY-MM-DD/`;
-   - `log_YYYY-MM-DD.csv` → Dropbox `AR Collections/log/YYYY-MM-DD.csv` (the Dropbox connector can only create
-     files, so the log is one file per day);
+     shared Dropbox `/Accounting/AR Collections/drafts/YYYY-MM-DD/`;
+   - `log_YYYY-MM-DD.csv` → shared `/Accounting/AR Collections/log/YYYY-MM-DD.csv` and `batch_list_YYYY-MM-DD.md` →
+     shared `/Accounting/AR Collections/Batch YYYY-MM-DD.md` (the Dropbox connector can only create files);
+   - Scott's rule (10/9): the shared folder gets only customer-level items Sonja acts on. Company AR totals,
+     aging, the weekly report, "For Scott" notes, holds, disputes and write-offs stay private in
+     `/Scott Woodland/Accounting/AR Collections/`;
    - Slack summary to the Scott–Sonja DM (D4KJ50AP4): "Today's collection batch: N customers, $X past due.
      Drafts are in …". No bank or card details, ever.
 4. **Monday:** also the weekly progress file (`Weekly progress YYYY-MM-DD.md`) against the 10/8 baseline.
@@ -44,4 +49,4 @@ The agent never writes to NetSuite or Alliant, and never sends email itself (unt
 | One contact per customer per week; week 1 reminder, week 2 follow-up, week 3 flag for a call | `log`, `step` |
 
 Outputs in `<out_dir>`: `working_file.csv` (all over-45 customers), `batch_YYYY-MM-DD.csv`, `drafts/YYYY-MM-DD/*.md`,
-`log_YYYY-MM-DD.csv`, `unifirst_balances.csv`, `writeoff_candidates.csv`, `sonja_fix_in_alliant.csv`.
+`log_YYYY-MM-DD.csv`, `batch_list_YYYY-MM-DD.md`, `unifirst_balances.csv`, `writeoff_candidates.csv`, `sonja_fix_in_alliant.csv`.

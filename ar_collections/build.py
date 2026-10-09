@@ -9,7 +9,8 @@
   open_ar.csv           Alliant Feed: unapplied credits (types P/F)
   payments_YYYY-MM.csv  Alliant Feed: last payment date (any months present are used)
   receipts_to_post.csv  Alliant Feed: Sonja's list (bank receipts not yet applied)
-  log/*.csv, log.csv    AR Collections log (optional): customer,date,action,amount,response
+  log/*.csv, log.csv    AR Collections log (optional): customer,name,route_day,contacted_on,action,amount,
+                        response (older files use "date" instead of "contacted_on")
   holds.csv, holds/*.csv  AR Collections holds (optional): customer,reason  (Scott/Sonja holds, Slack requests)
 
 Rules are the ones in "AR Collections Agent - brief 2026-10-08.md" and its v2. Nothing here writes to
@@ -243,7 +244,7 @@ def main(data_dir, out_dir, today):
 
         # Escalation from log.csv: weeks with a contact so far.
         mine = [r for r in log if r["customer"] in (key, name)]
-        contact_weeks = sorted({week_start(d(r["date"])) for r in mine
+        contact_weeks = sorted({week_start(d(r.get("contacted_on") or r.get("date"))) for r in mine
                                 if r["action"] in ("reminder", "follow-up", "call")})
         contacted_this_week = week_start(today) in contact_weeks
         step = len([w for w in contact_weeks if w < week_start(today)]) + 1
@@ -330,11 +331,29 @@ def main(data_dir, out_dir, today):
                 "Review each one, then send it from the accounting mailbox shown. Tell me about any replies.\n")
         for b in brows:
             f.write("\n---\n\n" + open(os.path.join(ddir, b["draft"])).read())
+    # Contact log (goes to the shared /Accounting/AR Collections/log/ for Sonja): customer-level only.
     write(os.path.join(out_dir, f"log_{today.isoformat()}.csv"), [
-        {"customer": f"{b['company']} {a}", "date": today.isoformat(),
+        {"customer": f"{b['company']} {a}", "name": b["name"], "route_day": b["delivery_day"],
+         "contacted_on": today.isoformat(),
          "action": "reminder" if b["step"] == "friendly reminder" else b["step"],
          "amount": b["past_due"], "response": "drafted for Sonja"}
         for b in brows for a in b["account"].split("+")])
+    # Batch list for Sonja (shared folder): who to contact today and the items to mention. No company totals.
+    with open(os.path.join(out_dir, f"batch_list_{today.isoformat()}.md"), "w") as f:
+        f.write(f"# Collections batch for {today:%A %-m/%-d/%Y}\n\n"
+                f"{len(batch)} customers. The emails are in the accounting@snowwhitelinen.com Drafts folder.\n")
+        for row, chase, credit in sorted(batch, key=lambda b: -sum(i["balance"] for i in b[1])):
+            f.write(f"\n## {nice(row['name'])}\n\n"
+                    f"- Email: {row['email']}\n- Route day: {row['delivery_day']}\n"
+                    f"- Step: {row['suggested_action']}\n")
+            note = next((b["note"] for b in brows if b["name"] == row["name"] and b["note"]), "")
+            if note:
+                f.write(f"- Note: {note}\n")
+            f.write("\n| Invoice | Date | Amount |\n|---|---|---|\n")
+            for i in sorted(chase, key=lambda i: i["date"]):
+                f.write(f"| {i['invoice']} | {i['date']:%m/%d/%Y} | {money(i['balance'])} |\n")
+            for c in credit:
+                f.write(f"| Credit {c['invoice']} | {c['date']:%m/%d/%Y} | -{money(c['amount'])} |\n")
     return work, unifirst, writeoffs, brows, sonja_fix
 
 
