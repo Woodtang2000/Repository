@@ -11,6 +11,8 @@ the rule says otherwise.
 - Google Group "Moderator's spam report" digests
   (noreply-spamdigest@google.com), for every account. Scotty doesn't check
   them.
+- Gusto "Time to run payroll" reminders (any account), once the due date in
+  the email has passed. Before that, keep them.
 
 ## Always keep
 
