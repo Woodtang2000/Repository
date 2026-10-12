@@ -4,7 +4,13 @@
       "Bash(python3 .claude/deputy_write.py:*)",
       "Bash(python3 /home/user/Repository/.claude/deputy_write.py:*)",
       "Bash(python -m service_changes.bot:*)",
-      "Bash(python3 -m service_changes.bot:*)"
+      "Bash(python3 -m service_changes.bot:*)",
+      "mcp__Superhuman_Mail__list_accounts",
+      "mcp__Superhuman_Mail__list_threads",
+      "mcp__Superhuman_Mail__get_thread",
+      "mcp__Superhuman_Mail__list_labels",
+      "mcp__Superhuman_Mail__list_splits",
+      "mcp__Superhuman_Mail__update_thread"
     ]
   }
 }
