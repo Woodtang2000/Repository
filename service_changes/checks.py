@@ -101,7 +101,11 @@ class Result:
 
     @property
     def questions(self) -> list[str]:
-        asked = list(self.parsed.questions_for_driver)
+        # "Which 3x5 mat?" when the account has exactly one 3x5 mat: the check already knows, so don't ask.
+        settled = [_topic(c.change.item) for c in self.changes if c.alliant_item and _topic(c.change.item)]
+        asked = [q for q in self.parsed.questions_for_driver
+                 if not (q.lower().startswith(("which", "what kind", "what type", "what size", "what color", "what colour"))
+                         and any(t <= _topic(q) for t in settled))]
         for q in (q for c in self.changes for q in c.questions):
             # Claude often already asked it in its own words ("What shirt size does Tim need?" vs our
             # "What size shirts for Tim?"): skip ours when every word that matters is already in one of theirs.
@@ -169,6 +173,23 @@ def _autocount(cc: CheckedChange, alliant: Alliant, account: str | None) -> int:
     return inventory
 
 
+SIZE = re.compile(r"^(x*s|m|x*l|\d?x|\dxl|\d+x\d+|\d+)$")  # S, M, L, XL, 2X, 3XL, 34x32, 42
+
+
+def _pool_garment(cc: CheckedChange, account: str, alliant: Alliant) -> tuple[str, int] | None:
+    """An item kept as a garment on a pool wearer ("XL butcher coats" = wearer #2's COAT BUTCHER WHITE XL, 64)."""
+    ch = cc.change
+    known = _words(" ".join(x for x in [ch.item, ch.size] if x)) & alliant_vocab(alliant)
+    if not {w for w in known - FILLER if not SIZE.match(w)}:  # a size alone ("stop L") names no garment
+        return None
+    hits = [(emp, label, qty) for (acct, emp), g in alliant.garments.items() if acct == account
+            for label, qty in g.items() if known <= _words(label)]
+    if len(hits) != 1:
+        return None
+    cc.wearer_number = hits[0][0]
+    return hits[0][1], hits[0][2]
+
+
 def _not_here(cc: CheckedChange, account: str, alliant: Alliant) -> None:
     """Remove / change an item the account doesn't have: look at the customer's other locations ("Costco" means
     seven departments) and ask the driver, instead of sending the office a ticket for nothing."""
@@ -223,10 +244,13 @@ def check(parsed: ParsedMessage, alliant: Alliant) -> Result:
             found = _check_wearer(cc, parsed.account_number, alliant)
         else:
             found = current_qty(alliant, parsed.account_number, ch.alliant_item or ch.item)
+        if not found and not ch.wearer and parsed.account_number:
+            found = _pool_garment(cc, parsed.account_number, alliant)
         if found:
             cc.alliant_item, cc.current = found
             cc.frequency_now = alliant.frequency.get(parsed.account_number or "", {}).get(cc.alliant_item)
-            if not ch.wearer:
+            if not ch.wearer and not cc.wearer_number and not ch.inventory:
+                # "Fix the inventory" is about Alliant's inventory number; everything else about the autocount.
                 cc.current = _autocount(cc, alliant, parsed.account_number)
         q = ch.quantity
 
@@ -333,7 +357,8 @@ def readback(result: Result) -> str:
                          + f" {VERBS.get(ch.action, 'changed')}" + _tail(group[-1]))
             i += len(group)
             continue
-        verb = f"set to {ch.quantity}" if ch.action == Action.set else VERBS.get(ch.action, "changed")
+        verb = (("inventory " if ch.inventory else "") + f"set to {ch.quantity}") if ch.action == Action.set \
+            else VERBS.get(ch.action, "changed")
         parts.append(f"{_what(ch)} {verb}{_tail(cc)}")
         i += 1
     return f"✅ {who} – " + "; ".join(parts) if parts else ""
@@ -372,13 +397,18 @@ def ticket(result: Result, alliant: Alliant, with_readback: bool = True) -> str:
             who = f"#{cc.wearer_number} {ch.wearer}" if cc.wearer_number else f"{ch.wearer} _(new wearer)_"
             what = cc.alliant_item or " ".join(x for x in [ch.size, ch.item] if x)
             sku = alliant.sku.get((acct, cc.wearer_number, cc.alliant_item)) if cc.wearer_number and cc.alliant_item else None
+            if ch.action == Action.size_change and ch.size and cc.alliant_item:
+                what += f" → *{ch.size}*"  # from the size Alliant has now to the new one
             what = f"{who}: {what}"
+        elif cc.wearer_number:  # kept as a garment on a pool wearer
+            what = f"{cc.alliant_item} _(on wearer #{cc.wearer_number})_"
+            sku = alliant.sku.get((acct, cc.wearer_number, cc.alliant_item))
         else:
             what = cc.alliant_item or f"{ch.item} _(not on account yet)_"
             sku = alliant.sku.get((acct, cc.alliant_item)) if cc.alliant_item else None
         bits = [f"{ICONS.get(ch.action, '✏️')} *{_do(ch)}*  {what}" + (f" `{sku}`" if sku else "")]
         if cc.current is not None and cc.new_total is not None:
-            bits.append(f"{cc.current} → *{cc.new_total}*")
+            bits.append(("inventory " if ch.inventory else "") + f"{cc.current} → *{cc.new_total}*")
         elif cc.new_total is not None and ch.action != Action.set:
             bits.append(f"new total *{cc.new_total}*")
         freq = _freq_words(ch.frequency) if ch.frequency else frequency_label(cc.frequency_now)

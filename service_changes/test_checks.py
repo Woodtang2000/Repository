@@ -375,3 +375,40 @@ def test_removing_something_the_account_doesnt_have_asks_instead_of_ticketing():
                                         "(400 per delivery). Which location is this for?"]
     new = msg("7192-1-00001", Change(action=Action.add, item="3x10 mats", quantity=2), customer="Costco")
     assert not check(new, a).questions  # adding a new item is fine
+
+
+def test_review_fixes():
+    from .checks import CheckedChange, Result, split_by_account, ticket
+    from .run import other_route_account
+    # "Fix the inventory to 20": the inventory is 20, not the autocount doubled.
+    a = Alliant(items={"S": {"TOWEL BAR MOP GOLD STRIPE": 40}}, autocount={"S": {"TOWEL BAR MOP GOLD STRIPE": 20}})
+    r = check(msg("S", Change(action=Action.set, item="bar mops", quantity=20, inventory=True)), a)
+    assert r.changes[0].current == 40 and r.changes[0].new_total == 20 and "inventory set to 20" in readback(r)
+    # Butcher coats kept on a pool wearer are found; a size alone ("stop L") is not a garment.
+    a = Alliant(items={"T": {}}, garments={("T", "2"): {"COAT BUTCHER WHITE XL": 64}, ("T", "4"): {"COAT BUTCHER WHITE L": 10}})
+    r = check(msg("T", Change(action=Action.decrease, item="butcher coats", size="XL", quantity=20)), a)
+    assert r.changes[0].current == 64 and r.changes[0].new_total == 44 and "on wearer #2" in ticket(r, a)
+    r = check(msg("T", Change(action=Action.stop, item="L")), a)
+    assert r.changes[0].wearer_number is None
+    # A customer on another route, named exactly.
+    a = Alliant(customers=[Customer("7518-1-00050", "THREE BEARS (50 KENAI)", "5", ["Mon"]),
+                           Customer("7518-1-00051", "THREE BEARS (51 SOLDOTNA)", "5", ["Mon"])])
+    p = ParsedMessage(category=Category.item_change, customer_as_written="Three Bears #50", summary="",
+                      changes=[Change(action=Action.stop, item="toilet bowl clip")],
+                      questions_for_driver=["Which Three Bears store is this?"])
+    other_route_account(p, a)
+    assert p.account_number == "7518-1-00050" and not p.questions_for_driver
+    # Several accounts in one message: one ticket each.
+    p = msg("2074-1-00009", Change(action=Action.add, item="bar mops", quantity=5, account_number="2074-1-00009"),
+            Change(action=Action.add, item="aprons", quantity=5, account_number="2074-1-00011"))
+    assert [x.account_number for x in split_by_account(p)] == ["2074-1-00009", "2074-1-00011"]
+    # "Which/what kind of mat" isn't asked when the item matched one line on the account.
+    a = Alliant(items={"C": {"MAT CHARCOAL HEATHER 3X5": 1}})
+    p = msg("C", Change(action=Action.add, item="3x5 mat", quantity=1))
+    p.questions_for_driver = ["What kind of 3x5 mat (color/type)?"]
+    assert not any("kind" in q for q in check(p, a).questions)
+    # Size swap shows the new size.
+    a = Alliant(wearers={}, garments={("M", "7"): {"PANTS NAVY 38X34": 11}})
+    p = ParsedMessage(category=Category.wearer_change, customer_as_written="Midas", account_number="M", summary="",
+                      changes=[Change(action=Action.size_change, item="pants", wearer="Juztyn", size="38x32")])
+    assert "38x32" in ticket(check(p, a), a)

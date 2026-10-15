@@ -77,7 +77,7 @@ def _messages(client, channel_id: str, oldest: float, **kw):
 def run_once(slack, claude, alliant: Alliant, since_minutes: int, live: bool, dry_run: bool = False,
              to: str = TEST_CHANNEL) -> int:
     from .parser import parse_message
-    from .run import fill_item_matches, fix_department
+    from .run import fill_item_matches, fix_department, other_route_account
 
     channels = {}
     cursor = None
@@ -121,6 +121,7 @@ def run_once(slack, claude, alliant: Alliant, since_minutes: int, live: bool, dr
             author = _name(slack, names, m.get("user"))
             parsed = parse_message(claude, text, name, m["ts"], alliant, author=author,
                                    office=author.lower() in office, previous=prior)
+            other_route_account(parsed, alliant)
             fix_department(parsed, alliant, route_from_channel(name), service_day(m["ts"]))
             fill_item_matches(claude, parsed, alliant)
             result = check(parsed, alliant)

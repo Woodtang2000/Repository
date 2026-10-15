@@ -11,6 +11,7 @@ Modes:
 """
 import argparse
 import json
+import re
 from datetime import datetime
 
 from .checks import check, readback, ticket
@@ -88,6 +89,21 @@ def fix_department(parsed: ParsedMessage, alliant: Alliant, route: str | None, d
     hits = [a for a in sisters if all(alliant.find_wearer(a, n) for n in names)]
     if len(hits) == 1:
         parsed.account_number = hits[0]
+
+
+def other_route_account(parsed: ParsedMessage, alliant: Alliant) -> None:
+    """No match on this route's list, but exactly one customer anywhere has every word the driver used ("Three Bears
+    #50" posted in #route-4 is THREE BEARS (50 KENAI) on route 5): use it. The office sees the route on the ticket."""
+    if parsed.account_number or not parsed.customer_as_written or any(c.account_number for c in parsed.changes):
+        return
+    words = re.findall(r"[a-z0-9]+", parsed.customer_as_written.lower())
+    if not words or all(w.isdigit() for w in words):
+        return
+    hits = [c.account for c in alliant.customers if all(w in re.findall(r"[a-z0-9]+", c.name.lower()) for w in words)]
+    if len(hits) == 1:
+        parsed.account_number = hits[0]
+        parsed.questions_for_driver = [q for q in parsed.questions_for_driver
+                                       if not re.search(r"\b(which|what)\b.*\b(store|customer|location|account)\b", q, re.I)]
 
 
 def fill_item_matches(client, parsed: ParsedMessage, alliant: Alliant) -> None:

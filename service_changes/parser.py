@@ -44,6 +44,10 @@ Classify the message and extract every change in it. Rules:
 - Record what the driver is asking the office to do, not everything mentioned. If a customer stopped two mats but
   the driver thinks only one should go, that is a question for the driver, not two stops.
 - Garments for a department (meat, deli, bakery, seafood) belong to that department's account when one exists.
+- Drivers sometimes write the end of the account number instead of the name ("Swickard 00009" = 2074-1-00009):
+  match it to the candidate whose account number ends that way.
+- "Fix the inventory, 6 total" / "inventory should be 20" is about Alliant's inventory (reg inv), not the
+  per-delivery count: set inventory true on that change.
 - One message can cover several accounts ("20 bar mops for the bakery and a new employee John in tire",
   "add a mat at Safeway 1817 and 1821"). Then give each change its own account_number and leave the message's
   account_number null. When everything is for one account, leave the changes' account_number null.

@@ -192,9 +192,11 @@ class Desk:
         self.links.setdefault((channel, src["ts"]), set()).update(replies)
 
         from .parser import parse_message
-        from .run import fill_item_matches, fix_department
+        from .run import fill_item_matches, fix_department, other_route_account
         parsed = parse_message(self.claude, text, route_name, src["ts"], self.alliant, author=author,
                                office=self.is_office(src.get("user")))
+        if parsed.category != Category.not_a_request:
+            other_route_account(parsed, self.alliant)
         # A message for several accounts ("bar mops for the bakery, a new wearer in tire") becomes one part per
         # account: questions are asked together, then each part gets its own ticket and readback.
         parts = split_by_account(parsed) if parsed.category in ACTIONABLE else [parsed]
@@ -308,6 +310,10 @@ class Desk:
             rb = f"✅ Office has it: {parsed.summary}"
         if correction:
             lines.insert(1, "🔁 *Correction*: the driver says the last entry wasn't right")
+        cust = next((c for c in self.alliant.customers if c.account == parsed.account_number), None)
+        here = route_from_channel(route_name)
+        if cust and here and cust.route != here:
+            lines.insert(1, f"📍 _A route {cust.route} customer, posted in #{route_name}_")
         text = "\n".join(lines + ["", _quote(_short(src.get("text", ""), 300)),
                                    f"<{link}|#{route_name}> · React ✅ or type done when it's in Alliant"])
         new = self.post(self.desk_id, text, {"kind": "ticket", "src_channel": channel, "src_ts": src["ts"],
