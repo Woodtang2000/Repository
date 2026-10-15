@@ -84,6 +84,24 @@ def read_csv(path):
         return list(csv.DictReader(f))
 
 
+def norm_name(s):
+    return re.sub(r"[^A-Z0-9]", "", (s or "").upper())
+
+
+def account_name(items, depts):
+    """Name for the account: NetSuite parent if it matches a current name, else the Alliant main account."""
+    parent = items[0]["parent_name"]
+    current = [i["name"] for i in items] + [n for c in depts for n in (c["name"], c["bill_to_name"]) if n]
+    first = re.findall(r"[A-Z0-9]{3,}", (parent or "").upper())[:1]
+    if any(norm_name(parent)[:5] and norm_name(parent)[:5] == norm_name(n)[:5] for n in current) or (
+            first and any(first[0] in re.findall(r"[A-Z0-9]{3,}", n.upper()) for n in current)):
+        return parent
+    main = sorted(depts, key=lambda c: (c["dept"] != "00000", c["active"] != "1", c["dept"]))
+    if main and main[0]["name"].strip():
+        return main[0]["name"].strip()
+    return sorted(items, key=lambda i: i["code"])[0]["name"]
+
+
 def contact_day(delivery):
     """Business day before the delivery day (Mon delivery -> previous Fri)."""
     return {"Mon": "Fri", "Tue": "Mon", "Wed": "Tue", "Thu": "Wed", "Fri": "Thu", "Sat": "Fri"}.get(delivery)
@@ -110,7 +128,8 @@ def load_invoices(data_dir):
         code = r["code"]
         account = code.split("-")[0]
         parent = r.get("parent") or f"{account} {r['nm']}"
-        rows.append({"co": co, "code": code, "name": r["nm"], "account": account,
+        cid = re.match(r"ALL-(?:OPEN|INV)-(\d+)-", ext)
+        rows.append({"co": co, "code": code, "name": r["nm"], "account": account, "cust_id": cid.group(1) if cid else "",
                      "group": (co, parent.split(" ")[0]), "parent_name": parent.split(" ", 1)[-1],
                      "invoice": inv, "date": orig, "due": due, "balance": float(r["bal"])})
     return rows
@@ -186,15 +205,21 @@ def main(data_dir, out_dir, today):
 
     work, unifirst, writeoffs, batch, sonja_fix = [], [], [], [], []
     for (co, acct), items in groups.items():
-        name = items[0]["parent_name"]
         key = f"{co} {acct}"
+        codes = by_group_codes.get((co, acct), set()) | {i["code"] for i in items}
+        # Account numbers are reused in Alliant, and some NetSuite parent records still carry a former
+        # customer's name (7871 "Full Circle" is now Northrim Bank Palmer). Use the parent name only when it
+        # matches one of the account's current names; otherwise the account's own name.
+        name = account_name(items, [cust[c] for c in sorted(codes) if c in cust])
+        # Every invoice must belong to the Alliant customer that now has its code; if not, don't contact.
+        wrong_owner = sorted({i["invoice"] for i in items if i["cust_id"] and code_to_id.get(i["code"])
+                              and i["cust_id"] != code_to_id[i["code"]]})
         open_amt = sum(i["balance"] for i in items)
         age = lambda i: (today - i["date"]).days
         past_due = [i for i in items if i["due"] < today]
         over45 = sum(i["balance"] for i in items if age(i) > 45)
         over90 = sum(i["balance"] for i in items if age(i) > 90)
         oldest = min(i["date"] for i in items)
-        codes = by_group_codes.get((co, acct), set()) | {i["code"] for i in items}
         lp = max((last_pay.get(code_to_id.get(c, ""), date.min) for c in codes), default=date.min)
         lp = None if lp == date.min else lp
         no_pay = lp is None or (today - lp).days >= 45
@@ -254,6 +279,9 @@ def main(data_dir, out_dir, today):
             reason = "no collection emails: " + NO_EMAIL_COMPANIES[co]
         elif (co, acct) in AGENCY:
             reason = "collections agency: " + AGENCY[(co, acct)]
+        elif wrong_owner:
+            reason = ("check first: invoices belong to a different Alliant customer than the one on this account "
+                      "number now: " + ", ".join(wrong_owner[:5]))
         elif key in holds or name in holds:
             reason = "hold: " + (holds.get(key) or holds.get(name) or "Scott/Sonja hold")
         elif acct in CHECK_FIRST:
