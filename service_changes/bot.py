@@ -45,9 +45,10 @@ def format_post(channel_name: str, author: str, text: str, link: str, parsed, re
     return f"*#{channel_name}* · {author} · <{link}|open>\n{quoted}\n{body}"
 
 
-def _office_staff() -> set[str]:
-    """Names (as Slack shows them) of office staff, from office_staff.txt, one per line, lower-cased."""
-    path = os.path.join(os.path.dirname(__file__), "office_staff.txt")
+def _office_staff(file: str = "office_staff.txt") -> set[str]:
+    """Names (as Slack shows them) of office staff, from office_staff.txt, one per line, lower-cased.
+    plant_staff.txt lists the plant and dispatch people who talk to drivers but don't enter changes in Alliant."""
+    path = os.path.join(os.path.dirname(__file__), file)
     if not os.path.exists(path):
         return set()
     return {ln.strip().lower() for ln in open(path) if ln.strip() and not ln.startswith("#")}

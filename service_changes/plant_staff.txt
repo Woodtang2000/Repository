@@ -1,0 +1,6 @@
+# Plant and dispatch staff as their names show in Slack: they pull orders and mats, supervise routes and talk to
+# drivers, but don't enter changes in Alliant. Their notes to drivers are left alone; a change, hold or special order
+# from them is a ticket. (Jesse drives and sells, so he is read as a driver.)
+Kirk Kosiek
+Michael Morales
+Maria Aukuso

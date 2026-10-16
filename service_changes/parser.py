@@ -61,6 +61,9 @@ Classify the message and extract every change in it. Rules:
 - A message that only makes sense with the previous one ("Actually cancel the special", "make that 6") applies to
   that previous request: say what it changes, using the customer from the previous message.
 - Plant completion posts ("You're 100% complete with the linens"), "ok", "done", and other replies are not_a_request.
+- Plant and dispatch staff talk to drivers in the route channels: carts or mats left at the plant, "pick up the mat at
+  Coast Pizza Thursday", "call me", route coverage, feedback on a delivery. Those are not_a_request. From them, only a
+  change to a customer's standing items or wearers, a hold, or a special order is a request.
 - A question asking what a customer has or gets ("how many bar mops does Humpy's get?", "what size is Juan?",
   "what's their stop number?", "when do they get mats?") is lookup with no changes: fill the customer and account and
   put the question in summary. A question that asks the office to do something ("can you call them?") is not lookup.
@@ -73,7 +76,7 @@ Classify the message and extract every change in it. Rules:
 """
 
 
-def prompt_parts(text: str, channel: str, ts: str, alliant: Alliant, author: str = "", office: bool = False,
+def prompt_parts(text: str, channel: str, ts: str, alliant: Alliant, author: str = "", office: bool | str = False,
                  previous: str = "") -> tuple[str, str]:
     """(route context, this message). The context is the same for every message on a route and day, so it is cached."""
     route = route_from_channel(channel)
@@ -92,7 +95,8 @@ def prompt_parts(text: str, channel: str, ts: str, alliant: Alliant, author: str
     if previous:
         rest += ["Previous message in the channel (context only, already handled):", previous, ""]
     if author:
-        rest += [f"Posted by: {author} ({'office staff' if office else 'driver or sales'})", ""]
+        who = office if isinstance(office, str) else "office staff" if office else "driver or sales"
+        rest += [f"Posted by: {author} ({who})", ""]
     rest += ["Message:", text]
     return "\n".join(lines), "\n".join(rest)
 
@@ -174,7 +178,7 @@ def is_reply(client: anthropic.Anthropic, bot_said: str, request: str, message: 
 
 
 def parse_message(client: anthropic.Anthropic, text: str, channel: str, ts: str, alliant: Alliant,
-                  author: str = "", office: bool = False, previous: str = "") -> ParsedMessage:
+                  author: str = "", office: bool | str = False, previous: str = "") -> ParsedMessage:
     context, message = prompt_parts(text, channel, ts, alliant, author, office, previous)
     response = client.beta.messages.parse(
         model=MODEL,

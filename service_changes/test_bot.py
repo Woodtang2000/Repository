@@ -64,7 +64,7 @@ def test_silent_run_posts_once_to_test_channel(monkeypatch):
 def test_bot_passes_author_and_previous_message(monkeypatch):
     import service_changes.parser as parser
     monkeypatch.setattr(parser, "parse_message", fake_parse)
-    monkeypatch.setattr(bot, "_office_staff", lambda: {"kirk"})
+    monkeypatch.setattr(bot, "_office_staff", lambda *a: {"kirk"})
     SEEN.clear()
     a = Alliant(customers=[Customer("K1", "KOBUK COFFEE", "1", ["Fri"])], items={"K1": {"TOWEL BAR MOP GOLD STRIPE": 80}})
     bot.run_once(FakeSlack(), None, a, since_minutes=10**7, live=False)

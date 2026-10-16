@@ -85,6 +85,7 @@ class Desk:
         self.me = slack.auth_test()["user_id"]
         self.names: dict[str, str] = {}
         self.office = _office_staff()
+        self.plant = _office_staff("plant_staff.txt")
         self.replies_seen: dict[tuple[str, str], str] = {}  # (channel, ts) -> latest_reply already looked at
         self.links: dict[tuple[str, str], set[str]] = {}  # (channel, request ts) -> main-channel replies read with it
         self.listening = False
@@ -111,6 +112,15 @@ class Desk:
 
     def is_office(self, user: str | None) -> bool:
         return self.name(user).lower() in self.office
+
+    def is_staff(self, user: str | None) -> bool:
+        """Office, plant or dispatch: not the driver the bot is talking to."""
+        return self.is_office(user) or self.name(user).lower() in self.plant
+
+    def role(self, user: str | None) -> bool | str:
+        if self.is_office(user):
+            return True
+        return "plant, dispatch or route supervisor; doesn't enter changes in Alliant" if self.is_staff(user) else False
 
     def thread(self, channel: str, m: dict) -> list[dict]:
         if not m.get("reply_count"):
@@ -162,7 +172,7 @@ class Desk:
             elif i == 0:
                 lines.append(f"{self.name(m.get('user'))} ({'earlier question, already answered' if new else 'original request'}): {text}")
             else:
-                lines.append(f"{self.name(m.get('user'))}{' (office)' if self.is_office(m.get('user')) else ''}: {text}")
+                lines.append(f"{self.name(m.get('user'))}{' (office)' if self.is_office(m.get('user')) else ' (plant)' if self.is_staff(m.get('user')) else ''}: {text}")
         return "\n".join(lines)
 
     def convo(self, channel: str, src: dict, top: list[dict], bot_posts: list[dict], extra: list[dict]) -> list[dict]:
@@ -195,7 +205,7 @@ class Desk:
         from .parser import parse_message
         from .run import fill_item_matches, fix_department, other_route_account
         parsed = parse_message(self.claude, text, route_name, src["ts"], self.alliant, author=author,
-                               office=self.is_office(src.get("user")))
+                               office=self.role(src.get("user")))
         if parsed.category != Category.not_a_request:
             other_route_account(parsed, self.alliant)
         # A message for several accounts ("bar mops for the bakery, a new wearer in tire") becomes one part per
@@ -261,7 +271,7 @@ class Desk:
                     and meta(b).get("driver_id") == src.get("user") and float(b["ts"]) >= midnight)
         cust = None if group else next((c for c in self.alliant.customers if c.account == acct), None)
         here = route_from_channel(route_name)
-        if cust and here and cust.route != here and not self.is_office(src.get("user")):
+        if cust and here and cust.route != here and not self.is_staff(src.get("user")):
             # Only customers on this channel's route are answered; anything else goes to the office.
             self.post(channel, f"<@{src.get('user')}> That customer isn't on route {here}, so I've passed this to the office.",
                       {"kind": "answer", "src_ts": src["ts"], "driver_id": src.get("user"), "msgs": replies, "held": True},
@@ -409,7 +419,7 @@ class Desk:
     def _answers(self, t: dict, src: dict) -> bool:
         """A thread reply the bot should read: from whoever posted, or anyone not in the office, not yet 👀."""
         return (not _is_bot(t, self.me) and t.get("subtype") in (None, "thread_broadcast") and not _seen(t, self.me)
-                and (t.get("user") == src.get("user") or not self.is_office(t.get("user"))))
+                and (t.get("user") == src.get("user") or not self.is_staff(t.get("user"))))
 
     # ---- office side ----------------------------------------------------------------------------------------
 
@@ -565,7 +575,7 @@ class Desk:
                 return
             if ev.get("type") == "message" and not ev.get("bot_id") and ev.get("subtype") in (None, "thread_broadcast") \
                     and channel != self.desk_id and ev.get("user") != self.me \
-                    and not (ev.get("thread_ts") not in (None, ev.get("ts")) and self.is_office(ev.get("user"))):
+                    and not (ev.get("thread_ts") not in (None, ev.get("ts")) and self.is_staff(ev.get("user"))):
                 try:
                     quick.reactions_add(channel=channel, timestamp=ev["ts"], name=WORKING)
                 except Exception:

@@ -132,7 +132,7 @@ def setup(monkeypatch):
     import service_changes.parser as parser
     monkeypatch.setattr(parser, "parse_message", fake_parse)
     monkeypatch.setattr(parser, "is_reply", fake_is_reply)
-    monkeypatch.setattr(desk, "_office_staff", lambda: {"sonja burke"})
+    monkeypatch.setattr(desk, "_office_staff", lambda f="office_staff.txt": {"sonja burke"} if f == "office_staff.txt" else {"kirk kosiek"})
     CALLS.clear()
     slack = FakeSlack()
     return slack, desk.Desk(slack, None, ALLIANT, "service-desk-test", ["route-1-test"])
@@ -499,7 +499,7 @@ def test_routes_are_handled_in_parallel_and_each_message_once(monkeypatch):
         return fake_parse(*a, **k)
     monkeypatch.setattr(parser, "parse_message", slow_parse)
     monkeypatch.setattr(parser, "is_reply", fake_is_reply)
-    monkeypatch.setattr(desk, "_office_staff", lambda: {"sonja burke"})
+    monkeypatch.setattr(desk, "_office_staff", lambda f="office_staff.txt": {"sonja burke"} if f == "office_staff.txt" else {"kirk kosiek"})
     slack = TwoRoutes()
     d = desk.Desk(slack, None, ALLIANT, "service-desk-test", ["route-1-test", "route-2-test"])
     d.listening = True
