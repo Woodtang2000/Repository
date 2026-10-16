@@ -10,6 +10,7 @@ class Category(str, Enum):
     wearer_change = "wearer_change"          # employee garments: new wearer, stop, size change, swap
     hold_or_closure = "hold_or_closure"      # seasonal hold, skip a week, closed, account cancelled
     special_order = "special_order"          # one-time delivery, not on the standing invoice
+    today_only = "today_only"                # one delivery changed ("0 bar mops today only"): driver did it on the handheld
     route_or_schedule = "route_or_schedule"  # stop order, service day move, redate
     operational_issue = "operational_issue"  # missing/wrong items, damage, truck, pricing question
     lookup = "lookup"                        # a question about the account: "how many bar mops does Humpy's get?"

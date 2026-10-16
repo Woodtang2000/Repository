@@ -35,8 +35,11 @@ Classify the message and extract every change in it. Rules:
 - "Stop everything except X" is one stop change for the rest; do not add a second change for X.
 - Never carry a size from one garment to another ("coats 3x" says nothing about the shirts). A new wearer's
   garment with no size gets a question.
-- A wearer who "needs" a garment may mean a one-time replacement or a standing addition; ask which unless
-  the driver says.
+- A wearer who "needs" a garment, or a new garment for a wearer, is a standing addition unless the driver says it
+  is a one-time replacement. Don't ask which.
+- A change to today's delivery only ("set bar mops to 0 today only", "skip the mats today", "short 10 towels this
+  delivery") is today_only with NO changes: the driver changes it on the handheld and the office only needs to know.
+  Describe it in summary ("bar mops 0 today only"). Don't ask questions about it.
 - Holds, closures, skipped weeks and cancelled accounts are hold_or_closure with NO changes: describe them in
   summary only ("closed 9/5 to 9/13"). Route order, redates and stop moves are route_or_schedule with no changes.
 - When part of a message is clear and part isn't, list the clear changes AND ask about the rest; don't hold

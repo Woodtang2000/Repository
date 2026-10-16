@@ -314,8 +314,9 @@ class Desk:
         here = route_from_channel(route_name)
         if cust and here and cust.route != here:
             lines.insert(1, f"📍 _A route {cust.route} customer, posted in #{route_name}_")
-        text = "\n".join(lines + ["", _quote(_short(src.get("text", ""), 300)),
-                                   f"<{link}|#{route_name}> · React ✅ or type done when it's in Alliant"])
+        done = ("Nothing to enter: the driver changed it on the handheld. React ✅ when seen"
+                if parsed.category == Category.today_only else "React ✅ or type done when it's in Alliant")
+        text = "\n".join(lines + ["", _quote(_short(src.get("text", ""), 300)), f"<{link}|#{route_name}> · {done}"])
         new = self.post(self.desk_id, text, {"kind": "ticket", "src_channel": channel, "src_ts": src["ts"],
                                              "readback": rb, "driver": author, "driver_id": src.get("user"),
                                              "account": parsed.account_number or "", "msgs": replies})
