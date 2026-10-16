@@ -583,3 +583,16 @@ def test_split_by_account_keeps_single_account_messages_whole():
     named = ParsedMessage(category=Category.item_change, summary="",
                           changes=[Change(action=Action.add, item="mats", quantity=1, account_number="W1")])
     assert [p.account_number for p in split_by_account(named)] == ["W1"]
+
+
+def test_going_live_does_not_answer_old_posts(setup, tmp_path, monkeypatch):
+    slack, d = setup
+    slack.say("C1", "U1", "more mats at wendys")  # posted before the desk watched this channel
+    path = str(tmp_path / "first_watched.json")
+    later = float(slack.msgs["C1"][-1]["ts"]) + 1
+    monkeypatch.setattr(desk.time, "time", lambda: later)
+    d.start_from(path)
+    assert d.run_once() == NOTHING
+    d.first_watched = {}
+    d.start_from(path)  # a restart keeps the first time, not the restart time
+    assert d.first_watched["C1"] == later

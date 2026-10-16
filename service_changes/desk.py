@@ -26,6 +26,7 @@ Posting in the real #route-N channels needs SERVICE_DESK_LIVE=1, the same lock a
 anything after the number (#route-12-test) are test channels and need no lock.
 """
 import argparse
+import json
 import os
 import re
 import sys
@@ -328,7 +329,24 @@ class Desk:
                                        metadata={"event_type": KIND, "event_payload": {**meta(old), "kind": "replaced"}})
         return new["ts"]
 
+    def start_from(self, path: str) -> None:
+        """Remember when the desk first watched each channel, and never reach back before it: switching on the real
+        #route-N channels must not answer the last three days of driver posts."""
+        try:
+            with open(path) as f:
+                first = json.load(f)
+        except (OSError, ValueError):
+            first = {}
+        now = time.time()
+        for cid in self.routes.values():
+            first.setdefault(cid, now)
+        with open(path + ".new", "w") as f:
+            json.dump(first, f)
+        os.replace(path + ".new", path)
+        self.first_watched = first
+
     def route_pass(self, name: str, cid: str, oldest: float, open_t: dict, counts: dict) -> None:
+        oldest = max(oldest, getattr(self, "first_watched", {}).get(cid, 0))
         top = list(reversed(list(_messages(self.slack, cid, oldest, include_all_metadata=True))))
         self.fetched[cid] = {m["ts"] for m in top}
         bot_posts = [m for m in top if _is_bot(m, self.me) and meta(m)]
@@ -675,6 +693,7 @@ def main():
     slack = WebClient(token=os.environ["SLACK_BOT_TOKEN"])
     claude = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("SERVICE_DESK_API_KEY"))
     desk = Desk(slack, claude, Alliant.from_dir(args.data), args.desk, routes)
+    desk.start_from(os.path.join(args.data, "first_watched.json"))
     loaded = [time.time()]
 
     def reload():  # pick up a fresh export without restarting
