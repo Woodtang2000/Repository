@@ -61,6 +61,10 @@ Classify the message and extract every change in it. Rules:
 - A message that only makes sense with the previous one ("Actually cancel the special", "make that 6") applies to
   that previous request: say what it changes, using the customer from the previous message.
 - Plant completion posts ("You're 100% complete with the linens"), "ok", "done", and other replies are not_a_request.
+- A report that shows a standing change is needed is that change, not just an operational issue: garments still
+  coming for someone who "doesn't work there anymore" / "left" is a stop for that wearer; deliveries still going to a
+  customer that is closed for the season is hold_or_closure. List the stop (or describe the hold) and keep the rest
+  of the report in summary.
 - Plant and dispatch staff talk to drivers in the route channels: carts or mats left at the plant, "pick up the mat at
   Coast Pizza Thursday", "call me", route coverage, feedback on a delivery. Those are not_a_request. From them, only a
   change to a customer's standing items or wearers, a hold, or a special order is a request.

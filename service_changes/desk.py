@@ -598,6 +598,22 @@ class Desk:
         print(time.strftime("%H:%M"), "listening", flush=True)
         self.serve(todo, since_minutes, backup_seconds, reload)
 
+    def api_trouble(self, e: Exception) -> None:
+        """Out of API credit, or a bad key: nothing gets read until someone fixes it, so tell the office (every 3
+        hours at most). Posts wait with ⏳ and are handled by the next pass once it works again."""
+        import anthropic
+        if not isinstance(e, anthropic.APIStatusError) or e.status_code not in (400, 401, 402, 403):
+            return
+        if time.time() - getattr(self, "api_warned", 0) < 3 * 3600:
+            return
+        self.api_warned = time.time()
+        why = "the Anthropic account is out of credit" if "credit" in str(e).lower() else f"Claude refused the request ({e.status_code})"
+        try:
+            self.post(self.desk_id, f"⚠️ *Service Desk can't read driver posts right now*: {why}. Posts are waiting with ⏳ "
+                      "and will be handled automatically once it's fixed. Please tell Scotty.", {"kind": "api_trouble"})
+        except Exception:
+            pass
+
     def serve(self, todo, since_minutes: int, backup_seconds: int, reload, workers: int = 8, stop=None) -> None:
         """Run passes for the queued channels in parallel, one pass per channel at a time: drivers on different
         routes don't wait for each other. The office pass (✅ readbacks, open tickets) runs under one lock so
@@ -638,6 +654,7 @@ class Desk:
                     print(time.strftime("%H:%M"), where + ":", ", ".join(f"{v} {k}" for k, v in counts.items()), flush=True)
             except Exception as e:  # keep going through a Slack or API hiccup
                 print(time.strftime("%H:%M"), "error:", e, flush=True)
+                self.api_trouble(e)
             finally:
                 with state:
                     again = waiting.pop(ch, None)

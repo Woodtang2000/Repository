@@ -596,3 +596,17 @@ def test_going_live_does_not_answer_old_posts(setup, tmp_path, monkeypatch):
     d.first_watched = {}
     d.start_from(path)  # a restart keeps the first time, not the restart time
     assert d.first_watched["C1"] == later
+
+
+def test_office_is_told_when_claude_cant_be_reached(setup):
+    import anthropic
+    import httpx
+    slack, d = setup
+    req = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+    err = anthropic.BadRequestError("Your credit balance is too low", response=httpx.Response(400, request=req), body=None)
+    d.api_trouble(err)
+    d.api_trouble(err)  # once, not on every retry
+    [w] = slack.bot_posts("D1", "api_trouble")
+    assert "out of credit" in w["text"]
+    d.api_trouble(ValueError("slack hiccup"))
+    assert len(slack.bot_posts("D1", "api_trouble")) == 1
