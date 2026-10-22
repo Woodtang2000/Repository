@@ -12,12 +12,12 @@ body {{ margin:0; font-family: 'Helvetica Neue', Arial, sans-serif; color:#1d2a3
 .page {{ width: 8.5in; height: 11in; padding: 0.75in 0.85in; display:flex; flex-direction:column; }}
 .top {{ border-bottom: 3px solid #1f4e79; padding-bottom: 14px; }}
 .brand {{ font-size: 15pt; letter-spacing: 3px; text-transform: uppercase; color:#1f4e79; font-weight:700; }}
-h1 {{ font-size: 40pt; margin: 34px 0 6px; line-height:1.05; }}
-.sub {{ font-size: 15pt; color:#45576a; margin:0 0 30px; }}
+h1 {{ font-size: 40pt; margin: 26px 0 6px; line-height:1.05; }}
+.sub {{ font-size: 15pt; color:#45576a; margin:0 0 24px; }}
 .number {{ background:#1f4e79; color:#fff; border-radius:14px; padding: 26px 30px; text-align:center; }}
 .number .label {{ font-size: 13pt; opacity:.85; letter-spacing:1px; text-transform:uppercase; }}
 .number .digits {{ font-size: 46pt; font-weight:700; margin-top:6px; letter-spacing:1px; }}
-h2 {{ font-size: 16pt; margin: 34px 0 10px; color:#1f4e79; }}
+h2 {{ font-size: 16pt; margin: 26px 0 10px; color:#1f4e79; }}
 ul {{ margin:0; padding-left: 22px; font-size: 13.5pt; line-height:1.6; }}
 .steps li {{ margin-bottom: 4px; }}
 .example {{ margin-top: 14px; background:#f1f5f9; border-left: 4px solid #1f4e79; padding: 12px 16px; font-size:12.5pt; color:#334; }}
@@ -44,7 +44,8 @@ ul {{ margin:0; padding-left: 22px; font-size: 13.5pt; line-height:1.6; }}
 </ul>
 <div class="fine"><b>Privacy:</b> Snow White Linen uses your mobile number only to respond to your service requests.
 We do not sell, rent or share your number or text messages with third parties for marketing purposes.
-Consent to receive texts is not a condition of service. Carriers are not liable for delayed or undelivered messages.</div>
+Consent to receive texts is not a condition of service. Carriers are not liable for delayed or undelivered messages.
+<br>Terms: <b>snowwhitelinen.com/sms-terms</b> · Privacy policy: <b>snowwhitelinen.com/sms-privacy</b></div>
 </div></body></html>"""
 out = pathlib.Path(__file__).parent
 (out / "flyer.html").write_text(html)
