@@ -326,6 +326,8 @@ def test_too_many_lookups_in_a_day_are_held_and_flagged(setup, monkeypatch):
     slack, d = setup
     monkeypatch.setattr(desk, "MAX_LOOKUPS_PER_DAY", 2)
     monkeypatch.setattr(parser, "answer_lookup", lambda c, q, f: Answer(answer="4 mats", found=True))
+    import time
+    slack.clock = max(slack.clock, time.time())  # "today" in Alaska: right after midnight an hour ago is yesterday
     for i in range(3):
         slack.say("C1", "U1", f"new: how many mats does wendys get {i}?")
         d.run_once()
