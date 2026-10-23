@@ -20,6 +20,7 @@ import hashlib
 import os
 import sys
 
+from reportlab import rl_config
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import landscape as _landscape, letter
 from reportlab.lib.styles import ParagraphStyle
@@ -36,6 +37,7 @@ COMPANIES = {
 INK, MUTED, RULE = colors.HexColor("#1c2226"), colors.HexColor("#5a646b"), colors.HexColor("#c9d0d5")
 NAVY, GOLD = colors.HexColor("#003746"), colors.HexColor("#f9af10")
 FONT, BOLD = "Helvetica", "Helvetica-Bold"
+rl_config.useA85 = 0  # binary streams: about 25% smaller PDFs (they are emailed as attachments)
 
 BODY = ParagraphStyle("body", fontName=FONT, fontSize=10, leading=14, textColor=INK)
 SMALL = ParagraphStyle("small", fontName=FONT, fontSize=8, leading=10, textColor=INK)
@@ -65,7 +67,20 @@ def logo(key, height=0.75 * inch):
     c = COMPANIES[key]
     p = logo_path(key)
     if p:
-        return Image(p, width=height * c["ratio"], height=height)
+        # flatten the transparent background onto white: no soft mask, so the PDF stays small enough to email
+        import io
+        from PIL import Image as PILImage
+        im = PILImage.open(p).convert("RGBA")
+        flat = PILImage.new("RGB", im.size, "white")
+        flat.paste(im, mask=im.split()[3])
+        px = int(height / inch * 170)  # about 170 dpi: sharp in print, small in email
+        if flat.size[1] > px:
+            flat = flat.resize((round(flat.size[0] * px / flat.size[1]), px), PILImage.LANCZOS)
+        flat = flat.quantize(colors=32).convert("RGB")  # few colors compress well inside the PDF
+        buf = io.BytesIO()
+        flat.save(buf, "PNG")
+        buf.seek(0)
+        return Image(buf, width=height * c["ratio"], height=height)
     t = Table([[Paragraph(c["brand"], LOGO_NAME)]], colWidths=[1.9 * inch], rowHeights=[height])
     t.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("LEFTPADDING", (0, 0), (-1, -1), 0)]))
     t.drawWidth = 1.9 * inch
