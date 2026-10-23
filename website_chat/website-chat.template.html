@@ -1,0 +1,361 @@
+<title>Snow White Website Chat</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Open+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a demo desk. Left, each company's website as a visitor meets it, with its chat; right, what Bill receives and the lead log.
+   The two website frames keep their own brand colors in both themes (that is how the sites look); the desk around them follows the theme. */
+:root {
+  --bg: #eef1f3; --surface: #ffffff; --ink: #1c2226; --muted: #5a646b; --line: #d5dce0;
+  --slack: #f8f8f8; --slack-line: #e3e3e3; --good: #1f7a4d; --tab: #dfe5e8; --tab-ink: #3b464d;
+  --font-display: "Montserrat", "Segoe UI", Arial, sans-serif;
+  --font-body: "Open Sans", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0f1418; --surface: #171e23; --ink: #e5ebee; --muted: #9aa6ad; --line: #2b353c;
+  --slack: #1d2429; --slack-line: #2d383f; --good: #4cc38a; --tab: #222b31; --tab-ink: #c5ced3; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0f1418; --surface: #171e23; --ink: #e5ebee; --muted: #9aa6ad; --line: #2b353c;
+  --slack: #1d2429; --slack-line: #2d383f; --good: #4cc38a; --tab: #222b31; --tab-ink: #c5ced3; color-scheme: dark }
+/* each site's own colors: fixed, as on the real sites */
+.site { --brand: #003746; --gold: #f9af10; --brand-soft: #eaf0f1; --site-bg: #ffffff; --site-ink: #1c2226; --site-muted: #55626a; --bubble: #eef2f3 }
+.site.tlg { --brand: #003f50; --gold: #ffb807; --brand-soft: #eaf0f2 }
+
+* { box-sizing: border-box }
+body { background: var(--bg); color: var(--ink); font: 15px/1.55 var(--font-body) }
+.wrap { max-width: 1240px; margin: 0 auto; padding-block: 22px 40px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)) }
+h1 { font: 800 clamp(22px, 3.4vw, 30px)/1.15 var(--font-display); margin: 0 0 4px; text-wrap: balance }
+.lede { color: var(--muted); margin: 0 0 16px; max-width: 70ch }
+.grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 20px; align-items: start }
+@media (max-width: 900px) { .grid { grid-template-columns: 1fr } }
+.panel-label { font: 700 11.5px/1 var(--font-display); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin: 0 0 8px }
+
+/* browser-ish tabs */
+.tabs { display: flex; gap: 6px; flex-wrap: wrap }
+.tabs button { font: 600 13px/1 var(--font-mono); color: var(--tab-ink); background: var(--tab); border: 1px solid var(--line); border-bottom: 0;
+  border-radius: 10px 10px 0 0; padding: 10px 14px; cursor: pointer }
+.tabs button[aria-selected="true"] { background: var(--surface); color: var(--ink) }
+.tabs button .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 7px; vertical-align: 1px }
+.frame { border: 1px solid var(--line); border-radius: 0 12px 12px 12px; overflow: hidden; background: var(--surface) }
+
+/* the website */
+.site { background: var(--site-bg); color: var(--site-ink) }
+.site header { display: flex; align-items: center; justify-content: space-between; gap: 12px 20px; flex-wrap: wrap; padding: 14px 22px; border-bottom: 4px solid var(--gold) }
+.site header img { height: 46px; width: auto; display: block }
+.site nav { display: flex; gap: 18px; flex-wrap: wrap; align-items: center; font: 700 12.5px/1 var(--font-display); letter-spacing: .06em; text-transform: uppercase; color: var(--brand) }
+.site nav .cta { background: var(--gold); color: #1c2226; padding: 10px 14px; border-radius: 4px }
+.hero { background: var(--brand); color: #ffffff; padding: 26px 22px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 22px; align-items: start }
+@media (max-width: 700px) { .hero { grid-template-columns: 1fr } }
+.hero h2 { font: 800 clamp(22px, 3vw, 30px)/1.12 var(--font-display); margin: 4px 0 10px; text-wrap: balance }
+.hero .eyebrow { font: 700 11.5px/1 var(--font-display); letter-spacing: .16em; text-transform: uppercase; color: var(--gold) }
+.hero p { margin: 0 0 12px; color: #d9e5e8 }
+.hero ul { margin: 0; padding-left: 18px; color: #ffffff }
+.hero li { margin: 2px 0 }
+
+/* chat widget */
+.chat { background: #ffffff; color: var(--site-ink); border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; min-height: 470px; box-shadow: 0 8px 24px rgba(0,0,0,.25) }
+.chat-head { background: #ffffff; border-bottom: 3px solid var(--gold); padding: 10px 14px; display: flex; align-items: center; gap: 10px }
+.chat-head img { height: 28px; width: auto }
+.chat-head small { color: var(--site-muted); font-size: 12px; display: block }
+.chat-head .live { margin-left: auto; font: 700 11px/1 var(--font-display); letter-spacing: .08em; color: #1f7a4d; text-transform: uppercase }
+.log { flex: 1; padding: 14px; display: flex; flex-direction: column; gap: 9px; overflow-y: auto; max-height: 440px; background: #ffffff }
+.msg { max-width: 88%; padding: 9px 13px; border-radius: 12px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14.5px }
+.msg.bot { background: var(--bubble); align-self: flex-start; border-bottom-left-radius: 3px }
+.msg.me { background: var(--brand); color: #ffffff; align-self: flex-end; border-bottom-right-radius: 3px }
+.msg.note { align-self: center; max-width: 100%; background: none; color: var(--site-muted); font-size: 12.5px; text-align: center; padding: 2px 6px }
+.msg.saved { align-self: center; background: none; color: #1f7a4d; font-weight: 600; font-size: 12.5px; padding: 2px 6px }
+.msg.handoff { align-self: stretch; max-width: 100%; background: var(--brand-soft); color: var(--brand); border-left: 3px solid var(--gold); font-size: 13px; border-radius: 6px }
+.starters { display: flex; flex-wrap: wrap; gap: 7px; padding: 0 14px 10px; background: #ffffff }
+.starters button { font: 600 12.5px/1.2 var(--font-body); color: var(--brand); background: var(--brand-soft); border: 1px solid transparent; border-radius: 999px; padding: 7px 11px; cursor: pointer }
+.starters button:hover { border-color: var(--brand) }
+form.compose { display: flex; gap: 8px; padding: 10px; border-top: 1px solid #e3e8ea; background: #ffffff }
+form.compose textarea { flex: 1; min-width: 0; resize: none; font: 14.5px/1.4 var(--font-body); color: var(--site-ink); background: #f6f8f9; border: 1px solid #d5dce0; border-radius: 8px; padding: 9px 11px; height: 44px; color-scheme: light }
+.send { font: 700 13px/1 var(--font-display); letter-spacing: .06em; text-transform: uppercase; background: var(--gold); color: #1c2226; border: 0; border-radius: 6px; padding: 0 16px; cursor: pointer }
+.send:disabled { opacity: .5; cursor: default }
+.chat-foot { display: flex; justify-content: space-between; gap: 10px; padding: 0 12px 10px; font-size: 12px; color: var(--site-muted); background: #ffffff }
+.linkbtn { background: none; border: 0; color: var(--brand); font: inherit; cursor: pointer; padding: 0; text-decoration: underline }
+button:focus-visible, textarea:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px }
+
+/* Bill's side */
+.side { display: flex; flex-direction: column; gap: 20px; min-width: 0 }
+.slack { background: var(--slack); border: 1px solid var(--slack-line); border-radius: 10px; padding: 14px 16px }
+.slack .chan { font: 500 12px/1 var(--font-mono); color: var(--muted); margin-bottom: 8px }
+.slack .who b { font-weight: 700 } .slack .who span { color: var(--muted); font-size: 12px; margin-left: 6px }
+.card-body { margin-top: 6px; white-space: pre-wrap; overflow-wrap: anywhere }
+.empty { color: var(--muted); font-size: 14px }
+.leads { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow: hidden }
+.lead { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; padding: 12px 16px; border: 0; border-top: 1px solid var(--line); background: none; width: 100%; text-align: left; color: inherit; font: inherit; cursor: pointer }
+.lead:first-child { border-top: 0 }
+.lead:hover { background: var(--bg) }
+.lead b { font-weight: 600 }
+.lead time { color: var(--muted); font: 12px/1.4 var(--font-mono); font-variant-numeric: tabular-nums }
+.lead .sub { grid-column: 1 / -1; color: var(--muted); font-size: 13px }
+.pill { display: inline-block; font: 700 10.5px/1 var(--font-display); letter-spacing: .06em; text-transform: uppercase; padding: 4px 7px; border-radius: 4px; margin-right: 6px; color: #ffffff; vertical-align: 1px }
+.pill.sw { background: #003746 } .pill.tlg { background: #00596f }
+.explain { font-size: 13.5px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 14px }
+.explain ul { margin: 6px 0 0; padding-left: 18px }
+@media (prefers-reduced-motion: no-preference) { .msg { animation: in .18s ease-out } @keyframes in { from { transform: translateY(4px) } to { transform: none } } }
+</style>
+
+<div class="wrap">
+  <h1>Website chat for Snow White and The Laundry Group</h1>
+  <p class="lede">Each company's site has its own chat with its own answers. If a visitor came to the wrong company, the chat hands them to the other one with what they've said so far. New business goes to Bill in #sales-desk, marked with the company; existing customers' service requests go to the office in #service-desk.</p>
+
+  <div class="grid">
+    <section aria-label="Websites">
+      <div class="tabs" role="tablist">
+        <button type="button" role="tab" id="tab-sw" aria-selected="true" data-co="sw"><span class="dot" style="background:#f9af10"></span>snowwhitelinen.com</button>
+        <button type="button" role="tab" id="tab-tlg" aria-selected="false" data-co="tlg"><span class="dot" style="background:#ffb807"></span>thelaundrygroup.com</button>
+      </div>
+      <div class="frame">
+        <div class="site sw" id="site-sw"></div>
+        <div class="site tlg" id="site-tlg" hidden></div>
+      </div>
+    </section>
+
+    <aside class="side">
+      <div>
+        <p class="panel-label">What lands in Slack</p>
+        <div class="slack">
+          <div class="chan" id="chan">#sales-desk</div>
+          <div class="who"><b>Service Desk</b><span>app</span></div>
+          <div class="card-body" id="cardbody"><span class="empty">New business goes to Bill in #sales-desk: the company, the business, what they need, how to reach them, and whether they were handed over. Existing customers' service requests go to the office in #service-desk.</span></div>
+        </div>
+      </div>
+      <div>
+        <p class="panel-label">Leads and requests from this demo</p>
+        <div class="leads" id="leads"><div class="lead" style="cursor:default"><span class="empty">No leads yet. Chat as a prospect on either site and give a name and phone or email.</span></div></div>
+      </div>
+      <div class="explain">
+        <b>Try a hand-off</b>
+        <ul>
+          <li>On snowwhitelinen.com, say you run a hotel or ask about laundry chemicals.</li>
+          <li>On thelaundrygroup.com, say you run a restaurant or need mechanic uniforms.</li>
+          <li>Say you're already a customer and need 2 more mats: it becomes a request for the office, not a lead.</li>
+          <li>Each chat knows only its own company's products and approved averages. No customer names, prices or accounts.</li>
+          <li>In this demo, leads are saved to this page, not sent to Slack.</li>
+        </ul>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<script>
+const LOGO = { sw: "__LOGO_SW__", tlg: "__LOGO_TLG__" };
+const FACTS = __FACTS__;
+const SAFE = `Never quote prices, discounts, contract terms or delivery days; Bill will put together pricing after a quick visit or call. Never invent products, brands, policies or facts beyond what is listed here. Never mention other customers. Be warm, brief (2-4 short sentences), plain-spoken, one question at a time.
+
+Your job: understand the business (type, town, size, what they use now and from whom, what's not working), suggest what they'd likely need in plain terms, and get their name, business name, phone and/or email, and a good time for Bill to reach them. Ask for contact details naturally once they're interested.
+
+When you have at least a name, the business, and a phone or email, call save_lead once with everything you learned, then tell them Bill Dubinsky will reach out and thank them. Don't call save_lead twice.
+
+EXISTING CUSTOMERS: if the visitor is already a customer and needs service (add or remove items, new or departing employees, a hold or skipped week, a missed or short delivery, a billing or account question), help them here: get their name, business and location, phone or email, and exactly what they need, then call service_request once and tell them the office will take care of it and confirm. You cannot see accounts in this chat, so never state what they currently get, their balance or delivery day, and never claim a change is made. Mention that next time they can text changes to (888) 519-7604 or email service@snowwhitelinen.com and get a confirmation. Existing customers are not sales leads: don't call save_lead for them.`;
+
+const CO = {
+  sw: {
+    name: "Snow White Linen Supply", short: "Snow White", domain: "snowwhitelinen.com",
+    nav: ["Services", "Industries", "About", "Contact"],
+    eyebrow: "Linen and uniform service · Alaska",
+    headline: "Clean linens, mats and uniforms, delivered on your schedule.",
+    sub: "Restaurants, grocery, auto shops, contractors, offices and schools across Southcentral Alaska. We launder, repair and replace, every week.",
+    bullets: ["Kitchen towels, bar mops and aprons", "Entrance and logo mats", "Employee uniforms with names and emblems", "Shop towels, mops and restroom supplies"],
+    greeting: "Hi! I'm Snow White's assistant. Tell me a little about your business and I'll help you figure out what linens, mats or uniforms you'd need.",
+    starters: [["I'm a customer: 2 more mats", "We're already a customer (Kobuk Coffee) and need 2 more 3x5 mats starting next week."],
+               ["40-seat restaurant in Wasilla", "We're opening a 40-seat restaurant in Wasilla next month. What would we need?"],
+               ["Auto shop, 8 mechanics", "I run an auto repair shop in Anchorage with 8 mechanics. Do you do uniforms?"],
+               ["We run a hotel", "We run a 60-room hotel in Anchorage and need sheets and towels."]],
+    rules: `You are the website chat for Snow White Linen Supply, a linen and uniform rental and laundry service in Alaska. Sister company: The Laundry Group (same owner; Bill Dubinsky handles both).
+
+Snow White serves: restaurants, bars, cafés and caterers; grocery, deli, meat and bakery; auto repair, tire and fleet; industrial, construction and oilfield; offices, retail and services; schools, churches and government; salons and fitness. Weekly (or more often) route delivery and pickup; we launder, repair and replace. Products: kitchen towels and bar mops, aprons, chef coats, table linens and napkins (for table-service restaurants and caterers), floor mats (charcoal, grey, black, Waterhog, custom logo mats), employee uniforms with names and emblems (shirts, pants, coveralls incl. FR and hi-vis, butcher coats), shop towels, microfiber, mops, restroom and janitorial supplies, first aid. Service area: Anchorage, Eagle River, Mat-Su (Wasilla, Palmer), Kenai Peninsula (Kenai, Soldotna, Homer), with routes reaching Fairbanks and Delta Junction; if a town is outside that, Bill will check. Customers can text or email changes any time.
+
+HAND-OFF: hospitals, care facilities, clinics' patient linen, hotels and lodging, on-premise laundry equipment (sales, installation, service, repair), and laundry soap and chemicals belong to The Laundry Group. When a visitor needs those, say it's our sister company's specialty, then call hand_off with a short summary of everything they told you. Don't try to sell them Snow White products for those needs.`
+  },
+  tlg: {
+    name: "The Laundry Group", short: "The Laundry Group", domain: "thelaundrygroup.com",
+    nav: ["Healthcare", "Hospitality", "Equipment", "Supplies", "Contact"],
+    eyebrow: "Systems · Service · Supplies",
+    headline: "Healthcare and hospitality linen, and the laundry behind it.",
+    sub: "Patient and guest linen service for hospitals, care facilities and hotels, plus on-premise laundry equipment, repair, and soap and chemicals.",
+    bullets: ["Patient linen: gowns, sheets, blankets, scrubs", "Hotel linen: sheets, towels, bath mats, blankets", "Laundry equipment sales, installation and repair", "Laundry soap and chemicals"],
+    greeting: "Hi! I'm The Laundry Group's assistant. Are you looking for healthcare or hotel linen service, laundry equipment, or soap and chemicals?",
+    starters: [["Clinic in Soldotna", "We're a small clinic in Soldotna that needs gowns, sheets and lab coats."],
+               ["Our washer is down", "Our on-site washer extractor at our lodge keeps breaking down. Can you help?"],
+               ["We're a restaurant", "We run a pizza place and need aprons and floor mats."]],
+    rules: `You are the website chat for The Laundry Group, Alaska ("Systems · Service · Supplies"). Sister company: Snow White Linen Supply (same owner; Bill Dubinsky handles both).
+
+The Laundry Group serves healthcare and hospitality: hospitals, care facilities, clinics' patient linen, hotels and lodging. What we do: (1) linen service for patients and guests: gowns, sheets, blankets, pillow cases, towels, scrubs and lab coats, laundered and delivered on a schedule sized to beds, rooms and occupancy; (2) on-premise laundry equipment: sales, installation, and service and repair; (3) laundry supplies: laundry soap and chemicals. Never name equipment brands or models, response times or service contracts; Bill will cover specifics. Healthcare and hotel linen is sized by beds, rooms and occupancy, so don't quote typical quantities.
+
+HAND-OFF: restaurants, bars, grocery, auto shops, contractors, offices, schools and salons needing mats, kitchen towels, aprons, shop towels or employee uniforms belong to Snow White Linen Supply. When a visitor needs those, say it's our sister company's specialty, then call hand_off with a short summary of everything they told you. A hotel or hospital that also wants mats or staff uniforms can stay here; mention Bill can add those through Snow White.`
+  }
+};
+
+let active = "sw", sample = null, db = null, busy = false, ctl = null;
+const state = { sw: { turns: [], saved: false, from: null }, tlg: { turns: [], saved: false, from: null } };
+const el = {};
+
+function buildSite(k) {
+  const c = CO[k], root = document.getElementById("site-" + k);
+  root.innerHTML = `
+    <header><img alt="${c.name}" src="${LOGO[k]}"><nav>${c.nav.map(n => `<span>${n}</span>`).join("")}<span class="cta">Get a quote</span></nav></header>
+    <div class="hero">
+      <div><div class="eyebrow">${c.eyebrow}</div><h2>${c.headline}</h2><p>${c.sub}</p><ul>${c.bullets.map(b => `<li>${b}</li>`).join("")}</ul></div>
+      <div class="chat">
+        <div class="chat-head"><img alt="" src="${LOGO[k]}"><div><b style="font:700 14px var(--font-display);color:var(--brand)">Chat with us</b><small>Usually replies in seconds</small></div><span class="live">● Online</span></div>
+        <div class="log" aria-live="polite"></div>
+        <div class="starters">${c.starters.map(([l, q]) => `<button type="button" data-q="${q.replace(/"/g, "&quot;")}">${l}</button>`).join("")}</div>
+        <form class="compose"><label hidden for="box-${k}">Your message</label><textarea id="box-${k}" placeholder="Ask us anything…" autocomplete="off"></textarea><button class="send" type="submit">Send</button></form>
+        <div class="chat-foot"><span class="status"></span><button type="button" class="linkbtn reset">Start over</button></div>
+      </div>
+    </div>`;
+  el[k] = { log: root.querySelector(".log"), box: root.querySelector("textarea"), send: root.querySelector(".send"),
+            status: root.querySelector(".status"), starters: root.querySelector(".starters") };
+  root.querySelector("form").addEventListener("submit", e => { e.preventDefault(); const t = el[k].box.value; el[k].box.value = ""; ask(k, t); });
+  el[k].box.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); root.querySelector("form").requestSubmit(); } });
+  el[k].starters.addEventListener("click", e => { const b = e.target.closest("button[data-q]"); if (b) ask(k, b.dataset.q); });
+  root.querySelector(".reset").addEventListener("click", () => reset(k));
+  reset(k);
+}
+function bubble(k, cls, text) { const d = document.createElement("div"); d.className = "msg " + cls; d.textContent = text; el[k].log.append(d); el[k].log.scrollTop = el[k].log.scrollHeight; return d; }
+function reset(k) { if (active === k) ctl?.abort(); state[k] = { turns: [], saved: false, from: null }; el[k].log.textContent = ""; bubble(k, "bot", CO[k].greeting); el[k].starters.hidden = false; el[k].status.textContent = ""; }
+function show(k) {
+  active = k;
+  for (const x of ["sw", "tlg"]) { document.getElementById("site-" + x).hidden = x !== k; document.getElementById("tab-" + x).setAttribute("aria-selected", String(x === k)); }
+}
+document.querySelector(".tabs").addEventListener("click", e => { const b = e.target.closest("button[data-co]"); if (b && !busy) show(b.dataset.co); });
+
+function slackText(l) {
+  if (l.kind === "service") return [`🌐 Website request from an existing customer · ${CO[l.company]?.name || ""}`, ``,
+    `${l.business || "Business"}${l.town ? " · " + l.town : ""}`, `Contact: ${[l.name, l.phone, l.email].filter(Boolean).join(" · ")}`,
+    `Request: ${l.request}`, l.urgent ? "⚠️ Marked urgent" : "", ``,
+    `Not verified: call or text them back at the number on the account before changing anything. React ✅ when it's handled.`].filter(x => x !== "").join("\n");
+  const lines = [`🧲 New website lead for @Bill Dubinsky · ${CO[l.company]?.name || ""}`, ``,
+    `${l.business || "Business"}${l.business_type ? " · " + l.business_type : ""}${l.town ? " · " + l.town : ""}`,
+    `Contact: ${[l.name, l.phone, l.email].filter(Boolean).join(" · ")}`];
+  if (l.handed_from) lines.push(`Came in on ${CO[l.handed_from].domain}, handed over to ${CO[l.company].short}`);
+  if (l.best_time) lines.push(`Best time: ${l.best_time}`);
+  if (l.size) lines.push(`Size: ${l.size}`);
+  if (l.current_provider) lines.push(`Uses now: ${l.current_provider}`);
+  if (l.needs) lines.push(`Needs: ${l.needs}`);
+  if (l.notes) lines.push(`Notes: ${l.notes}`);
+  lines.push(``, `React ✅ when you've called them.`);
+  return lines.join("\n");
+}
+const showCard = l => { document.getElementById("cardbody").textContent = slackText(l); document.getElementById("chan").textContent = l.kind === "service" ? "#service-desk" : "#sales-desk"; };
+
+function tools(k, after) {
+  const other = k === "sw" ? "tlg" : "sw";
+  return [{
+    name: "save_lead",
+    description: "Save the prospect as a lead for Bill Dubinsky. Call once, when you have at least their name, business name, and a phone or email. Returns 'saved'.",
+    inputSchema: { type: "object", properties: {
+      name: { type: "string" }, business: { type: "string" }, business_type: { type: "string" }, town: { type: "string" },
+      size: { type: "string", description: "seats, rooms, beds, employees, locations" }, phone: { type: "string" }, email: { type: "string" },
+      best_time: { type: "string" }, current_provider: { type: "string" }, needs: { type: "string", description: "short list" },
+      notes: { type: "string" } }, required: ["name", "business"] },
+    async execute(input) {
+      if (state[k].saved) return "already saved";
+      const pick = f => (input[f] == null ? "" : String(input[f]).slice(0, 500));
+      const lead = Object.fromEntries(["name","business","business_type","town","size","phone","email","best_time","current_provider","needs","notes"].map(f => [f, pick(f)]));
+      if (!lead.phone && !lead.email) throw new Error("Need a phone number or email before saving.");
+      Object.assign(lead, { company: k, handed_from: state[k].from || "", created_at: new Date().toISOString(),
+        transcript: state[k].turns.filter(t => !t.hidden).map(t => (t.role === "user" ? "Visitor: " : "Chat: ") + t.content).join("\n").slice(-6000) });
+      showCard(lead); state[k].saved = true;
+      if (db) { try { await db.collection("leads").add(lead); } catch (e) { bubble(k, "note", "Couldn't save the lead to this page. Bill's card is what would be sent."); } }
+      bubble(k, "saved", "✓ Lead sent to Bill");
+      return "saved";
+    }
+  }, {
+    name: "service_request",
+    description: "Send an existing customer's service request to the office. Call once, when you have their name, business, a phone or email, and what they need. Returns 'sent'.",
+    inputSchema: { type: "object", properties: {
+      name: { type: "string" }, business: { type: "string" }, town: { type: "string" }, phone: { type: "string" }, email: { type: "string" },
+      request: { type: "string", description: "exactly what they need, in their words" }, urgent: { type: "boolean" } },
+      required: ["name", "business", "request"] },
+    async execute(input) {
+      if (state[k].sentRequest) return "already sent";
+      const pick = f => (input[f] == null ? "" : String(input[f]).slice(0, 800));
+      const r = Object.fromEntries(["name","business","town","phone","email","request"].map(f => [f, pick(f)]));
+      if (!r.phone && !r.email) throw new Error("Need a phone number or email so the office can confirm.");
+      Object.assign(r, { kind: "service", urgent: !!input.urgent, company: k, created_at: new Date().toISOString() });
+      showCard(r); state[k].sentRequest = true;
+      if (db) { try { await db.collection("leads").add(r); } catch (e) { bubble(k, "note", "Couldn't save the request to this page."); } }
+      bubble(k, "saved", "✓ Request sent to the office");
+      return "sent";
+    }
+  }, {
+    name: "hand_off",
+    description: `Hand the visitor to the sister company ${CO[other].name}, when what they need is that company's specialty. Give a short summary of everything they told you (business, town, size, needs, any contact details). Call once, then tell them in one sentence that you're connecting them.`,
+    inputSchema: { type: "object", properties: { summary: { type: "string" } }, required: ["summary"] },
+    execute(input) { after.handoff = String(input.summary || "").slice(0, 2000); return "connecting them now"; }
+  }];
+}
+
+async function run(k, out) {
+  const after = {};
+  ctl = new AbortController();
+  const input = [{ role: "user", content: CO[k].rules + "\n\n" + SAFE + "\n\nFACTS (approved by the owner; product names and anonymous averages from our own customers; use averages only as a starting point and never as a quote):\n" + FACTS[k] + "\n\nThe chat opened with: " + CO[k].greeting },
+                 ...state[k].turns.slice(-24).map(({ role, content }) => ({ role, content }))];
+  const { text } = await sample(input, { modelTier: "quick", cache: false, signal: ctl.signal, tools: tools(k, after),
+    onText: ({ text }) => { out.textContent = text; el[k].log.scrollTop = el[k].log.scrollHeight; } });
+  out.textContent = text;
+  state[k].turns.push({ role: "assistant", content: text });
+  return after;
+}
+
+async function ask(k, text) {
+  if (busy || !text.trim()) return;
+  if (!sample) { bubble(k, "note", "The chat needs Claude, which isn't available in this view. Open the page in Claude to try it."); return; }
+  busy = true; el[k].send.disabled = true; el[k].starters.hidden = true;
+  bubble(k, "me", text.trim());
+  state[k].turns.push({ role: "user", content: text.trim() });
+  let out = bubble(k, "bot", "…"); el[k].status.textContent = "Typing…";
+  try {
+    const after = await run(k, out);
+    if (after.handoff) {
+      const to = k === "sw" ? "tlg" : "sw";
+      bubble(k, "handoff", `Connected to ${CO[to].name} →`);
+      reset(to); state[to].from = k; el[to].starters.hidden = true;
+      show(to);
+      bubble(to, "handoff", `Continued from ${CO[k].domain}`);
+      state[to].turns.push({ role: "user", hidden: true, content: `(The visitor was just handed over from the ${CO[k].name} website chat. What they told them: ${after.handoff}\nGreet them as ${CO[to].name}, ${CO[k].short}'s sister company, say Bill Dubinsky handles both, and pick up where they left off without asking for anything they already gave.)` });
+      const out2 = bubble(to, "bot", "…"); el[to].status.textContent = "Typing…";
+      await run(to, out2);
+      el[to].status.textContent = "";
+    }
+  } catch (e) {
+    if (e.code === "cancelled") out.remove();
+    else if (e.code === "not_granted" || e.code === "sampling_disabled") { out.remove(); bubble(k, "note", "Claude isn't allowed for this page, so the chat can't answer. Allow it from the page's permissions to try the demo."); }
+    else if (e.code === "rate_limited") { out.textContent = e.text || ""; bubble(k, "note", "Too many messages at once. Wait a moment, then send again."); }
+    else if (e.code === "tools_unavailable") { out.remove(); bubble(k, "note", "This view can't run the lead step. Open the page in the Claude app or claude.ai to try it."); }
+    else { if (e.text) out.textContent = e.text; else out.remove(); bubble(k, "note", "The chat stopped before finishing. Send your message again."); }
+    if (!e.text && state[k].turns.at(-1)?.role === "user") state[k].turns.pop();
+  } finally {
+    busy = false; for (const x of ["sw", "tlg"]) { el[x].send.disabled = false; el[x].status.textContent = ""; }
+    el[active].box.focus();
+  }
+}
+
+function renderLeads(snap) {
+  const box = document.getElementById("leads"); box.textContent = "";
+  if (snap.empty) { const d = document.createElement("div"); d.className = "lead"; d.style.cursor = "default"; d.innerHTML = '<span class="empty">No leads yet. Chat as a prospect on either site and give a name and phone or email.</span>'; box.append(d); return; }
+  for (const doc of snap.docs) {
+    const l = doc.data(); const b = document.createElement("button"); b.type = "button"; b.className = "lead";
+    const name = document.createElement("b");
+    const pill = document.createElement("span"); pill.className = "pill " + (l.company === "tlg" ? "tlg" : "sw"); pill.textContent = (l.company === "tlg" ? "TLG" : "Snow White") + (l.kind === "service" ? " · service" : "");
+    name.append(pill, document.createTextNode((l.business || "Business") + (l.town ? " · " + l.town : "")));
+    const t = document.createElement("time"); const d = new Date(l.created_at); t.textContent = isNaN(d) ? "" : d.toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+    const sub = document.createElement("span"); sub.className = "sub"; sub.textContent = [l.name, l.phone || l.email, l.handed_from ? "handed over" : "", l.kind === "service" ? l.request : l.needs].filter(Boolean).join(" · ");
+    b.append(name, t, sub); b.addEventListener("click", () => showCard(l)); box.append(b);
+  }
+}
+
+buildSite("sw"); buildSite("tlg");
+(async () => {
+  if (!window.claude) return;
+  sample = await claude.use("sample");
+  db = await claude.use("db");
+  if (db) db.collection("leads").orderBy("created_at", "desc").limit(20).onSnapshot(renderLeads, () => {});
+})();
+</script>

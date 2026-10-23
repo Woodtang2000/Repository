@@ -1,10 +1,15 @@
 import csv, json, os, re, sys, statistics
 from collections import defaultdict, Counter
 feed, types_path, out_json = sys.argv[1], sys.argv[2], sys.argv[3]
+branch = sys.argv[4] if len(sys.argv) > 4 else ""  # "1" Snow White, "2" The Laundry Group (account-branch-dept)
 rd = lambda f: list(csv.DictReader(open(os.path.join(feed, f), encoding="utf-8-sig")))
 types = json.load(open(types_path))
 items, garments, wearers, cust = rd("current_items.csv"), rd("garments.csv"), rd("wearers.csv"), rd("customers.csv")
-names = " ".join(c["name"] for c in cust).upper()
+if branch:
+    keep = lambda a: a.split("-")[1:2] == [branch]
+    items, garments, wearers = [r for r in items if keep(r["account"])], [r for r in garments if keep(r["account"])], [r for r in wearers if keep(r["account"])]
+    cust_all, cust = cust, [c for c in cust if keep(c["account"])]
+names = " ".join(c["name"] for c in (cust_all if branch else cust)).upper()  # never let any customer's name through
 MIN = 5
 
 def family(item):
