@@ -92,6 +92,8 @@ def setup():
 
 
 FEED_FILES = ["customers.csv", "customer_cards.csv", "current_items.csv", "garments.csv", "wearers.csv", "holds.csv"]
+# Garment tracking (barcode status, custom-scan text, open customer POs): used once the Mac export writes them.
+OPTIONAL = {"holds.csv", "garments_in_service.csv", "purchase_orders.csv", "garment_scans.csv"}
 FEED_REQUIRED = {"customers.csv": {"account", "name", "route", "service_days"},
                  "customer_cards.csv": {"account", "name"},
                  "current_items.csv": {"account", "item", "quantity", "autocount", "sku"},
@@ -142,8 +144,8 @@ def sync_feed(conf, auth, done_meta) -> bool:
     try:
         with open(os.path.join(tmp, "feed_done.txt"), "wb") as f:
             f.write(_download(auth, "/feed_done.txt"))
-        for name in FEED_FILES:
-            if name == "holds.csv" and _meta(auth, "/holds.csv") is None:
+        for name in FEED_FILES + sorted(OPTIONAL - set(FEED_FILES)):
+            if name in OPTIONAL and _meta(auth, "/" + name) is None:
                 continue
             with open(os.path.join(tmp, name), "wb") as f:
                 f.write(_download(auth, "/" + name))
