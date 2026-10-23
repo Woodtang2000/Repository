@@ -35,7 +35,7 @@ def public_name(item):
         return None  # could carry a customer's name: leave it out
     return item.title().replace("X", "x") if False else re.sub(r"(\d)X(\d)", r"\1x\2", item.title())
 
-per = lambda r: float(r.get("autocount") or r.get("quantity") or 0)
+per = lambda r: float(r.get("autocount") or 0)  # the autocount is what goes out each delivery; inventory is not usage
 catalog = defaultdict(Counter)
 use = defaultdict(lambda: defaultdict(float))  # account -> family -> per-delivery qty
 for r in items:

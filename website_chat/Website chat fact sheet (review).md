@@ -7,7 +7,7 @@ nightly Alliant service data (current items, garments, wearers). **Nothing else 
 balances, or anything from the finance folder. Logo mats are listed only as "custom logo mat", and any item whose
 name could identify a customer was left out.
 
-**Averages** are per delivery, across all current customers of that type, and are shown only for groups of at least
+**Averages** are the per-delivery autocount (not inventory), across all current customers of that type, and are shown only for groups of at least
 5 customers. Business type was worked out from each customer's name, so a few are mis-grouped; the
 averages are meant as a starting point ("restaurants your size often start around..."), never a quote.
 
