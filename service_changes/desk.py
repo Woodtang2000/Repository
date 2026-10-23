@@ -91,6 +91,7 @@ class Desk:
         self.replies_seen: dict[tuple[str, str], str] = {}  # (channel, ts) -> latest_reply already looked at
         self.links: dict[tuple[str, str], set[str]] = {}  # (channel, request ts) -> main-channel replies read with it
         self.listening = False
+        self.data_dir = "service_changes/data"
         self.fetched: dict[str, set[str]] = {}  # per route channel: the top-level messages the last pass saw
         # Office ✅ reactions straight from Slack's event (ticket ts -> who), for when history doesn't show them yet.
         self.done_events: dict[str, str] = {}
@@ -613,6 +614,16 @@ class Desk:
 
         def on_event(client, req):
             client.send_socket_mode_response(SocketModeResponse(envelope_id=req.envelope_id))
+            if req.type == "interactive" and req.payload.get("type") == "block_actions":
+                # "Give to Bill/Jesse" on a website lead in #sales-desk: create the Salesforce Lead (sales.py)
+                from . import sales
+                def give(p=req.payload):
+                    try:
+                        print(time.strftime("%H:%M"), "sales:", sales.handle_action(quick, p, self.data_dir), flush=True)
+                    except Exception as e:
+                        print(time.strftime("%H:%M"), "sales error:", e, flush=True)
+                threading.Thread(target=give, daemon=True).start()
+                return
             if req.type != "events_api":
                 return
             ev = req.payload.get("event", {})
@@ -768,6 +779,7 @@ def main():
     claude = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("SERVICE_DESK_API_KEY"))
     desk = Desk(slack, claude, Alliant.from_dir(args.data), args.desk, routes)
     desk.start_from(os.path.join(args.data, "first_watched.json"))
+    desk.data_dir = args.data
     loaded = [time.time()]
 
     def reload():  # pick up a fresh export without restarting

@@ -103,6 +103,21 @@ to the Bird inbound address; `email_desk.py` polls Bird, keeps each sender to th
 Staff can forward a customer's email there too. Put `BIRD_API_KEY` in `/etc/service-desk.env`, then
 `sudo bash deploy/email_setup.sh`. Log: `journalctl -u service-desk-email -f`. Stop: `sudo bash deploy/email_setup.sh off`.
 
+## Website chat (optional)
+
+The chat bubble for snowwhitelinen.com and thelaundrygroup.com (`service_changes/webchat.py`, widget in
+`website_chat/widget.js`). Each company's chat answers for its own trade, hands visitors to the sister company, sends new
+business to **#sales-desk** with "Give to Bill / Jesse / Scott" buttons (a click creates the Salesforce Lead for that
+person) and existing customers' service requests to #service-desk. It never sees customer accounts or prices.
+
+1. Lightsail: attach a static IP to the instance; open ports 80 and 443 (Networking tab).
+2. DNS: an A record `chat.snowwhitelinen.com` → that static IP.
+3. Slack: create #sales-desk, invite the bot, and turn on Interactivity in the Slack app (for the buttons).
+4. `sudo bash deploy/webchat_setup.sh`, then try `https://chat.snowwhitelinen.com/try`.
+5. Put the printed `<script>` line in each site's footer.
+6. Salesforce (for the buttons): a connected app with the client credentials flow; put `SF_DOMAIN`, `SF_CLIENT_ID`,
+   `SF_CLIENT_SECRET` in `/etc/service-desk.env` and restart `service-desk`.
+
 ## 5. Start it
 
 ```bash
