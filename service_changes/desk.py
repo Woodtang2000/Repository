@@ -442,8 +442,9 @@ class Desk:
             if _is_bot(h, self.me) or h.get("subtype") or _seen(h, self.me):
                 continue
             text = h.get("text", "")
+            from .email_desk import is_email_command
             from .sms import is_phone_command
-            if is_phone_command(text):  # "add 907-555-1234 to Midas": the texting service (sms.py) handles it
+            if is_phone_command(text) or is_email_command(text):  # "add 907-555-1234 to Midas": the texting service (sms.py) handles it
                 self.mark_seen(self.desk_id, [h])
                 continue
             if DONE_ANY.search(text):
@@ -504,6 +505,13 @@ class Desk:
         if p.get("sms_to"):  # a customer's text (sms.py): the readback goes back by text, not to Slack
             from .sms import send_sms
             send_sms(p["sms_to"], "Snow White Linen: " + msg)
+        elif p.get("email_to"):  # a customer's email (email_desk.py): the readback is a reply in their thread
+            from . import bird
+            from .sms import plain
+            subject = p.get("email_subject") or "Your Snow White Linen request"
+            bird.send(p["email_to"], subject if subject.lower().startswith("re:") else "Re: " + subject,
+                      plain(msg) + "\n\nSnow White Linen\n(907) 222-7738", in_reply_to=p.get("email_msgid", ""),
+                      key=f"readback/{t['ts']}")
         else:
             self.post(p["src_channel"], msg, {"kind": "readback", "src_ts": p["src_ts"], "driver_id": p.get("driver_id"),
                                               "msgs": p.get("msgs", [])})

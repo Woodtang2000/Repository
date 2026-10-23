@@ -94,6 +94,15 @@ card to approve. Nothing about any account goes to a number until the office has
 Put `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` and `TWILIO_NUMBER` in `/etc/service-desk.env`, then
 `sudo bash deploy/sms_setup.sh`. Log: `journalctl -u service-desk-sms -f`. Stop: `sudo bash deploy/sms_setup.sh off`.
 
+## Customer email (optional)
+
+Customers email changes the same way they text. A mailbox (`EMAIL_REPLY_TO`, e.g. service@snowwhitelinen.com) forwards
+to the Bird inbound address; `email_desk.py` polls Bird, keeps each sender to their own accounts
+(`service_changes/data/customer_emails.csv`, approved from 📧 sign-up cards in the office channel or with
+`add jane@acme.com to <account>`), and replies from `EMAIL_FROM` on the verified Bird domain mail.snowwhitelinen.com.
+Staff can forward a customer's email there too. Put `BIRD_API_KEY` in `/etc/service-desk.env`, then
+`sudo bash deploy/email_setup.sh`. Log: `journalctl -u service-desk-email -f`. Stop: `sudo bash deploy/email_setup.sh off`.
+
 ## 5. Start it
 
 ```bash

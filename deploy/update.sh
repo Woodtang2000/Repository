@@ -7,6 +7,6 @@ git pull --ff-only
 "$REPO/.venv/bin/pip" install -q --upgrade anthropic pydantic slack_sdk
 sudo systemctl daemon-reload   # picks up any change to the service files
 sudo systemctl restart service-desk
-sudo systemctl try-restart service-desk-sms 2>/dev/null || true   # customer texting, once installed
+sudo systemctl try-restart service-desk-sms service-desk-email 2>/dev/null || true   # customer texting and email, once installed
 sleep 5
 journalctl -u service-desk -n 5 --no-pager
