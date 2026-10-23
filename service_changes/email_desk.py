@@ -1,0 +1,282 @@
+"""Customers email in changes for their own account(s), the same way they text (sms.py): the office works the ticket
+in Slack and the readback goes back by email.
+
+  python -m service_changes.email_desk --data service_changes/data --desk service-desk
+
+A mailbox (e.g. service@snowwhitelinen.com) forwards to a Bird inbound address; this polls Bird for what arrived,
+so the server needs no open port. Replies go out from the Bird sending domain (EMAIL_FROM) with Reply-To set to the
+real mailbox (EMAIL_REPLY_TO), so a customer's answer comes back the same way.
+
+Each address is pinned to its account(s) in `customer_emails.csv` (email,accounts,name), kept by the office: an
+unknown sender gets a sign-up card in the office channel (best match from the Alliant invoice and location emails
+first), ✅ approves; or type `add jane@acme.com to <account or name>` / `remove jane@acme.com`. As with texts, Claude
+only ever sees the sender's own accounts, and every reply goes to the address on file, never anywhere else.
+
+Email senders can be forged, so a ticket from a message whose SPF and DKIM both failed to pass is marked for the
+office to confirm by phone. Staff (our own domain) forwarding a customer's email get a ticket read against every
+account, with the readback emailed to them. Needs BIRD_API_KEY and BIRD_INBOUND_ADDRESS_ID.
+"""
+import argparse
+import csv
+import os
+import re
+import sys
+import time
+from datetime import datetime, timedelta, timezone
+
+from . import bird
+from .context import Alliant
+from .sms import KIND, MAX_TEXTS_PER_DAY, TextDesk, plain
+
+EMAIL = r"([A-Za-z0-9._%+'-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})"
+ADD_EMAIL = re.compile(rf"^\s*(?:add|approve)\s+<?(?:mailto:)?{EMAIL}(?:\|[^>]*)?>?\s+(?:to|for)\s+(.+?)\s*$", re.I | re.S)
+REMOVE_EMAIL = re.compile(rf"^\s*(?:remove|delete)\s+<?(?:mailto:)?{EMAIL}(?:\|[^>]*)?>?\s*$", re.I)
+OWN_DOMAIN = os.environ.get("EMAIL_OWN_DOMAIN", "snowwhitelinen.com")
+AUTO = re.compile(r"^(mailer-daemon|postmaster|no-?reply|do-?not-?reply|bounce)", re.I)
+AUTO_SUBJECT = re.compile(r"^(automatic reply|auto(matic)?[- ]?reply|out of (the )?office|undeliverable|delivery status|"
+                          r"returned mail|read:|accepted:|declined:)", re.I)
+QUOTE = re.compile(r"^(On .{5,200} wrote:|-{2,}\s*Original Message|From: .+|Sent from my |_{5,})", re.I | re.M)
+
+
+def is_email_command(text: str) -> bool:
+    return bool(ADD_EMAIL.match(text or "") or REMOVE_EMAIL.match(text or ""))
+
+
+def email_key(addr: str) -> str:
+    m = re.search(EMAIL, addr or "")
+    return m.group(1).lower() if m else (addr or "").strip().lower()
+
+
+def clean_body(text: str) -> str:
+    """The new part of an email: drop the quoted thread under "On … wrote:" and the like."""
+    m = QUOTE.search(text or "")
+    body = (text or "")[:m.start()] if m else (text or "")
+    body = "\n".join(ln for ln in body.splitlines() if not ln.lstrip().startswith(">"))
+    return re.sub(r"\n{3,}", "\n\n", body).strip()[:4000]
+
+
+def alliant_emails(alliant: Alliant) -> dict[str, list[str]]:
+    """Invoice and location emails on the Alliant cards -> the accounts they appear on (sign-up suggestions only)."""
+    out: dict[str, list[str]] = {}
+    for acct, card in alliant.cards.items():
+        for field in ("email", "location_email"):
+            for e in re.findall(EMAIL, card.get(field) or ""):
+                out.setdefault(e.lower(), []).append(acct)
+    return out
+
+
+def load_emails(path: str) -> dict[str, dict]:
+    out = {}
+    if os.path.exists(path):
+        with open(path, newline="") as f:
+            for row in csv.DictReader(f):
+                accts = [a.strip() for a in re.split(r"[;,\s]+", row.get("accounts", "")) if a.strip()]
+                if email_key(row.get("email", "")) and accts:
+                    out[email_key(row["email"])] = {"accounts": accts, "name": (row.get("name") or "").strip()}
+    return out
+
+
+def _write(path: str, rows: list[dict]) -> None:
+    tmp = path + ".tmp"
+    with open(tmp, "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=["email", "accounts", "name"], extrasaction="ignore")
+        w.writeheader()
+        w.writerows(rows)
+    os.replace(tmp, path)
+
+
+def _rows(path: str) -> list[dict]:
+    if not os.path.exists(path):
+        return []
+    with open(path, newline="") as f:
+        return list(csv.DictReader(f))
+
+
+class EmailDesk(TextDesk):
+    word, icon, to_key, signup_kind, list_file = "email", "📧", "email_to", "email_signup", "customer_emails.csv"
+    add_cmd, remove_cmd = ADD_EMAIL, REMOVE_EMAIL
+    set_up = "You're all set. Email us here any time with changes for {names}, and we'll confirm each one when it's entered."
+
+    def __init__(self, slack, claude, alliant: Alliant, desk: str, data_dir: str, send=None, fetch=None):
+        super().__init__(slack, claude, alliant, desk, data_dir, send=send or self._send)
+        self.fetch = fetch or (lambda since: bird.received(since, os.environ.get("BIRD_INBOUND_ADDRESS_ID", "")))
+        self.state_path = os.path.join(data_dir, "email_state.json")
+        self.state = {}
+        try:
+            import json
+            with open(self.state_path) as f:
+                self.state = json.load(f)
+        except (OSError, ValueError):
+            pass
+        for k in ("seen", "cmds"):
+            self.state.setdefault(k, [])
+        for k in ("convos", "counts", "threads"):
+            self.state.setdefault(k, {})
+
+    # ---- hooks for TextDesk ---------------------------------------------------------------------------------
+
+    def key(self, addr: str) -> str:
+        return email_key(addr)
+
+    def addr(self, key: str) -> str:
+        return key
+
+    def masked(self, addr: str) -> str:
+        return email_key(addr)
+
+    def contacts(self) -> dict[str, dict]:
+        return load_emails(os.path.join(self.data_dir, self.list_file))
+
+    def save_contact(self, addr: str, accounts: list[str], name: str) -> list[str]:
+        path = os.path.join(self.data_dir, self.list_file)
+        rows = _rows(path)
+        row = next((r for r in rows if email_key(r.get("email", "")) == email_key(addr)), None)
+        if row is None:
+            row = {"email": email_key(addr), "accounts": "", "name": name}
+            rows.append(row)
+        have = [a for a in re.split(r"[;,\s]+", row.get("accounts", "")) if a]
+        row["accounts"] = ";".join(have + [a for a in accounts if a not in have])
+        row["name"] = row.get("name") or name
+        _write(path, rows)
+        return row["accounts"].split(";")
+
+    def remove_contact(self, addr: str) -> bool:
+        path = os.path.join(self.data_dir, self.list_file)
+        rows = _rows(path)
+        keep = [r for r in rows if email_key(r.get("email", "")) != email_key(addr)]
+        _write(path, keep)
+        return len(keep) < len(rows)
+
+    def card(self, addr: str, who: str, said: str, accounts: list[str], by: str = "") -> None:
+        name = lambda a: next((c.name for c in self.alliant.customers if c.account == a), "")
+        on_file = alliant_emails(self.alliant).get(email_key(addr), [])
+        accounts = list(dict.fromkeys(on_file + accounts))  # on an Alliant card first, then Claude's guess
+        head = f"📧 *{by}* asks to set up {email_key(addr)} for email" if by else f"📧 *New emailer* {email_key(addr)}"
+        lines = [head + (f": {who}" if who else ""), f"_{said[:200]}_"]
+        if on_file:
+            lines.append(f"On the Alliant card for: " + ", ".join(f"{a} {name(a)}" for a in on_file[:6])
+                         + (f" and {len(on_file) - 6} more" if len(on_file) > 6 else ""))
+        if accounts:
+            lines.append(f"Best match: *{accounts[0]}* {name(accounts[0])}")
+            lines.append(f"React ✅ to approve the best match, or type `add {email_key(addr)} to <account number(s)>`.")
+        else:
+            lines.append(f"I couldn't tell which customer. Type `add {email_key(addr)} to <account number>` to approve.")
+        self.slack.chat_postMessage(channel=self.desk_id, text="\n".join(lines), unfurl_links=False, metadata={
+            "event_type": KIND, "event_payload": {"kind": self.signup_kind, "phone": email_key(addr),
+                                                  "accounts": accounts[:1], "name": who}})
+
+    def inbound(self, since: datetime) -> list[dict]:
+        out = []
+        for m in self.fetch(since.strftime("%Y-%m-%dT%H:%M:%SZ")):
+            sender = email_key((m.get("from") or {}).get("email", ""))
+            subject = m.get("subject") or ""
+            if AUTO.match(sender) or AUTO_SUBJECT.match(subject):
+                continue  # out-of-office, bounces, no-reply senders: never answered (no mail loops)
+            body = clean_body(m.get("text") or "")
+            self.state["threads"][sender] = {
+                "subject": subject, "msgid": m.get("message_id") or "", "name": (m.get("from") or {}).get("name") or "",
+                "verified": bool(m.get("spf_pass") or m.get("dkim_pass"))}
+            out.append({"id": m["id"], "from": sender,
+                        "body": (f"Subject: {subject}\n" if subject and not subject.lower().startswith("re:") else "")
+                        + body})
+        return out
+
+    def ticket_extra(self, addr: str) -> dict:
+        t = self.state["threads"].get(email_key(addr), {})
+        return {"email_subject": t.get("subject", ""), "email_msgid": t.get("msgid", "")}
+
+    def ticket_notes(self, addr: str) -> list[str]:
+        if self.state["threads"].get(email_key(addr), {}).get("verified", True):
+            return []
+        return ["⚠️ _The sender's email couldn't be verified (SPF/DKIM). Confirm by phone before entering._"]
+
+    def _send(self, to: str, body: str) -> None:
+        t = self.state["threads"].get(email_key(to), {})
+        subject = t.get("subject") or "Your Snow White Linen request"
+        bird.send(email_key(to), subject if subject.lower().startswith("re:") else "Re: " + subject,
+                  plain(body) + "\n\nSnow White Linen\n(907) 222-7738", in_reply_to=t.get("msgid", ""))
+
+    def sign_up(self, addr: str, body: str, sid: str, n: int) -> None:
+        """An unknown sender: the email itself usually says who they are, so the office gets a card straight away and
+        the message is held until it's approved."""
+        key = email_key(addr)
+        p = self.state.setdefault("pending", {}).get(key)
+        if n > MAX_TEXTS_PER_DAY:
+            return
+        if p is not None:
+            p["held"].append([body, sid])
+            return
+        from .parser import identify_customer
+        who = self.state["threads"].get(key, {}).get("name", "")
+        found = identify_customer(self.claude, f"From: {who} <{key}>\n{body}", self.alliant.customers)
+        self.state["pending"][key] = {"phone": key, "stage": "waiting", "held": [[body, sid]], "at": time.time(),
+                                      "name": found.person_name or who}
+        self.card(key, found.person_name or who, body, found.accounts)
+        self.send(key, "Thanks for your email. Our office will confirm your account shortly, then we'll take care of "
+                       "your request.")
+
+    # ---- staff forwarding a customer's email ----------------------------------------------------------------
+
+    def handle(self, addr: str, body: str, sid: str) -> None:
+        if email_key(addr).endswith("@" + OWN_DOMAIN):
+            return self.from_staff(addr, body, sid)
+        super().handle(addr, body, sid)
+
+    def from_staff(self, addr: str, body: str, sid: str) -> None:
+        """Someone at Snow White forwarded or wrote in: read it against every account, ticket to the office."""
+        from .checks import check, readback, ticket
+        from .parser import parse_message
+        from .run import fill_item_matches
+        from .sms import ACTIONABLE
+        name = self.state["threads"].get(email_key(addr), {}).get("name") or email_key(addr)
+        parsed = parse_message(self.claude, body, "office-email", f"{time.time():.6f}", self.alliant,
+                               author=f"{name} (office staff, forwarding a customer's email)")
+        if parsed.category in ACTIONABLE and parsed.account_number:
+            fill_item_matches(self.claude, parsed, self.alliant)
+        result = check(parsed, self.alliant)
+        if parsed.category in ACTIONABLE and parsed.account_number:
+            out = ticket(result, self.alliant, with_readback=False).splitlines()
+            rb = readback(result) if not result.questions else ""
+            out += [f"❓ {q}" for q in result.questions]
+        else:
+            out = [f"📣 *Emailed in: {parsed.category.value.replace('_', ' ')}*", parsed.summary]
+            rb = f"✅ {parsed.summary}"
+        quote = "\n".join("> " + ln for ln in body.splitlines()[:8])
+        self.office("\n".join(out + ["", quote, f"📧 Emailed in by {name} · React ✅ or type done when it's in Alliant"]),
+                    {"kind": "ticket", "src_channel": "email", "src_ts": sid, "readback": rb, "driver": name,
+                     "driver_id": "", "account": parsed.account_number or "", "msgs": [], "email_to": email_key(addr),
+                     **self.ticket_extra(addr)})
+
+
+def main():
+    import anthropic
+    from slack_sdk import WebClient
+
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--data", default="service_changes/data")
+    ap.add_argument("--desk", default="service-desk", help="office channel for tickets")
+    ap.add_argument("--every", type=int, default=20, help="seconds between checks for new email")
+    args = ap.parse_args()
+    missing = [v for v in ("BIRD_API_KEY", "BIRD_INBOUND_ADDRESS_ID") if not os.environ.get(v)]
+    if missing:
+        sys.exit("Needs " + ", ".join(missing) + " (from the Bird dashboard).")
+    slack = WebClient(token=os.environ["SLACK_BOT_TOKEN"])
+    claude = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("SERVICE_DESK_API_KEY"))
+    ed = EmailDesk(slack, claude, Alliant.from_dir(args.data), args.desk.lstrip("#"), args.data)
+    first, loaded = not ed.state["seen"], time.time()
+    print(time.strftime("%H:%M"), "watching email", flush=True)
+    while True:
+        try:
+            if time.time() - loaded > 3600:
+                ed.alliant, loaded = Alliant.from_dir(args.data), time.time()
+            n = ed.run_once(first)
+            first = False
+            if n:
+                print(time.strftime("%H:%M"), f"{n} email(s)", flush=True)
+        except Exception as e:  # keep going through a Bird, Slack or API hiccup
+            print(time.strftime("%H:%M"), "error:", e, flush=True)
+        time.sleep(args.every)
+
+
+if __name__ == "__main__":
+    main()

@@ -206,6 +206,41 @@ def customer_facts(alliant: Alliant, account: str) -> str:
 # ---- the loop -------------------------------------------------------------------------------------------------
 
 class TextDesk:
+    """Customer texts. email_desk.EmailDesk reuses all of this for customer emails, through the hooks below."""
+    word, icon, to_key, signup_kind, list_file = "text", "📱", "sms_to", "sms_signup", "customer_phones.csv"
+    add_cmd, remove_cmd, set_up = ADD_CMD, REMOVE_CMD, SET_UP
+
+    def key(self, addr: str) -> str:
+        return phone_key(addr)
+
+    def addr(self, key: str) -> str:
+        return "+1" + key
+
+    def masked(self, addr: str) -> str:
+        return f"(…{phone_key(addr)[-4:]})"
+
+    def contacts(self) -> dict[str, dict]:
+        return load_phones(os.path.join(self.data_dir, self.list_file))
+
+    def save_contact(self, addr: str, accounts: list[str], name: str) -> list[str]:
+        return save_phone(os.path.join(self.data_dir, self.list_file), addr, accounts, name)
+
+    def remove_contact(self, addr: str) -> bool:
+        return remove_phone(os.path.join(self.data_dir, self.list_file), addr)
+
+    def card(self, addr: str, who: str, said: str, accounts: list[str], by: str = "") -> None:
+        signup_card(self.slack, self.desk_id, self.alliant, addr, who, said, accounts, by=by)
+
+    def inbound(self, since: datetime) -> list[dict]:
+        """New messages as {"id", "from", "body"}, oldest first."""
+        return [{"id": m["sid"], "from": m.get("from", ""), "body": (m.get("body") or "").strip()} for m in inbound(since)]
+
+    def ticket_extra(self, addr: str) -> dict:
+        return {}
+
+    def ticket_notes(self, addr: str) -> list[str]:
+        return []
+
     def __init__(self, slack, claude, alliant: Alliant, desk: str, data_dir: str, send=send_sms):
         self.slack, self.claude, self.alliant, self.data_dir, self.send = slack, claude, alliant, data_dir, send
         self.desk_id = next(c["id"] for p in slack.conversations_list(types="public_channel,private_channel",
@@ -235,35 +270,34 @@ class TextDesk:
     def run_once(self, first: bool = False) -> int:
         """Handle new texts. On the very first run, existing texts are only marked as seen, never answered."""
         since = datetime.now(timezone.utc) - timedelta(days=1)
-        new = [m for m in inbound(since) if m["sid"] not in self.state["seen"]]
+        new = [m for m in self.inbound(since) if m["id"] not in self.state["seen"]]
         handled = self.office_pass() if not first else 0
         for m in new:
-            self.state["seen"].append(m["sid"])
+            self.state["seen"].append(m["id"])
             if not first:
-                self.handle(m.get("from", ""), (m.get("body") or "").strip(), m["sid"])
+                self.handle(m["from"], m["body"], m["id"])
                 handled += 1
             self.save()
         return handled
 
     def handle(self, phone: str, body: str, sid: str) -> None:
-        phones = load_phones(os.path.join(self.data_dir, "customer_phones.csv"))
-        who = phones.get(phone_key(phone))
+        who = self.contacts().get(self.key(phone))
         today = datetime.now(ALASKA).strftime("%Y-%m-%d")
-        count_key = f"{today} {phone_key(phone)}"
+        count_key = f"{today} {self.key(phone)}"
         n = self.state["counts"][count_key] = self.state["counts"].get(count_key, 0) + 1
         self.state["counts"] = {k: v for k, v in self.state["counts"].items() if k.startswith(today)}
-        masked = f"(…{phone_key(phone)[-4:]})"
+        masked = self.masked(phone)
         if not who:
             return self.sign_up(phone, body, sid, n)
         if n > MAX_TEXTS_PER_DAY:
             if n == MAX_TEXTS_PER_DAY + 1:
-                self.office(f"⚠️ {who['name'] or 'A customer'} {masked} has texted {MAX_TEXTS_PER_DAY} times today; "
+                self.office(f"⚠️ {who['name'] or 'A customer'} {masked} has sent {MAX_TEXTS_PER_DAY} {self.word}s today; "
                             "I've stopped answering them until tomorrow.", {"kind": "sms_limit"})
             return
 
         accounts = who["accounts"]
         mine = only(self.alliant, accounts)
-        convo = self.state["convos"].get(phone_key(phone))
+        convo = self.state["convos"].get(self.key(phone))
         if convo and time.time() - convo["at"] > CONVO_MINUTES * 60:
             convo = None
         lines = (convo["lines"] if convo else []) + [f"Customer: {body}"]
@@ -271,8 +305,8 @@ class TextDesk:
 
         from .parser import answer_lookup, parse_message
         from .run import fill_item_matches
-        parsed = parse_message(self.claude, text, "customer-text", f"{time.time():.6f}", mine,
-                               author=f"{who['name'] or 'Customer'} (the customer, by text)")
+        parsed = parse_message(self.claude, text, f"customer-{self.word}", f"{time.time():.6f}", mine,
+                               author=f"{who['name'] or 'Customer'} (the customer, by {self.word})")
         # Isolation: only this number's accounts, whatever the message or the model says.
         if parsed.account_number not in accounts:
             parsed.account_number = accounts[0] if len(accounts) == 1 else None
@@ -281,7 +315,7 @@ class TextDesk:
         acct = parsed.account_number
 
         if parsed.category == Category.not_a_request:
-            self.state["convos"].pop(phone_key(phone), None)
+            self.state["convos"].pop(self.key(phone), None)
             return
         if acct is None:
             names = [f"{c.name}" for c in mine.customers] or accounts
@@ -290,9 +324,9 @@ class TextDesk:
         if parsed.category == Category.lookup:
             ans = answer_lookup(self.claude, parsed.summary or body, customer_facts(mine, acct), asker="customer")
             self.send(phone, ans.answer)
-            self.state["convos"].pop(phone_key(phone), None)
+            self.state["convos"].pop(self.key(phone), None)
             if not ans.found:
-                self.office(f"📱 *{acct}* {self.name(mine, acct)}: customer question I couldn't answer {masked}\n"
+                self.office(f"{self.icon} *{acct}* {self.name(mine, acct)}: customer question I couldn't answer {masked}\n"
                             f"_{body[:300]}_\nPlease follow up with them.", {"kind": "sms_question", "account": acct})
             return
         if parsed.category in ACTIONABLE:
@@ -312,18 +346,19 @@ class TextDesk:
             out = [f"*{acct}*  {self.name(mine, acct)}", f"📣 *Customer message: {parsed.category.value.replace('_', ' ')}*",
                    parsed.summary]
             rb = f"✅ Thanks, we've got it: {parsed.summary}"
+        out += self.ticket_notes(phone)
         quote = "\n".join("> " + ln for ln in lines[-6:])
-        self.office("\n".join(out + ["", quote, f"📱 Customer text from {who['name'] or 'customer'} {masked} · "
-                                                 "React ✅ or type done when it's in Alliant"]),
-                    {"kind": "ticket", "src_channel": "sms", "src_ts": sid, "readback": rb, "driver": who["name"],
-                     "driver_id": "", "account": acct, "msgs": [], "sms_to": phone})
-        self.send(phone, "Got it, thanks. We'll text you when it's done.")
-        self.state["convos"].pop(phone_key(phone), None)
+        self.office("\n".join(out + ["", quote, f"{self.icon} Customer {self.word} from {who['name'] or 'customer'} "
+                                                 f"{masked} · React ✅ or type done when it's in Alliant"]),
+                    {"kind": "ticket", "src_channel": self.word, "src_ts": sid, "readback": rb, "driver": who["name"],
+                     "driver_id": "", "account": acct, "msgs": [], self.to_key: phone, **self.ticket_extra(phone)})
+        self.send(phone, f"Got it, thanks. We'll {'text' if self.word == 'text' else 'email'} you when it's done.")
+        self.state["convos"].pop(self.key(phone), None)
 
     # ---- sign-up: an unknown number tells us who they are, the office approves --------------------------------
 
     def sign_up(self, phone: str, body: str, sid: str, n: int) -> None:
-        key = phone_key(phone)
+        key = self.key(phone)
         p = self.state.setdefault("pending", {}).get(key)
         if n > MAX_TEXTS_PER_DAY:
             return
@@ -335,7 +370,7 @@ class TextDesk:
             from .parser import identify_customer
             found = identify_customer(self.claude, body, self.alliant.customers)
             p.update(stage="waiting", intro=body, name=found.person_name or "")
-            signup_card(self.slack, self.desk_id, self.alliant, phone, found.person_name or "", body, found.accounts)
+            self.card(phone, found.person_name or "", body, found.accounts)
             self.send(phone, WAITING)
             return
         p["held"].append([body, sid])  # waiting for the office: keep it for after approval
@@ -343,7 +378,6 @@ class TextDesk:
     def office_pass(self) -> int:
         """Office side: ✅ on a sign-up card approves it; `add <phone> to <account or name>` and `remove <phone>`
         typed in the office channel (or a driver's add, forwarded by desk.py as a card) change the phone list."""
-        path = os.path.join(self.data_dir, "customer_phones.csv")
         done = set(self.state.setdefault("cmds", []))
         r = self.slack.conversations_history(channel=self.desk_id, oldest=f"{time.time() - 14 * 86400:.6f}", limit=200,
                                              include_all_metadata=True)
@@ -352,11 +386,11 @@ class TextDesk:
             pl = ((m.get("metadata") or {}).get("event_payload") or {})
             if m["ts"] in done:
                 continue
-            if pl.get("kind") == "sms_signup" and pl.get("accounts"):
+            if pl.get("kind") == self.signup_kind and pl.get("accounts"):
                 who = next((u for x in m.get("reactions", []) if x.get("name") in DONE_REACTIONS
                             for u in x.get("users", []) if not m.get("user") or u != m.get("user")), None)
                 if who:
-                    self.approve(pl["phone"], pl["accounts"], pl.get("name", ""), path)
+                    self.approve(pl["phone"], pl["accounts"], pl.get("name", ""))
                     self.slack.chat_update(channel=self.desk_id, ts=m["ts"], text=m["text"] + "\n✅ *Approved*",
                                            metadata={"event_type": KIND, "event_payload": {**pl, "kind": "sms_approved"}})
                     done.add(m["ts"])
@@ -365,24 +399,24 @@ class TextDesk:
             if m.get("bot_id") or m.get("subtype"):
                 continue
             text = m.get("text", "")
-            add, rem = ADD_CMD.match(text), REMOVE_CMD.match(text)
+            add, rem = self.add_cmd.match(text), self.remove_cmd.match(text)
             if rem:
-                ok = remove_phone(path, rem.group(1))
-                self.state.get("pending", {}).pop(phone_key(rem.group(1)), None)
-                self.office(f"📱 {'Removed' if ok else 'No texting set up for'} {rem.group(1).strip()}.", {"kind": "sms_admin"})
+                ok = self.remove_contact(rem.group(1))
+                self.state.get("pending", {}).pop(self.key(rem.group(1)), None)
+                self.office(f"{self.icon} {'Removed' if ok else f'No {self.word}s set up for'} {rem.group(1).strip()}.",
+                            {"kind": "sms_admin"})
                 changed += 1
             elif add:
                 ids = {c.account for c in self.alliant.customers}
                 known = [t for t in re.split(r"[;,\s]+", add.group(2)) if t in ids]
                 if known:
-                    self.approve(add.group(1), known, "", path)
-                    self.office(f"📱 {add.group(1).strip()} can now text for " +
+                    self.approve(add.group(1), known, "")
+                    self.office(f"{self.icon} {add.group(1).strip()} can now {self.word} us for " +
                                 ", ".join(f"{a} {self.name(self.alliant, a)}" for a in known) + ".", {"kind": "sms_admin"})
                 else:  # a name, not an account number: suggest, and let a ✅ confirm which
                     from .parser import identify_customer
                     found = identify_customer(self.claude, add.group(2), self.alliant.customers)
-                    signup_card(self.slack, self.desk_id, self.alliant, add.group(1), "", add.group(2), found.accounts,
-                                by="Office")
+                    self.card(add.group(1), "", add.group(2), found.accounts, by="Office")
                 changed += 1
             else:
                 continue
@@ -390,14 +424,14 @@ class TextDesk:
         self.state["cmds"] = list(done)[-500:]
         return changed
 
-    def approve(self, phone: str, accounts: list[str], name: str, path: str) -> None:
-        key = phone_key(phone)
+    def approve(self, phone: str, accounts: list[str], name: str) -> None:
+        key = self.key(phone)
         p = self.state.get("pending", {}).pop(key, None)
         name = name or (p or {}).get("name", "")
-        now = save_phone(path, "+1" + key, accounts, name)
-        to = (p or {}).get("phone") or "+1" + key
+        now = self.save_contact(self.addr(key), accounts, name)
+        to = (p or {}).get("phone") or self.addr(key)
         names = " and ".join(self.name(self.alliant, a) for a in now)
-        self.send(to, SET_UP.format(names=names))
+        self.send(to, self.set_up.format(names=names))
         for body, sid in (p or {}).get("held", []):  # what they texted before being set up
             self.handle(to, body, sid)
 
@@ -405,7 +439,7 @@ class TextDesk:
         msg = "Quick question: " + questions[0] if len(questions) == 1 else \
             "A few quick questions:\n" + "\n".join(f"- {q}" for q in questions)
         self.send(phone, msg)
-        self.state["convos"][phone_key(phone)] = {"lines": lines + [f"Snow White asked: {plain(msg)}"],
+        self.state["convos"][self.key(phone)] = {"lines": lines + [f"Snow White asked: {plain(msg)}"],
                                                   "asks": (convo["asks"] if convo else 0) + 1, "at": time.time()}
 
     @staticmethod
