@@ -94,6 +94,13 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--gold); o
 .lead .sub { grid-column: 1 / -1; color: var(--muted); font-size: 13px }
 .pill { display: inline-block; font: 700 10.5px/1 var(--font-display); letter-spacing: .06em; text-transform: uppercase; padding: 4px 7px; border-radius: 4px; margin-right: 6px; color: #ffffff; vertical-align: 1px }
 .pill.sw { background: #003746 } .pill.tlg { background: #00596f }
+.sf { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 10px }
+.sfbtn { font: 700 12.5px/1 var(--font-display); letter-spacing: .04em; background: #0176d3; color: #ffffff; border: 0; border-radius: 6px; padding: 10px 14px; cursor: pointer }
+.sfbtn:disabled { opacity: .55; cursor: default }
+.sflabel { font-size: 13px; color: var(--muted) }
+#sfowner { font: 14px var(--font-body); color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 7px 8px }
+#sfmsg { font-size: 13px; color: var(--muted) }
+#sfmsg.ok { color: var(--good); font-weight: 600 }
 .explain { font-size: 13.5px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 14px }
 .explain ul { margin: 6px 0 0; padding-left: 18px }
 @media (prefers-reduced-motion: no-preference) { .msg { animation: in .18s ease-out } @keyframes in { from { transform: translateY(4px) } to { transform: none } } }
@@ -123,6 +130,12 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--gold); o
           <div class="who"><b>Service Desk</b><span>app</span></div>
           <div class="card-body" id="cardbody"><span class="empty">New business goes to Bill in #sales-desk: the company, the business, what they need, how to reach them, and whether they were handed over. Existing customers' service requests go to the office in #service-desk.</span></div>
         </div>
+        <div class="sf" id="sf" hidden>
+          <label for="sfowner" class="sflabel">Give to</label>
+          <select id="sfowner"><option value="0051W000004Fa1pQAC">Bill Dubinsky</option><option value="0051W000005qDzpQAE">Jesse James Tingley</option><option value="005400000016E1ZAAU">Scott Woodland</option></select>
+          <button type="button" class="sfbtn" id="sfbtn">Create in Salesforce</button>
+          <span id="sfmsg"></span>
+        </div>
       </div>
       <div>
         <p class="panel-label">Leads and requests from this demo</p>
@@ -135,7 +148,7 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--gold); o
           <li>On thelaundrygroup.com, say you run a restaurant or need mechanic uniforms.</li>
           <li>Say you're already a customer and need 2 more mats: it becomes a request for the office, not a lead.</li>
           <li>Each chat knows only its own company's products and approved averages. No customer names, prices or accounts.</li>
-          <li>In this demo, leads are saved to this page, not sent to Slack.</li>
+          <li>In this demo, leads are saved to this page, not sent to Slack. "Create in Salesforce" makes a real Lead for the person you pick.</li>
         </ul>
       </div>
     </aside>
@@ -191,7 +204,7 @@ HAND-OFF: restaurants, bars, grocery, auto shops, contractors, offices, schools 
   }
 };
 
-let active = "sw", sample = null, db = null, busy = false, ctl = null;
+let active = "sw", sample = null, db = null, mcp = null, busy = false, ctl = null;
 const state = { sw: { turns: [], saved: false, from: null }, tlg: { turns: [], saved: false, from: null } };
 const el = {};
 
@@ -242,7 +255,63 @@ function slackText(l) {
   lines.push(``, `React ✅ when you've called them.`);
   return lines.join("\n");
 }
-const showCard = l => { document.getElementById("cardbody").textContent = slackText(l); document.getElementById("chan").textContent = l.kind === "service" ? "#service-desk" : "#sales-desk"; };
+let current = null;  // {lead, id}: the lead on the card
+const showCard = (l, id) => {
+  document.getElementById("cardbody").textContent = slackText(l);
+  document.getElementById("chan").textContent = l.kind === "service" ? "#service-desk" : "#sales-desk";
+  current = { lead: l, id: id || l._id || null };
+  const sf = document.getElementById("sf"), btn = document.getElementById("sfbtn"), msg = document.getElementById("sfmsg");
+  sf.hidden = l.kind === "service" || !mcp;
+  msg.className = ""; msg.textContent = l.sf_id ? `In Salesforce: Lead ${l.sf_id}${l.sf_owner ? ", owned by " + l.sf_owner : ""}` : "Creates a real Lead for whoever you pick.";
+  document.getElementById("sfowner").disabled = !!l.sf_id;
+  if (l.sf_id) msg.className = "ok";
+  btn.disabled = !!l.sf_id;
+};
+
+const OWNERS = { "0051W000004Fa1pQAC": "Bill Dubinsky", "0051W000005qDzpQAE": "Jesse James Tingley", "005400000016E1ZAAU": "Scott Woodland" };  // Salesforce users
+const VENDORS = ["Alsco", "Alaska Cleaners", "Co-Op", "Mayfields", "Fireweed Cleaners"];
+const PRODUCTS = [["Uniforms", /uniform|shirt|pant|coverall|coat|scrub|jacket/i], ["Linens", /linen|sheet|napkin|table|gown|blanket|pillow/i],
+  ["Towels", /towel|bar mop|rag|microfiber/i], ["Aprons", /apron/i], ["Mats", /\bmats?\b/i], ["Paper", /paper|toilet|tissue/i]];
+function sfLead(l) {
+  const parts = (l.name || "").trim().split(/\s+/);
+  const last = parts.length > 1 ? parts.pop() : (parts[0] || "(unknown)");
+  const first = parts.length ? parts.join(" ") : "";
+  const text = [l.needs, l.notes, l.transcript].join(" ");
+  const vendor = VENDORS.find(v => (l.current_provider || "").toLowerCase().includes(v.toLowerCase()));
+  const products = PRODUCTS.filter(([, re]) => re.test(text)).map(([p]) => p);
+  const desc = [`[${CO[l.company]?.name || ""}] Website chat lead`, l.handed_from ? `Came in on ${CO[l.handed_from].domain}, handed over` : "",
+    l.business_type ? `Type: ${l.business_type}` : "", l.size ? `Size: ${l.size}` : "", l.needs ? `Needs: ${l.needs}` : "",
+    l.current_provider ? `Uses now: ${l.current_provider}` : "", l.best_time ? `Best time: ${l.best_time}` : "", l.notes ? `Notes: ${l.notes}` : "",
+    "", "Chat:", l.transcript || ""].filter((x, i) => x !== "" || i === 8).join("\n").slice(0, 31000);
+  const body = { FirstName: first, LastName: last, Company: l.business || "(unknown)", City: l.town || "", Phone: l.phone || "", Email: l.email || "",
+    LeadSource: "Website", Status: "Open", OwnerId: document.getElementById("sfowner").value, Description: desc };
+  if (vendor) body.Current_Vendor__c = vendor;
+  if (products.length) body.Products__c = products.join(";");
+  for (const k of Object.keys(body)) if (body[k] === "") delete body[k];
+  return body;
+}
+document.getElementById("sfbtn").addEventListener("click", async () => {
+  if (!current || !mcp) return;
+  const btn = document.getElementById("sfbtn"), msg = document.getElementById("sfmsg");
+  btn.disabled = true; msg.className = ""; msg.textContent = "Creating…";
+  try {
+    const r = await mcp.callTool("Salesforce Mutations", "createSobjectRecord", { "sobject-name": "Lead", body: sfLead(current.lead) }, { cache: false });
+    const p = r.payload || {};
+    const id = p.id || p.Id || (JSON.stringify(r).match(/\b00Q[A-Za-z0-9]{12,15}\b/) || [])[0];
+    if (!id) throw { code: "tool_error", message: "Salesforce didn't return a Lead ID." };
+    const owner = OWNERS[document.getElementById("sfowner").value] || "";
+    msg.className = "ok"; msg.textContent = `Created: Lead ${id}, owned by ${owner} (Salesforce → Leads)`;
+    current.lead = { ...current.lead, sf_id: id, sf_owner: owner };
+    document.getElementById("sfowner").disabled = true;
+    if (db && current.id) { try { await db.doc("leads/" + current.id).update({ sf_id: id, sf_owner: owner }); } catch (e) {} }
+  } catch (e) {
+    btn.disabled = false;
+    msg.textContent = e.code === "needs_reauth" || e.code === "server_not_connected"
+      ? "Connect Salesforce in claude.ai Settings → Connectors, then try again."
+      : e.code === "tool_error" ? "Salesforce refused it: " + String(e.message || "").slice(0, 160)
+      : "Couldn't reach Salesforce. Try again.";
+  }
+});
 
 function tools(k, after) {
   const other = k === "sw" ? "tlg" : "sw";
@@ -347,7 +416,8 @@ function renderLeads(snap) {
     name.append(pill, document.createTextNode((l.business || "Business") + (l.town ? " · " + l.town : "")));
     const t = document.createElement("time"); const d = new Date(l.created_at); t.textContent = isNaN(d) ? "" : d.toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
     const sub = document.createElement("span"); sub.className = "sub"; sub.textContent = [l.name, l.phone || l.email, l.handed_from ? "handed over" : "", l.kind === "service" ? l.request : l.needs].filter(Boolean).join(" · ");
-    b.append(name, t, sub); b.addEventListener("click", () => showCard(l)); box.append(b);
+    if (l.sf_id) sub.textContent += " · in Salesforce";
+    b.append(name, t, sub); b.addEventListener("click", () => showCard(l, doc.id)); box.append(b);
   }
 }
 
@@ -356,6 +426,7 @@ buildSite("sw"); buildSite("tlg");
   if (!window.claude) return;
   sample = await claude.use("sample");
   db = await claude.use("db");
+  mcp = await claude.use("mcp");
   if (db) db.collection("leads").orderBy("created_at", "desc").limit(20).onSnapshot(renderLeads, () => {});
 })();
 </script>
