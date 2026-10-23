@@ -10,7 +10,42 @@
       "mcp__Superhuman_Mail__get_thread",
       "mcp__Superhuman_Mail__list_labels",
       "mcp__Superhuman_Mail__list_splits",
-      "mcp__Superhuman_Mail__update_thread"
+      "mcp__Superhuman_Mail__update_thread",
+
+      "Bash(curl:*)",
+      "Bash(python3:*)",
+      "Bash(cmp:*)",
+      "Bash(diff:*)",
+      "Bash(md5sum:*)",
+      "Bash(wc:*)",
+      "Bash(grep:*)",
+      "Bash(sed:*)",
+      "Bash(cut:*)",
+      "Bash(head:*)",
+      "Bash(cat:*)",
+      "Bash(ls:*)",
+      "Bash(mkdir:*)",
+      "Bash(cp:*)",
+
+      "mcp__NetSuite__ns_runCustomSuiteQL",
+      "mcp__NetSuite__ns_getRecord",
+      "mcp__NetSuite__ns_runReport",
+      "mcp__NetSuite__ns_listAllReports",
+      "mcp__NetSuite__ns_getSubsidiaries",
+      "mcp__NetSuite__ns_createRecord",
+      "mcp__NetSuite__ns_updateRecord",
+
+      "mcp__Dropbox__list_folder",
+      "mcp__Dropbox__search",
+      "mcp__Dropbox__fetch",
+      "mcp__Dropbox__download_link",
+      "mcp__Dropbox__get_file_metadata",
+      "mcp__Dropbox__check_job_status",
+      "mcp__Dropbox__create_file",
+      "mcp__Dropbox__delete",
+
+      "mcp__Slack__slack_schedule_message",
+      "mcp__Slack__slack_send_message"
     ]
   }
 }
