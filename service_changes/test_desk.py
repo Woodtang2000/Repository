@@ -612,3 +612,49 @@ def test_office_is_told_when_claude_cant_be_reached(setup):
     assert "out of credit" in w["text"]
     d.api_trouble(ValueError("slack hiccup"))
     assert len(slack.bot_posts("D1", "api_trouble")) == 1
+
+
+def test_entry_check_flags_tickets_alliant_doesnt_match(setup, monkeypatch):
+    import dataclasses
+    from datetime import datetime, timedelta, timezone
+    slack, d = setup
+    monkeypatch.setattr(desk, "VERIFY_HOUR", 0)
+    slack.say("C1", "U1", "more mats at wendys")
+    d.run_once()
+    slack.say("C1", "U1", "6")
+    d.run_once()
+    [t] = slack.bot_posts("D1", "ticket")
+    assert desk.meta(t)["expect"] == [{"item": "MAT CHARCOAL HEATHER 3X10", "matched": True, "wearer": "", "total": 6,
+                                       "inventory": False, "say": "MAT CHARCOAL HEATHER 3X10"}]
+    slack.say("D1", "U2", "done")
+    d.run_once()
+    assert desk.meta(slack.find("D1", t["ts"]))["entered_by"] == "Sonja Burke"
+
+    # Next morning's export still shows 4: flagged once, on the ticket and in one summary.
+    later = datetime.now(timezone.utc) + timedelta(minutes=1)
+    d.alliant = dataclasses.replace(ALLIANT, exported_at=later)
+    d.run_once()
+    [c] = slack.bot_posts("D1", "entry_check")
+    assert "1 ticket" in c["text"] and "W1 WENDY'S #4412" in c["text"] and "entered by Sonja Burke" in c["text"]
+    assert "MAT CHARCOAL HEATHER 3X10: expected 6, Alliant shows 4 (inventory)" in c["text"]
+    t = slack.find("D1", t["ts"])
+    assert desk.meta(t)["verified"] == "flagged" and "Doesn't match Alliant" in t["text"]
+    d.verified_feed = None
+    d.run_once()
+    assert len(slack.bot_posts("D1", "entry_check")) == 1  # each ticket is checked once
+
+
+def test_entry_check_passes_what_was_entered():
+    from .verify import problems
+    a = Alliant(items={"W1": {"MAT CHARCOAL HEATHER 3X10": 12, "TOWEL SHOP": 0}},
+                autocount={"W1": {"MAT CHARCOAL HEATHER 3X10": 6, "TOWEL SHOP": 0}}, garments={("W1", "7"): {"SHIRT XL": 11}})
+    ok = [{"item": "MAT CHARCOAL HEATHER 3X10", "matched": True, "wearer": "", "total": 6, "say": "mats"},
+          {"item": "TOWEL SHOP", "matched": True, "wearer": "", "total": 0, "say": "shop towels"},
+          {"item": "SHIRT XL", "matched": True, "wearer": "7", "total": 11, "say": "shirts"}]
+    assert problems(a, "W1", ok) == []
+    bad = [{"item": "bar mops", "matched": False, "wearer": "", "total": 20, "say": "bar mops"},
+           {"item": "MAT CHARCOAL HEATHER 3X10", "matched": True, "wearer": "", "total": 0, "say": "mats"},
+           {"new_wearer": "Joey Smith", "say": "new wearer Joey Smith"}]
+    assert problems(a, "W1", bad) == ["bar mops: not on the account in Alliant (expected 20)",
+                                      "MAT CHARCOAL HEATHER 3X10: should be stopped, Alliant still shows 6 (autocount)",
+                                      "New wearer Joey Smith isn't on the account in Alliant"]

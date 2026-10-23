@@ -28,6 +28,7 @@ import urllib.request
 from datetime import datetime, timedelta, timezone
 
 from .checks import check, readback, ticket
+from .verify import expectations
 from .context import ALASKA, Alliant, frequency_label
 from .schema import Category
 
@@ -351,7 +352,8 @@ class TextDesk:
         self.office("\n".join(out + ["", quote, f"{self.icon} Customer {self.word} from {who['name'] or 'customer'} "
                                                  f"{masked} · React ✅ or type done when it's in Alliant"]),
                     {"kind": "ticket", "src_channel": self.word, "src_ts": sid, "readback": rb, "driver": who["name"],
-                     "driver_id": "", "account": acct, "msgs": [], self.to_key: phone, **self.ticket_extra(phone)})
+                     "driver_id": "", "account": acct, "msgs": [], self.to_key: phone, **self.ticket_extra(phone),
+                     "expect": expectations(result) if parsed.category in ACTIONABLE and not result.questions else []})
         self.send(phone, f"Got it, thanks. We'll {'text' if self.word == 'text' else 'email'} you when it's done.")
         self.state["convos"].pop(self.key(phone), None)
 

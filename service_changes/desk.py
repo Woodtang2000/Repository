@@ -31,6 +31,7 @@ import os
 import re
 import sys
 import time
+from datetime import datetime
 
 from .bot import _messages, _name, _office_staff
 from .checks import check, readback, split_by_account, ticket
@@ -44,6 +45,7 @@ DONE_REACTIONS = {"white_check_mark", "heavy_check_mark", "ballot_box_with_check
 DONE_WORDS = re.compile(r"^\s*(done|changed|entered|complete[d]?|made|updated|ok(ay)?|got it|all set|finished)\b[\s.!]*$", re.I)
 MAX_ASKS = 2
 MAX_QUESTIONS = 3  # per message to a driver; the rest come up again once they answer
+VERIFY_HOUR = 7  # entry check posts once the morning's Alliant data is in, from this hour (Alaska)
 STALE_HOURS = 36  # the Alliant feed runs nightly; older than this means it has stopped (e.g. the Mac restarted)
 MAX_LOOKUPS_PER_DAY = 15  # per person: past this the bot stops answering and tells the office
 ACTIONABLE = {Category.item_change, Category.wearer_change, Category.hold_or_closure, Category.special_order}
@@ -329,9 +331,11 @@ class Desk:
                 if parsed.category == Category.today_only else "React ✅ or type done when it's in Alliant"
                 if parsed.category in ACTIONABLE else "React ✅ when it's handled")
         text = "\n".join(lines + ["", _quote(_short(src.get("text", ""), 300)), f"<{link}|#{route_name}> · {done}"])
+        from .verify import expectations
+        expect = expectations(result) if parsed.category in ACTIONABLE and not result.questions else []
         new = self.post(self.desk_id, text, {"kind": "ticket", "src_channel": channel, "src_ts": src["ts"],
                                              "readback": rb, "driver": author, "driver_id": src.get("user"),
-                                             "account": parsed.account_number or "", "msgs": replies})
+                                             "account": parsed.account_number or "", "msgs": replies, "expect": expect})
         for old_ts in replaces:
             old = self.desk_msgs.get(old_ts)
             if old:
@@ -516,7 +520,39 @@ class Desk:
             self.post(p["src_channel"], msg, {"kind": "readback", "src_ts": p["src_ts"], "driver_id": p.get("driver_id"),
                                               "msgs": p.get("msgs", [])})
         self.slack.chat_update(channel=self.desk_id, ts=t["ts"], text=t["text"] + f"\n✅ *Entered by {who}* · readback sent",
-                               metadata={"event_type": KIND, "event_payload": {**p, "kind": "done"}})
+                               metadata={"event_type": KIND, "event_payload": {**p, "kind": "done", "done_at": time.time(),
+                                                                               "entered_by": who}})
+
+    def verify_pass(self, now: float) -> None:
+        """The morning after tickets are ✅'d, check them against the new Alliant export (verify.py) and tell the
+        office about any that don't match. Once per export, from 7 AM; each ticket is checked once."""
+        from .verify import problems
+        exported = self.alliant.exported_at
+        if exported is None or datetime.fromtimestamp(now, ALASKA).hour < VERIFY_HOUR \
+                or getattr(self, "verified_feed", None) == exported.timestamp():
+            return
+        flagged = []
+        for t in _messages(self.slack, self.desk_id, now - 8 * 86400, include_all_metadata=True):
+            p = meta(t) or {}
+            if p.get("kind") != "done" or p.get("verified") or not p.get("expect") or not p.get("account") \
+                    or not p.get("done_at") or p["done_at"] > exported.timestamp():
+                continue
+            found = problems(self.alliant, p["account"], p["expect"])
+            text = t["text"] + ("\n⚠️ *Doesn't match Alliant*: " + "; ".join(found) if found else "")
+            self.slack.chat_update(channel=self.desk_id, ts=t["ts"], text=text, metadata={
+                "event_type": KIND, "event_payload": {**p, "verified": "flagged" if found else "ok"}})
+            if found:
+                flagged.append((t, p, found))
+        if flagged:
+            lines = [f"🔎 *Entry check*: {len(flagged)} ticket{'s' if len(flagged) > 1 else ''} from the last few days "
+                     "don't match Alliant this morning. Please fix them in Alliant:"]
+            for t, p, found in flagged:
+                link = self.slack.chat_getPermalink(channel=self.desk_id, message_ts=t["ts"])["permalink"]
+                cust = next((c.name for c in self.alliant.customers if c.account == p["account"]), "")
+                by = f" · entered by {p['entered_by']}" if p.get("entered_by") else ""
+                lines.append(f"• <{link}|{p['account']} {cust}>{by}\n    " + "\n    ".join(found))
+            self.post(self.desk_id, "\n".join(lines), {"kind": "entry_check"})
+        self.verified_feed = exported.timestamp()
 
     # ---- one pass -------------------------------------------------------------------------------------------
 
@@ -550,6 +586,7 @@ class Desk:
         now = time.time()
         counts = {"asked": 0, "ticket": 0, "read": 0, "readback": 0, "answered": 0}
         self.check_stale(now)
+        self.verify_pass(now)
         open_t = self.desk_pass(now - ticket_days * 86400, counts)
         for name, cid in sorted(self.routes.items()):
             if only is None or cid in only:
@@ -643,6 +680,7 @@ class Desk:
                 now = time.time()
                 with desk_lock:
                     self.check_stale(now)
+                    self.verify_pass(now)
                     # Route passes share an office pass from the last few seconds: during a burst of drivers they
                     # don't queue up behind each other here. Office events (✅, "done") always get a fresh one.
                     if ch not in names or time.time() - fresh["at"] > 3:
