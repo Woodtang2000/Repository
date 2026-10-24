@@ -71,3 +71,19 @@ def test_route_facts():
     assert "Stop order Thu: 3. 1300-1-00000 KOBUK COFFEE, 22. 1205-1-00007 MIDAS 7" in f
     assert "Stop order Mon: 5. 1205-1-00007 MIDAS 7" in f
     assert route_facts(a, "9") == ""
+
+
+def test_barcode_facts(tmp_path):
+    write(tmp_path)
+    (tmp_path / "garment_scans.csv").write_text(
+        "barcode,cust_code,wearer,status,scan_datetime,scan_text,scan_type,route\n"
+        "100001,1205-1-00007,12,I,2026-10-17 06:00:00,,Count Station,4\n"
+        "100001,1205-1-00007,12,O,2026-10-20 05:00:00,,Count Station,4\n"
+        "100001,1205-1-00007,12,U,2026-10-21 10:15:00,MIDAS 4,Handheld,4\n")
+    from .context import barcode_facts
+    a = Alliant.from_dir(str(tmp_path))
+    f = barcode_facts(a, ["100001", "999"])
+    assert f.startswith('Garment 100001 SHT NAVY L/S L: custom scan "MIDAS 4" 2026-10-21 10:15:00; 3 washes; in service since 2026-10-01; last delivered 2026-10-21')
+    assert "Belongs to: 1205-1-00007 MIDAS 7, wearer #12 Joey Smith" in f
+    lines = f.splitlines()
+    assert lines[3] == '  - 2026-10-21 10:15:00: custom scan "MIDAS 4" (Handheld)' and "in soil" in lines[5]

@@ -75,6 +75,8 @@ class Alliant:
     # garments_in_service.csv, and customer purchase-order lines by account from purchase_orders.csv.
     in_service: dict[tuple[str, str], list[dict]] = field(default_factory=dict)
     orders: dict[str, list[dict]] = field(default_factory=dict)
+    by_barcode: dict[str, dict] = field(default_factory=dict)  # barcode -> its garments_in_service row
+    scans: dict[str, list[tuple]] = field(default_factory=dict)  # barcode -> (datetime, status, text, scan type), 60 days
 
     def on_hold(self, account: str | None, item: str | None = None, sku: str | None = None) -> list[dict]:
         """Holds on this account, or on this item / SKU on it."""
@@ -111,6 +113,15 @@ class Alliant:
                 for row in csv.DictReader(fh):
                     row = {k: (v or "").strip() for k, v in row.items() if k}
                     data.in_service.setdefault((row.get("cust_code", ""), row.get("wearer", "")), []).append(row)
+                    if row.get("barcode"):
+                        data.by_barcode[row["barcode"]] = row
+        if f("garment_scans.csv"):
+            with open(f("garment_scans.csv"), newline="", encoding="utf-8-sig") as fh:
+                for row in csv.DictReader(fh):
+                    b = (row.get("barcode") or "").strip()
+                    if b:
+                        data.scans.setdefault(b, []).append(tuple((row.get(k) or "").strip() for k in
+                                                                  ("scan_datetime", "status", "scan_text", "scan_type")))
         if f("purchase_orders.csv"):
             # Open lines going back to 2006 are dead orders: keep the last year only (agreed with the Mac session).
             since = ((data.exported_at or datetime.now(ALASKA)).date() - timedelta(days=PO_DAYS)).isoformat()
@@ -230,6 +241,39 @@ def _num(v: str) -> int:
         return 0
 
 
+def garment_line(r: dict) -> str:
+    """One barcoded garment: what it is, its last scan, washes and last delivery."""
+    st = GARMENT_STATUS.get(r.get("status", ""), f"status {r.get('status', '')}")
+    txt = f' "{r["scan_text"]}"' if r.get("scan_text") else ""
+    when = r.get("scan_date") or r.get("status_date", "")
+    size = " ".join(x for x in (r.get("size_a"), r.get("size_b")) if x)
+    extra = [f"{r['washes']} washes" if r.get("washes") else "", f"{r['repairs']} repairs" if _num(r.get("repairs")) else "",
+             f"in service since {r['in_service_date']}" if r.get("in_service_date") else "",
+             f"last delivered {r['last_delivered']}" if r.get("last_delivered") else ""]
+    return (f"{r.get('barcode', '')} {r.get('description') or r.get('sku', '')} {size}: {st}{txt} {when}".rstrip()
+            + "".join(f"; {x}" for x in extra if x))
+
+
+def barcode_facts(alliant: "Alliant", barcodes: list[str]) -> str:
+    """Garments looked up by barcode, with whose they are and their recent scans (garment_scans.csv)."""
+    out = []
+    for b in barcodes:
+        r = alliant.by_barcode.get(b)
+        if not r:
+            continue
+        acct, wr = r.get("cust_code", ""), r.get("wearer", "")
+        cust = next((c.name for c in alliant.customers if c.account == acct), "")
+        w = next((w.name for w in alliant.wearers.get(acct, []) if w.employee == wr), "")
+        out.append(f"Garment {garment_line(r)}\n  Belongs to: {acct} {cust}, wearer #{wr} {w}".rstrip())
+        scans = alliant.scans.get(b, [])
+        if scans:
+            out.append("  Recent scans (newest first; status, free text, where scanned):")
+            for when, st, txt, kind in sorted(scans, reverse=True)[:8]:
+                out.append(f"  - {when}: {GARMENT_STATUS.get(st, 'status ' + st)}" + (f' "{txt}"' if txt else "")
+                           + (f" ({kind})" if kind else ""))
+    return "\n".join(out)
+
+
 def garment_facts(alliant: "Alliant", account: str, question: str = "") -> str:
     """Barcoded garments and recent garment orders for the office: each garment's last scan, and PO lines with what's
     been received. Detail for the wearers the question names (or everyone on a small account), else a summary."""
@@ -252,13 +296,7 @@ def garment_facts(alliant: "Alliant", account: str, question: str = "") -> str:
             if e in detail and lines < MAX_GARMENT_LINES:
                 out.append(f"- Wearer {who(e)}:")
                 for r in rows:
-                    st = GARMENT_STATUS.get(r.get("status", ""), f"status {r.get('status', '')}")
-                    txt = f' "{r["scan_text"]}"' if r.get("scan_text") else ""
-                    when = r.get("scan_date") or r.get("status_date", "")
-                    size = " ".join(x for x in (r.get("size_a"), r.get("size_b")) if x)
-                    last = f"; last delivered {r['last_delivered']}" if r.get("last_delivered") else ""
-                    out.append(f"  - {r.get('barcode', '')} {r.get('description') or r.get('sku', '')} {size}: {st}{txt} "
-                               f"{when}{last}".rstrip())
+                    out.append("  - " + garment_line(r))
                     lines += 1
             else:
                 counts: dict[str, int] = {}

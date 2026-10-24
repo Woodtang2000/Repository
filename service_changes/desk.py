@@ -491,6 +491,14 @@ class Desk:
                       and float(h["ts"]) - float(b["ts"]) < 900), None)
         if asked:
             text = f"{meta(asked)['q']}\nService Desk asked: {asked.get('text', '')}\nAnswer: {text}"
+        codes = [b for b in re.findall(r"\b\d{5,14}\b", text) if b in self.alliant.by_barcode]
+        if codes:  # "how many washes on 1234567?"
+            from .context import barcode_facts
+            ans = answer_lookup(self.claude, text, barcode_facts(self.alliant, codes[:10]),
+                                asker="office staff member")
+            as_of = f" _(Alliant as of {self.alliant.as_of})_" if self.alliant.as_of else ""
+            self.post(self.desk_id, f"<@{user}> {ans.answer}{as_of}"[:3900], {"kind": "answer", "barcodes": codes[:10]})
+            return True
         parsed = parse_message(self.claude, text, self.desk_name, h["ts"], self.alliant, author=self.name(user),
                                office=True)
         if parsed.category != Category.lookup:
@@ -515,6 +523,18 @@ class Desk:
             self.post(self.desk_id, f"<@{user}> *{len(group)} accounts*: {ans.answer}{as_of}"[:3900],
                       {"kind": "answer", "accounts": len(group)})
             return True
+        if not parsed.account_number:  # "show me Joey Smith's garments": find the wearer on any account
+            words = set(re.findall(r"[a-z]+", text.lower()))
+            found = [(acct, w) for acct, ws in self.alliant.wearers.items() for w in ws
+                     if len(w.first) > 1 and len(w.last) > 1 and w.first.lower() in words and w.last.lower() in words]
+            if len(found) == 1:
+                parsed.account_number = found[0][0]
+            elif 2 <= len(found) <= 6:
+                names = {c.account: c.name for c in self.alliant.customers}
+                self.post(self.desk_id, f"<@{user}> Which one? " + "; ".join(
+                    f"{w.name} (#{w.employee}) at {acct} {names.get(acct, '')}" for acct, w in found),
+                    {"kind": "office_ask", "user": user, "q": text})
+                return True
         if not parsed.account_number:
             qs = parsed.questions_for_driver or ["Which customer? Add the account number or location."]
             self.post(self.desk_id, f"<@{user}> " + " ".join(qs), {"kind": "office_ask", "user": user, "q": text})
