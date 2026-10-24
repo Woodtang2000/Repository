@@ -101,3 +101,28 @@ def test_garment_check_flags_extra_inventory_with_nothing_on_order(tmp_path):
     assert (f["wearer"], f["name"], f["item"], f["extra"], f["on_order"], f["barcodes_in_service"]) == \
         ("12", "Joey Smith", "PNT NAVY", 6, 0, 1)
     assert "stop/deassign the old garments" in f["issue"]
+
+
+def test_weekly_stockroom_post(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from . import desk
+    write(tmp_path)
+    (tmp_path / "garments.csv").write_text("account,employee,sku,size,item,quantity,autocount\n"
+                                           "1205-1-00007,12,2-21-01,34 32,PNT NAVY,11,5\n")
+    posts = []
+
+    def post(cid, text, payload, **kw):
+        posts.append((cid, text, kw))
+        return {"ts": str(len(posts))}
+    d = SimpleNamespace(channels={"stockroom": "CSR"}, data_dir=str(tmp_path), alliant=Alliant.from_dir(str(tmp_path)),
+                        slack=None, stockroom_lead="UANA", post=post)
+    monday_8am = datetime(2026, 10, 26, 8, 0, tzinfo=ALASKA).timestamp()
+    desk.Desk.stockroom_pass(d, monday_8am - 3600 * 2)  # before 7: nothing
+    assert posts == []
+    desk.Desk.stockroom_pass(d, monday_8am)
+    desk.Desk.stockroom_pass(d, monday_8am + 600)  # once a week
+    (cid, head, _), (_, body, kw) = posts
+    assert cid == "CSR" and head.startswith("🧺 <@UANA> *Weekly garment check*") and "*1 garment line*" in head
+    assert kw == {"thread_ts": "1"} and "#12 Joey Smith · PNT NAVY 34 32: inventory 11, delivered 5, on order 0" in body
+    desk.Desk.stockroom_pass(d, monday_8am + 86400)  # Tuesday: nothing
+    assert len(posts) == 2

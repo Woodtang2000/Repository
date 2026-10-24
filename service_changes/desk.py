@@ -46,6 +46,8 @@ DONE_WORDS = re.compile(r"^\s*(done|changed|entered|complete[d]?|made|updated|ok
 MAX_ASKS = 2
 MAX_QUESTIONS = 3  # per message to a driver; the rest come up again once they answer
 VERIFY_HOUR = 7  # entry check posts once the morning's Alliant data is in, from this hour (Alaska)
+STOCKROOM = os.environ.get("STOCKROOM_CHANNEL", "stockroom")  # Ana's channel: weekly garment data checks
+STOCKROOM_DAY, STOCKROOM_LEAD = 0, "Ana Faamita"  # Mondays, tagging the stockroom manager
 STALE_HOURS = 36  # the Alliant feed runs nightly; older than this means it has stopped (e.g. the Mac restarted)
 MAX_LOOKUPS_PER_DAY = 15  # per person: past this the bot stops answering and tells the office
 ACTIONABLE = {Category.item_change, Category.wearer_change, Category.hold_or_closure, Category.special_order}
@@ -688,6 +690,46 @@ class Desk:
             self.post(self.desk_id, "\n".join(lines), {"kind": "entry_check"})
         self.verified_feed = exported.timestamp()
 
+    def stockroom_pass(self, now: float) -> None:
+        """Mondays from 7 AM, once a week: post the garment check (garment_check.py) in #stockroom: one short line in
+        the channel, tagging the stockroom manager, and the list in its thread, so others in the channel aren't flooded."""
+        cid = self.channels.get(STOCKROOM)
+        local = datetime.fromtimestamp(now, ALASKA)
+        if not cid or local.weekday() != STOCKROOM_DAY or local.hour < VERIFY_HOUR:
+            return
+        week = local.strftime("%G-W%V")
+        mark = os.path.join(self.data_dir, "stockroom_posted.txt")
+        try:
+            if open(mark).read().strip() == week:
+                return
+        except OSError:
+            pass
+        with open(mark, "w") as f:  # first, so a failure below can't post twice
+            f.write(week)
+        from .alliant_help import find_user
+        from .garment_check import findings
+        rows = findings(self.data_dir, self.alliant)
+        if not hasattr(self, "stockroom_lead"):
+            self.stockroom_lead = find_user(self.slack, STOCKROOM_LEAD)
+        tag = f"<@{self.stockroom_lead}> " if self.stockroom_lead else ""
+        as_of = f" (Alliant as of {self.alliant.as_of})" if self.alliant.as_of else ""
+        if not rows:
+            self.post(cid, f"🧺 *Weekly garment check*{as_of}: ✅ every wearer's garment inventory matches what's "
+                           "delivered or what's on order.", {"kind": "stockroom_check", "count": 0})
+            return
+        head = self.post(cid, f"🧺 {tag}*Weekly garment check*{as_of}: *{len(rows)} garment line"
+                              f"{'s' if len(rows) != 1 else ''}* with more in inventory than delivered and nothing on "
+                              "order. Old garments that were never stopped/deassigned. List in the thread 👇",
+                         {"kind": "stockroom_check", "count": len(rows)})
+        lines = [f"• *{r['account']}* {r['customer']} · #{r['wearer']} {r['name']} · {r['item']} {r['size']}: "
+                 f"inventory {r['inventory']}, delivered {r['auto_count']}, on order {r['on_order']}, "
+                 f"{r['barcodes_in_service']} barcodes in service" for r in rows[:40]]
+        if len(rows) > 40:
+            lines.append(f"…and {len(rows) - 40} more (full list on the server: `python -m service_changes.garment_check`)")
+        lines.append("For each: stop/deassign the old garments (charge loss if they won't come back), or fix the "
+                     "delivered count if that's what's wrong. React ✅ on a line's reply when it's fixed.")
+        self.post(cid, "\n".join(lines)[:3900], {"kind": "stockroom_list"}, thread_ts=head["ts"])
+
     # ---- one pass -------------------------------------------------------------------------------------------
 
     def check_stale(self, now: float) -> None:
@@ -845,6 +887,7 @@ class Desk:
                 with desk_lock:
                     self.check_stale(now)
                     self.verify_pass(now)
+                    self.stockroom_pass(now)
                     # Route passes share an office pass from the last few seconds: during a burst of drivers they
                     # don't queue up behind each other here. Office events (✅, "done") always get a fresh one.
                     if ch not in names or time.time() - fresh["at"] > 3:
