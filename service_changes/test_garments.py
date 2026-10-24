@@ -87,3 +87,17 @@ def test_barcode_facts(tmp_path):
     assert "Belongs to: 1205-1-00007 MIDAS 7, wearer #12 Joey Smith" in f
     lines = f.splitlines()
     assert lines[3] == '  - 2026-10-21 10:15:00: custom scan "MIDAS 4" (Handheld)' and "in soil" in lines[5]
+
+
+def test_garment_check_flags_extra_inventory_with_nothing_on_order(tmp_path):
+    from .garment_check import findings
+    write(tmp_path)
+    (tmp_path / "garments.csv").write_text(
+        "account,employee,sku,size,item,quantity,autocount\n"
+        "1205-1-00007,12,2-01-01,L,SHT NAVY L/S,11,5\n"    # 6 extra, PO 900 has 6 open: waiting, fine
+        "1205-1-00007,12,2-21-01,34 32,PNT NAVY,11,5\n"    # 6 extra, nothing on order: flag
+        "1205-1-00007,13,2-21-01,30 30,PNT NAVY,11,11\n")  # matches
+    [f] = findings(str(tmp_path))
+    assert (f["wearer"], f["name"], f["item"], f["extra"], f["on_order"], f["barcodes_in_service"]) == \
+        ("12", "Joey Smith", "PNT NAVY", 6, 0, 1)
+    assert "stop/deassign the old garments" in f["issue"]

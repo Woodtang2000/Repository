@@ -93,7 +93,7 @@ def setup():
 
 FEED_FILES = ["customers.csv", "customer_cards.csv", "current_items.csv", "garments.csv", "wearers.csv", "holds.csv"]
 # Garment tracking (barcode status, custom-scan text, open customer POs): used once the Mac export writes them.
-OPTIONAL = {"holds.csv", "garments_in_service.csv", "purchase_orders.csv", "garment_scans.csv"}
+OPTIONAL = {"holds.csv", "garments_in_service.csv", "purchase_orders.csv", "garment_scans.csv", "open_work_orders.csv"}
 FEED_REQUIRED = {"customers.csv": {"account", "name", "route", "service_days"},
                  "customer_cards.csv": {"account", "name"},
                  "current_items.csv": {"account", "item", "quantity", "autocount", "sku"},
