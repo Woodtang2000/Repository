@@ -7,7 +7,8 @@ and reports anything that makes a domain look used, or puts it at risk of being 
 
 | Setting | Why |
 |---|---|
-| Show nothing: no `@` A record, no GoDaddy parked page | GoDaddy parks new domains on an ad page by default. Ads on a page at another organization's name are the main evidence of bad faith in a UDRP complaint or a cybersquatting (ACPA) claim |
+| Show nothing: no website, parked page or forwarding (`@`/`www` A, AAAA, CNAME) | GoDaddy parks new domains on an ad page by default. Ads on a page at another organization's name are the main evidence of bad faith in a UDRP complaint or a cybersquatting (ACPA) claim |
+| No email (no MX) | Mail meant for the company the name matches would land in your account |
 | No for-sale listing (Afternic, Sedo, Dan) | An offer to sell to the name holder or its competitor is the other main evidence of bad faith |
 | Auto-renew on | A lapsed domain goes to whoever buys it next |
 | Privacy on, transfer lock on | Keeps the owner details private and the domain from being moved out |
@@ -30,8 +31,10 @@ hold" of a well-known name (Category A and B). Those categories are worth review
 | To | Run |
 |---|---|
 | Audit (changes nothing) | `mkdir -p domains/out && python -m domains.audit > domains/out/audit.md` |
-| See which parking records would go | `python -m domains.audit --fix` |
-| Delete them (domains then show nothing) | `python -m domains.audit --fix --apply` |
+| See what going dark would change | `python -m domains.audit --dark` |
+| Take every domain dark and lock it | `python -m domains.audit --dark --apply` |
 
-`--apply` only deletes records that point to GoDaddy parking addresses or parking hosts. Auto-renew, privacy,
-lock and marketplace listings are reported, not changed: fix those in GoDaddy (My Products → the domain).
+`--apply` deletes the website, forwarding and email records and turns the transfer lock on; nameservers, TXT and the
+registration stay. The public registration lookup still shows that each domain exists (with privacy on, not who
+owns it). Auto-renew, privacy and marketplace listings are reported, not changed: fix those in GoDaddy (My
+Products → the domain).

@@ -1,12 +1,15 @@
-"""Read-only audit of every domain in the GoDaddy account, for holding domains without using them publicly
-(Scott, 2026-10-24: "I bought all these to just hold real estate not to use them publicly").
+"""Audit of every domain in the GoDaddy account, for holding domains without using them publicly
+(Scott, 2026-10-24: "I bought all these to just hold real estate not to use them publicly"; "make them all
+disappear on the internet").
 
   python -m domains.audit > domains/out/audit.md
-  python -m domains.audit --fix              # list the parking records it would delete, change nothing
-  python -m domains.audit --fix --apply      # delete them
+  python -m domains.audit --dark             # list what going dark would change, change nothing
+  python -m domains.audit --dark --apply     # do it
 
-A held domain should show nothing: no GoDaddy parked page (it carries ads, and ads on a page at someone else's
-name are what a UDRP panel reads as bad faith), no for-sale listing, auto-renew on, privacy on, locked.
+Going dark deletes every record that makes the domain answer: A/AAAA on '@' and 'www', the 'www' CNAME (so no
+site, parked page or forwarding) and MX (so no email arrives addressed to the company the name matches), and turns
+the transfer lock on. Nameservers, TXT and the registration itself stay. Auto-renew and privacy are reported, not
+changed: renewing costs money, and GoDaddy sells privacy for some extensions.
 Grouping comes from domains/categories.csv (A institutional, B competitors, C other Alaskan); anything not listed
 there shows under "Not categorized"."""
 import argparse
@@ -23,6 +26,8 @@ PARKING_IPS = {"34.102.136.180", "184.168.131.241", "3.33.130.190", "15.197.148.
 PARKING_PREFIXES = ("50.63.202.",)
 # Nameservers or CNAME targets that mean a parking or marketplace (for sale) page.
 PARKING_HOSTS = ("park", "afternic", "sedo", "dan.com", "bodis", "above.com", "undeveloped", "lander")
+# The records a dark domain doesn't have.
+LIVE = [("A", "@"), ("AAAA", "@"), ("A", "www"), ("AAAA", "www"), ("CNAME", "www"), ("MX", "@")]
 GROUPS = {"A": "Category A: High-profile / institutional matches", "B": "Category B: Direct industry competitors",
           "C": "Category C: Other Alaskan commercial assets", "": "Not categorized"}
 RENEW_WARN_DAYS = 60
@@ -44,25 +49,25 @@ def categories(path: str) -> dict[str, str]:
 
 
 def inspect(d: dict, today: date) -> dict:
-    """One domain's row: settings, '@' A and 'www' CNAME records, the problems found and the records to delete."""
+    """One domain's row: settings, '@' A and 'www' CNAME records, the problems found, and what going dark deletes."""
     name = d["domain"]
-    a = godaddy.records(name, "A", "@")
-    cname = godaddy.records(name, "CNAME", "www")
+    recs = godaddy.records(name)
     ns = d.get("nameServers") or []
     expires = (d.get("expires") or "")[:10]
-    flags, fix = [], []
-    if a is None:
+    get = lambda t, h: [r["data"] for r in recs or [] if r["type"] == t and r["name"] == h]
+    flags = []
+    if recs is None:
         flags.append("DNS not at GoDaddy (" + ", ".join(ns[:2]) + "): check it there")
     else:
-        bad = [r for r in a if parked_ip(r["data"])]
-        if bad:
-            flags.append("PARKED: @ points to GoDaddy parking " + ", ".join(r["data"] for r in bad))
-            fix.append(("A", "@"))
-        elif a:
-            flags.append("LIVE: @ points to " + ", ".join(r["data"] for r in a))
-    if cname and any(parked_host(r["data"]) for r in cname):
-        flags.append("PARKED: www CNAME to " + ", ".join(r["data"] for r in cname))
-        fix.append(("CNAME", "www"))
+        web = get("A", "@") + get("AAAA", "@")
+        if any(parked_ip(ip) for ip in web):
+            flags.append("PARKED: @ points to GoDaddy parking/forwarding " + ", ".join(web))
+        elif web:
+            flags.append("LIVE: @ points to " + ", ".join(web))
+        if any(parked_host(h) for h in get("CNAME", "www")):
+            flags.append("PARKED: www CNAME to " + ", ".join(get("CNAME", "www")))
+        if get("MX", "@"):
+            flags.append("receives email (MX " + ", ".join(get("MX", "@")) + ")")
     if any(parked_host(n) for n in ns):
         flags.append("FOR SALE / PARKING nameservers " + ", ".join(ns) + ": delist in the marketplace")
     if not d.get("renewAuto"):
@@ -75,14 +80,17 @@ def inspect(d: dict, today: date) -> dict:
         flags.append("transfer lock OFF")
     if d.get("status") not in (None, "ACTIVE"):
         flags.append("status " + d["status"])
+    dark = [(t, h) for t, h in LIVE if get(t, h)]
     return {"domain": name, "expires": expires, "renew": "on" if d.get("renewAuto") else "OFF",
-            "privacy": "on" if d.get("privacy") else "OFF", "a": "n/a" if a is None else ", ".join(r["data"] for r in a) or "none",
-            "www": "n/a" if cname is None else ", ".join(r["data"] for r in cname) or "none", "flags": flags, "fix": fix}
+            "privacy": "on" if d.get("privacy") else "OFF",
+            "a": "n/a" if recs is None else ", ".join(get("A", "@")) or "none",
+            "www": "n/a" if recs is None else ", ".join(get("CNAME", "www")) or "none", "flags": flags,
+            "dark": dark, "lock": not d.get("locked")}
 
 
 def report(rows: list[dict], cats: dict[str, str], today: date) -> str:
     out = [f"# GoDaddy domain audit, {today.isoformat()}", "",
-           f"{len(rows)} domains. {sum(1 for r in rows if r['fix'])} parked; "
+           f"{len(rows)} domains. {sum(1 for r in rows if r['dark'] or r['lock'])} not dark yet; "
            f"{sum(1 for r in rows if not r['flags'])} clean (nothing showing, renewing, private, locked).", ""]
     for key, title in GROUPS.items():
         group = [r for r in rows if cats.get(r["domain"].lower(), "") == key]
@@ -91,7 +99,7 @@ def report(rows: list[dict], cats: dict[str, str], today: date) -> str:
         out += [f"## {title}", "", "| Domain | Expires | Auto-renew | Privacy | @ A | www CNAME | Flags |",
                 "|---|---|---|---|---|---|---|"]
         out += [f"| {r['domain']} | {r['expires']} | {r['renew']} | {r['privacy']} | {r['a']} | {r['www']} | "
-                f"{'; '.join(r['flags']) or 'ok'} |" for r in sorted(group, key=lambda r: r["domain"])]
+                f"{'; '.join(r['flags']) or 'ok'} |" for r in sorted(group, key=lambda r: (r["expires"], r["domain"]))]
         out.append("")
     return "\n".join(out)
 
@@ -99,23 +107,31 @@ def report(rows: list[dict], cats: dict[str, str], today: date) -> str:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--categories", default=os.path.join(os.path.dirname(__file__), "categories.csv"))
-    ap.add_argument("--fix", action="store_true", help="list the parking records to delete")
-    ap.add_argument("--apply", action="store_true", help="with --fix: delete them")
+    ap.add_argument("--dark", action="store_true", help="list what going dark would delete and lock")
+    ap.add_argument("--apply", action="store_true", help="with --dark: do it")
     args = ap.parse_args(argv)
     today = datetime.now().date()
     rows = [inspect(d, today) for d in godaddy.domains()]
-    if not args.fix:
+    if not args.dark:
         print(report(rows, categories(args.categories), today))
         return 0
-    todo = [(r["domain"], t, h) for r in rows for t, h in r["fix"]]
-    for name, t, h in todo:
-        if args.apply:
-            godaddy.delete_records(name, t, h)
-        print(f"{'deleted' if args.apply else 'would delete'} {t} {h} on {name}")
-    if not todo:
-        print("No parking records.")
+    verb = "" if args.apply else "would "
+    n = 0
+    for r in rows:
+        for t, h in r["dark"]:
+            if args.apply:
+                godaddy.delete_records(r["domain"], t, h)
+            print(f"{verb}delete {t} {h} on {r['domain']}")
+            n += 1
+        if r["lock"]:
+            if args.apply:
+                godaddy.lock(r["domain"])
+            print(f"{verb}lock {r['domain']}")
+            n += 1
+    if not n:
+        print("All domains are already dark and locked.")
     elif not args.apply:
-        print(f"\n{len(todo)} records. Nothing changed; run again with --apply to delete them.", file=sys.stderr)
+        print(f"\n{n} changes. Nothing changed; run again with --apply to make them.", file=sys.stderr)
     return 0
 
 
