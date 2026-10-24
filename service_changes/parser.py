@@ -72,6 +72,9 @@ Classify the message and extract every change in it. Rules:
   "what's their stop number?", "when do they get mats?") is lookup with no changes: fill the customer and account and
   put the question in summary. A question that asks the office to do something ("can you call them?") is not lookup.
   After Service Desk answered a lookup, a follow-up ("and shop towels?") is another lookup for the same customer.
+  Questions about where garments are or whether they've been ordered or came in ("do we have garments on the way for
+  new employee Dave?", "where are Joey's shirts?", "did the new coats come in?") are lookup too: put the wearer and
+  the question in summary. If the driver also asks the office to do something, keep that in summary as well.
 - A request to have the plant pull garments for repair or a closer look is service_code with NO changes: "put a
   service code on 1234567, torn pocket", "Joey's shirts need buttons", "audit all of Juan's garments", "inspect
   every garment at Midas 7, they look worn". Fill service: scope garment (barcodes given), wearer (all of one

@@ -301,6 +301,9 @@ class Desk:
                                     f"(<{link}|#{route_name}>)", {"kind": "lookup_limit", "driver_id": src.get("user")})
             return "answered"
         facts = "\n\n".join(account_facts(self.alliant, a) for a in group) if group else account_facts(self.alliant, acct)
+        if not group:  # "are Dave's garments on the way?": last scans and garment orders (no prices in either)
+            from .context import garment_facts
+            facts += "\n" + garment_facts(self.alliant, acct, f"{src.get('text', '')} {parsed.summary or ''}")
         ans = answer_lookup(self.claude, parsed.summary or src.get("text", ""), facts)
         as_of = f" _(Alliant as of {self.alliant.as_of})_" if self.alliant.as_of else ""
         text = f"<@{src.get('user')}> *{name}*: {ans.answer}{as_of}"
