@@ -431,3 +431,19 @@ def test_new_wearer_gets_the_standard_quantity():
     assert p.changes[0].quantity == 13 and "13 like most wearers here" in ticket(r, a)
     p.changes[0].quantity = 7  # the driver said 7: keep it
     assert check(p, a).changes[0].change.quantity == 7
+
+
+def test_price_type_21_inventory_follows_the_auto_count():
+    from .checks import check, ticket
+    from .context import Alliant, Customer
+    from .schema import Action, Category, Change, ParsedMessage
+    a = Alliant(customers=[Customer("K1", "KOBUK", "4", ["Tue"])],
+                items={"K1": {"MAT 3X5": 8, "BAR MOP": 40, "APRON": 7, "TOWEL": 10}},
+                autocount={"K1": {"MAT 3X5": 4, "BAR MOP": 40, "APRON": 4, "TOWEL": 10}},
+                price_type={"K1": {"MAT 3X5": "21", "BAR MOP": "21", "APRON": "21", "TOWEL": "8"}})
+    t = lambda item, n: ticket(check(ParsedMessage(category=Category.item_change, account_number="K1", summary="s",
+                                                   changes=[Change(action=Action.add, item=item, quantity=n)]), a), a)
+    assert "4 → *6*" in t("MAT 3X5", 2) and "PT 21: inventory 8 → *12* too (stays double)" in t("MAT 3X5", 2)
+    assert "PT 21: inventory 40 → *50* too" in t("BAR MOP", 10)
+    assert "isn't equal to or double the auto count 4: set the inventory by hand" in t("APRON", 1)
+    assert "PT" not in t("TOWEL", 5)

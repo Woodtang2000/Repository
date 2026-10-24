@@ -76,6 +76,7 @@ class Alliant:
     in_service: dict[tuple[str, str], list[dict]] = field(default_factory=dict)
     orders: dict[str, list[dict]] = field(default_factory=dict)
     by_barcode: dict[str, dict] = field(default_factory=dict)  # barcode -> its garments_in_service row
+    price_type: dict[str, dict[str, str]] = field(default_factory=dict)  # account -> item -> Alliant price type code
     scans: dict[str, list[tuple]] = field(default_factory=dict)  # barcode -> (datetime, status, text, scan type), 60 days
 
     def on_hold(self, account: str | None, item: str | None = None, sku: str | None = None) -> list[dict]:
@@ -202,6 +203,8 @@ class Alliant:
                         data.sku[(acct, item)] = row["sku"].strip()
                     if row.get("frequency"):
                         data.frequency.setdefault(acct, {})[item] = row["frequency"].strip()
+                    if (row.get("price_type") or "").strip():  # the code only (8, 9, 14, 21...), never a price
+                        data.price_type.setdefault(acct, {})[item] = row["price_type"].strip()
                     if (row.get("autocount") or "").strip():
                         auto = data.autocount.setdefault(acct, {})
                         auto[item] = auto.get(item, 0) + int(row["autocount"])

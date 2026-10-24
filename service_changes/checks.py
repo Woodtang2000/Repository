@@ -387,6 +387,24 @@ ICONS = {Action.add: "➕", Action.decrease: "➖", Action.set: "🔢", Action.s
          Action.size_change: "📏", Action.other: "✏️"}
 
 
+INVENTORY_PRICED = {"21"}  # billed on inventory: a change to the auto count must move the inventory with it
+
+
+def _inventory_follows(cc: CheckedChange, alliant: Alliant, acct: str | None) -> str:
+    """Price type 21 bills on inventory, so inventory keeps its ratio to the auto count (Scott, 2026-10-24): equal
+    stays equal, double stays double. Anything else is for the office to set by hand."""
+    ch = cc.change
+    pt = alliant.price_type.get(acct or "", {}).get(cc.alliant_item or "")
+    if pt not in INVENTORY_PRICED or ch.inventory or ch.wearer or cc.current is None or cc.new_total is None:
+        return ""
+    inv = cc.inventory if cc.inventory is not None else cc.current
+    if inv == cc.current:
+        return f"PT {pt}: inventory {inv} → *{cc.new_total}* too"
+    if inv == 2 * cc.current:
+        return f"PT {pt}: inventory {inv} → *{2 * cc.new_total}* too (stays double)"
+    return f"⚠️ PT {pt}: inventory {inv} isn't equal to or double the auto count {cc.current}: set the inventory by hand"
+
+
 def _do(ch: Change) -> str:
     """What to key in, verb first: "Add 2", "Set to 6", "Stop"."""
     q = ch.quantity
@@ -435,6 +453,9 @@ def ticket(result: Result, alliant: Alliant, with_readback: bool = True) -> str:
             bits.append(freq)
         if ch.effective:
             bits.append(ch.effective)
+        inv_line = _inventory_follows(cc, alliant, acct)
+        if inv_line:
+            bits.append(inv_line)
         if cc.standard_qty:
             bits.append(f"_{cc.standard_qty}_")
         if cc.already_done:
