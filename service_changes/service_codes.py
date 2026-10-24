@@ -13,7 +13,7 @@ KINDS = {"repair": ("🧵", "repair"), "inspection": ("🔍", "inspection / audi
          "inventory": ("📋", "inventory count"), "other": ("🛠️", "service")}
 HOW = {"garment": 'In Alliant: "Inquiry" > "Garment" tab > scan or type the barcode > "Add Service Code"',
        "wearer": 'In Alliant: "Stockroom" > "Add/Remove Service Code" > scope "Specific Wearers" > "Append" > "Begin"',
-       "customer": 'In Alliant: "Stockroom" > "Add/Remove Service Code" > scope "Specific Customer" > "Append" > "Begin"'}
+       "customer": 'In Alliant: "Stockroom" > "Add/Remove Service Code" > scope "Specific Customer" (pick the SKU if it's one garment type) > "Append" > "Begin"'}
 
 
 def codes(path: str = os.path.join(os.path.dirname(__file__), "service_codes.csv")) -> dict[str, tuple[str, str]]:
