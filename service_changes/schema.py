@@ -14,6 +14,7 @@ class Category(str, Enum):
     route_or_schedule = "route_or_schedule"  # stop order, service day move, redate
     operational_issue = "operational_issue"  # missing/wrong items, damage, truck, pricing question
     lookup = "lookup"                        # a question about the account: "how many bar mops does Humpy's get?"
+    service_code = "service_code"            # flag garments for the plant: repair, inspection/audit, relabel
     not_a_request = "not_a_request"          # confirmations, plant completion posts, chatter
 
 
@@ -45,6 +46,17 @@ class Change(BaseModel):
         "from the candidate list. Null when the whole message is for one account."))
 
 
+class ServiceFlag(BaseModel):
+    """A service code the office puts on garments in Alliant so the plant pulls them at the next scan."""
+    scope: str = Field(description="'garment' (specific barcodes), 'wearer' (all of one employee's garments) or "
+                                   "'customer' (every garment on the account, e.g. an audit).")
+    kind: str = Field(description="'repair' (tear, button, zipper, hem, patch), 'inspection' (audit, condition check, "
+                                  "worn out?), 'relabel' (new label/emblem/name) or 'other'.")
+    reason: str = Field(description="What the driver said is wrong or wanted, short: 'torn left pocket', 'audit all garments'.")
+    barcodes: list[str] = Field(default_factory=list, description="Garment barcode numbers exactly as written.")
+    wearer: Optional[str] = Field(None, description="Employee name when the scope is a wearer (or the garments are theirs).")
+
+
 class ParsedMessage(BaseModel):
     category: Category
     customer_as_written: Optional[str] = Field(None, description="Customer name exactly as the driver wrote it.")
@@ -55,3 +67,4 @@ class ParsedMessage(BaseModel):
         description="Short questions that must be answered before anyone can enter this in Alliant.",
     )
     summary: str = Field(description="One line saying what was asked.")
+    service: Optional[ServiceFlag] = Field(None, description="Only for service_code: what to flag and why.")

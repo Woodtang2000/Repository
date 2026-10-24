@@ -224,6 +224,9 @@ class Desk:
                 fill_item_matches(self.claude, part, self.alliant)
         results = [check(part, self.alliant) for part in parts]
         questions = list(dict.fromkeys(q for r in results for q in r.questions))
+        if parsed.category == Category.service_code:  # pull garments for repair/inspection, or an inventory count
+            from .service_codes import review
+            questions = list(dict.fromkeys(questions + review(parsed, self.alliant)[2]))
 
         did = "read"
         if parsed.category == Category.not_a_request:
@@ -234,7 +237,8 @@ class Desk:
               and (group := self.customer_group(route_name, parsed.customer_as_written))):
             # "All of them combined": every location of this customer on the driver's route (7 Costco departments).
             did = self.answer(route_name, channel, src, author, parsed, replies, bot_posts, group=group)
-        elif questions and asks < MAX_ASKS and (parsed.category in ACTIONABLE or parsed.category == Category.lookup):
+        elif questions and asks < MAX_ASKS and (parsed.category in ACTIONABLE
+                                                or parsed.category in (Category.lookup, Category.service_code)):
             qs = "\n".join(f"• {q}" for q in questions[:MAX_QUESTIONS])
             # A normal channel message with an @mention, so it pushes to the driver's phone.
             self.post(channel, f"<@{src.get('user')}> Quick check on _{_short(src.get('text', ''), 60)}_\n{qs}",
@@ -323,6 +327,11 @@ class Desk:
             rb = readback(result) if not result.questions else ""
             if result.questions:
                 lines.append("⚠️ _Still unclear after asking the driver. Please call them._")
+        elif parsed.category == Category.service_code:
+            from .service_codes import review
+            lines, rb, still = review(parsed, self.alliant)
+            if still:
+                lines += [f"❓ {q}" for q in still] + ["⚠️ _Still unclear after asking the driver. Please call them._"]
         else:
             lines = [f"📣 *FYI: {parsed.category.value.replace('_', ' ')}*", parsed.summary]
             rb = f"✅ Office has it: {parsed.summary}"
@@ -334,7 +343,7 @@ class Desk:
             lines.insert(1, f"📍 _A route {cust.route} customer, posted in #{route_name}_")
         done = ("Nothing to enter: the driver changed it on the handheld. React ✅ when seen"
                 if parsed.category == Category.today_only else "React ✅ or type done when it's in Alliant"
-                if parsed.category in ACTIONABLE else "React ✅ when it's handled")
+                if parsed.category in ACTIONABLE or parsed.category == Category.service_code else "React ✅ when it's handled")
         text = "\n".join(lines + ["", _quote(_short(src.get("text", ""), 300)), f"<{link}|#{route_name}> · {done}"])
         from .verify import expectations
         expect = expectations(result) if parsed.category in ACTIONABLE and not result.questions else []
