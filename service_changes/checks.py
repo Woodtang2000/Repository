@@ -81,6 +81,7 @@ class CheckedChange:
     new_total: int | None = None
     questions: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
+    standard_qty: str = ""  # why a new wearer's garment got the standard quantity ("driver didn't say")
 
 
 _FILLER = {"what", "which", "does", "do", "did", "the", "for", "and", "need", "needs", "should", "they", "have",
@@ -132,6 +133,8 @@ def _check_wearer(cc: CheckedChange, account: str | None, alliant: Alliant) -> t
             cc.notes.append(f"No wearer named {ch.wearer} on this account (may already be stopped)")
         elif ch.action == Action.add:
             cc.notes.append(f"{ch.wearer} is not in Alliant yet (new wearer)")
+            if ch.quantity is None and ch.stated_total is None:
+                ch.quantity, cc.standard_qty = standard_quantity(alliant, account)
         else:
             cc.notes.append(f"No wearer named {ch.wearer} on this account; check by hand")
         return None
@@ -141,6 +144,22 @@ def _check_wearer(cc: CheckedChange, account: str | None, alliant: Alliant) -> t
     if not found and lines and (ch.action == Action.stop or "all" in ch.item.lower()):
         cc.notes.append(f"#{w.employee} {w.name} has " + ", ".join(f"{q} {n}" for n, q in lines.items()))
     return found
+
+
+STANDARD_SETS = 11  # a 5-day worker: 5 at the laundry, 5 delivered, 1 wearing (6 days: 13, i.e. 2 x days + 1)
+
+
+def standard_quantity(alliant: Alliant, account: str | None) -> tuple[int, str]:
+    """Garments for a new wearer when nobody said how many: what most wearers on this account have, else 11."""
+    counts: dict[int, int] = {}
+    for (acct, _), lines in alliant.garments.items():
+        if acct == account:
+            for q in lines.values():
+                counts[q] = counts.get(q, 0) + 1
+    if counts:
+        q = max(counts, key=lambda k: (counts[k], k == STANDARD_SETS))
+        return q, f"{q} like most wearers here; driver didn't say"
+    return STANDARD_SETS, f"standard {STANDARD_SETS} for a 5-day week; driver didn't say"
 
 
 def _autocount(cc: CheckedChange, alliant: Alliant, account: str | None) -> int:
@@ -416,6 +435,8 @@ def ticket(result: Result, alliant: Alliant, with_readback: bool = True) -> str:
             bits.append(freq)
         if ch.effective:
             bits.append(ch.effective)
+        if cc.standard_qty:
+            bits.append(f"_{cc.standard_qty}_")
         if cc.already_done:
             bits.append("☑️ already in Alliant")
         if cc.alliant_item and alliant.on_hold(acct, cc.alliant_item, sku):

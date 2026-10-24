@@ -412,3 +412,22 @@ def test_review_fixes():
     p = ParsedMessage(category=Category.wearer_change, customer_as_written="Midas", account_number="M", summary="",
                       changes=[Change(action=Action.size_change, item="pants", wearer="Juztyn", size="38x32")])
     assert "38x32" in ticket(check(p, a), a)
+
+
+def test_new_wearer_gets_the_standard_quantity():
+    from .checks import check, ticket
+    from .context import Alliant, Customer, Wearer
+    from .schema import Action, Category, Change, ParsedMessage
+    a = Alliant(customers=[Customer("M7", "MIDAS 7", "4", ["Tue"])], wearers={"X1": [Wearer("1", "Zed", "Ray")]})
+    p = ParsedMessage(category=Category.wearer_change, account_number="M7", summary="new wearer Dave",
+                      changes=[Change(action=Action.add, item="shirts", wearer="Dave Smith", size="L")])
+    r = check(p, a)
+    assert p.changes[0].quantity == 11 and not r.questions
+    assert "Add 11" in ticket(r, a) and "standard 11 for a 5-day week; driver didn't say" in ticket(r, a)
+    a.wearers = {"M7": [Wearer("1", "Ann", "Lee"), Wearer("2", "Bo", "Ng")]}
+    a.garments = {("M7", "1"): {"SHT NAVY L": 13, "PNT NAVY 34": 13}, ("M7", "2"): {"SHT NAVY M": 13}}
+    p.changes[0].quantity = None
+    r = check(p, a)
+    assert p.changes[0].quantity == 13 and "13 like most wearers here" in ticket(r, a)
+    p.changes[0].quantity = 7  # the driver said 7: keep it
+    assert check(p, a).changes[0].change.quantity == 7

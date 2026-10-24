@@ -33,6 +33,10 @@ Classify the message and extract every change in it. Rules:
 - When the driver gives a total and then a breakdown ("making a total of 10: 5 orange 24 oz and 5 blue 16 oz"),
   the breakdown numbers are each item's new total: set 24 oz to 5 and 16 oz to 5.
 - "Stop everything except X" is one stop change for the rest; do not add a second change for X.
+- New wearers get a set number of each garment: the standard is 11 for someone who works 5 days a week (5 at the
+  laundry, 5 delivered, 1 being worn), 13 for 6 days: 2 x days worked + 1. If the driver says how many days they work,
+  use that as the quantity; if the driver gives no quantity at all, leave quantity null (the standard is filled in
+  later). Never ask how many garments a new wearer needs.
 - Never carry a size from one garment to another ("coats 3x" says nothing about the shirts). A new wearer's
   garment with no size gets a question.
 - A wearer who "needs" a garment, or a new garment for a wearer, is a standing addition unless the driver says it
