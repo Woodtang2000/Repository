@@ -5,6 +5,9 @@ display_information:
   description: Reads route-channel change requests, checks them against Alliant, and drafts readbacks.
   background_color: "#1d4f91"
 features:
+  app_home:
+    messages_tab_enabled: true   # office staff can message the bot privately
+    messages_tab_read_only_enabled: false
   bot_user:
     display_name: Service Desk
     always_online: true
@@ -19,11 +22,14 @@ oauth_config:
       - reactions:read     # see 👍 / ✅ replies from drivers and staff
       - reactions:write    # mark messages it has picked up
       - users:read         # tell drivers' route accounts apart from office staff
+      - im:history         # office staff's private questions to the bot
+      - im:read
 settings:
   event_subscriptions:
     bot_events:
       - message.groups
       - message.channels
+      - message.im
       - reaction_added
   interactivity:
     is_enabled: true   # the "Give to" buttons on website leads in #sales-desk

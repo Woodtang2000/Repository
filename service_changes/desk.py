@@ -488,10 +488,12 @@ class Desk:
                 open_t.setdefault((meta(t)["src_channel"], meta(t)["src_ts"]), []).append(t["ts"])
         return open_t
 
-    def office_lookup(self, h: dict, top: list[dict]) -> bool:
+    def office_lookup(self, h: dict, top: list[dict], channel: str | None = None) -> bool:
         """A question typed in the office channel ("how many shop towels does Midas get?"), answered from the Alliant
         export right in the channel, like the route channels. Any customer on any route; no daily limit and no log,
-        since it is the office. If the bot just asked this person which customer, this message is read as the answer."""
+        since it is the office. If the bot just asked this person which customer, this message is read as the answer.
+        `channel` is a private message with the bot (dm) instead of the office channel."""
+        here = channel or self.desk_id
         from .context import account_facts, garment_facts
         from .parser import answer_lookup, parse_message
         user, text = h.get("user"), h.get("text", "")
@@ -506,7 +508,7 @@ class Desk:
             ans = answer_lookup(self.claude, text, barcode_facts(self.alliant, codes[:10]),
                                 asker="office staff member")
             as_of = f" _(Alliant as of {self.alliant.as_of})_" if self.alliant.as_of else ""
-            self.post(self.desk_id, f"<@{user}> {ans.answer}{as_of}"[:3900], {"kind": "answer", "barcodes": codes[:10]})
+            self.post(here, f"<@{user}> {ans.answer}{as_of}"[:3900], {"kind": "answer", "barcodes": codes[:10]})
             return True
         parsed = parse_message(self.claude, text, self.desk_name, h["ts"], self.alliant, author=self.name(user),
                                office=True)
@@ -519,7 +521,7 @@ class Desk:
             if facts:
                 ans = answer_lookup(self.claude, parsed.summary or text, facts, asker="office staff member")
                 as_of = f" _(Alliant as of {self.alliant.as_of})_" if self.alliant.as_of else ""
-                self.post(self.desk_id, f"<@{user}> *Route {route.group(1)}*: {ans.answer}{as_of}"[:3900],
+                self.post(here, f"<@{user}> *Route {route.group(1)}*: {ans.answer}{as_of}"[:3900],
                           {"kind": "answer", "route": route.group(1)})
                 return True
         group = self.office_group(text, parsed)
@@ -529,7 +531,7 @@ class Desk:
                                 "first, then a short per-location list if it helps.)", group_facts(self.alliant, group),
                                 asker="office staff member")
             as_of = f" _(Alliant as of {self.alliant.as_of})_" if self.alliant.as_of else ""
-            self.post(self.desk_id, f"<@{user}> *{len(group)} accounts*: {ans.answer}{as_of}"[:3900],
+            self.post(here, f"<@{user}> *{len(group)} accounts*: {ans.answer}{as_of}"[:3900],
                       {"kind": "answer", "accounts": len(group)})
             return True
         if not parsed.account_number:  # "show me Joey Smith's garments": find the wearer on any account
@@ -540,13 +542,13 @@ class Desk:
                 parsed.account_number = found[0][0]
             elif 2 <= len(found) <= 6:
                 names = {c.account: c.name for c in self.alliant.customers}
-                self.post(self.desk_id, f"<@{user}> Which one? " + "; ".join(
+                self.post(here, f"<@{user}> Which one? " + "; ".join(
                     f"{w.name} (#{w.employee}) at {acct} {names.get(acct, '')}" for acct, w in found),
                     {"kind": "office_ask", "user": user, "q": text})
                 return True
         if not parsed.account_number:
             qs = parsed.questions_for_driver or ["Which customer? Add the account number or location."]
-            self.post(self.desk_id, f"<@{user}> " + " ".join(qs), {"kind": "office_ask", "user": user, "q": text})
+            self.post(here, f"<@{user}> " + " ".join(qs), {"kind": "office_ask", "user": user, "q": text})
             return True
         acct = parsed.account_number
         name = next((c.name for c in self.alliant.customers if c.account == acct), parsed.customer_as_written or acct)
@@ -554,8 +556,33 @@ class Desk:
         facts = "\n".join(x for x in (account_facts(self.alliant, acct), garment_facts(self.alliant, acct, text + " " + question)) if x)
         ans = answer_lookup(self.claude, question, facts, asker="office staff member")
         as_of = f" _(Alliant as of {self.alliant.as_of})_" if self.alliant.as_of else ""
-        self.post(self.desk_id, f"<@{user}> *{acct}* {name}: {ans.answer}{as_of}", {"kind": "answer", "account": acct})
+        self.post(here, f"<@{user}> *{acct}* {name}: {ans.answer}{as_of}", {"kind": "answer", "account": acct})
         return True
+
+    def dm(self, ev: dict) -> str | None:
+        """A private message to the bot from office staff: account, route and garment lookups like #service-desk, and
+        anything else is answered as an Alliant how-to from the Alliant University notes. Nobody else sees it."""
+        user, channel = ev.get("user"), ev["channel"]
+        if not self.is_office(user):
+            self.slack.chat_postMessage(channel=channel, text="Private questions here are for office staff. Drivers: post "
+                                        "in your route channel. For how to do something in Alliant, ask in #alliant-help.")
+            return "not office"
+        try:
+            self.slack.reactions_add(channel=channel, timestamp=ev["ts"], name=SEEN)
+        except Exception:
+            pass
+        top = list(reversed(list(_messages(self.slack, channel, time.time() - 900, include_all_metadata=True))))
+        if self.office_lookup(ev, top, channel=channel):
+            return "lookup"
+        if self.helper is None:
+            self.slack.chat_postMessage(channel=channel, text="I can answer account, route and garment questions here. "
+                                        "The Alliant how-to notes aren't set up on the Service Desk yet.")
+            return "no notes"
+        reply, missed = self.helper.answer([{"role": "user", "content": ev.get("text", "")}], user)
+        if missed:
+            reply += "\n\n_I've logged this one for Scott._"
+        self.slack.chat_postMessage(channel=channel, text=reply[:3900], unfurl_links=False)
+        return "how-to"
 
     def office_group(self, text: str, parsed) -> list[str]:
         """Every location under an account number ("4000", "all of 4000") or every customer whose name has all the
@@ -701,6 +728,16 @@ class Desk:
                 return
             ev = req.payload.get("event", {})
             channel = ev.get("channel") or ev.get("item", {}).get("channel")
+            if ev.get("type") == "message" and ev.get("channel_type") == "im" and not ev.get("bot_id") \
+                    and ev.get("subtype") is None and ev.get("user") not in (None, self.me):
+                def private(e=ev):
+                    try:
+                        print(time.strftime("%H:%M"), "dm:", self.dm(e), flush=True)
+                    except Exception as x:
+                        print(time.strftime("%H:%M"), "dm error:", x, flush=True)
+                        self.api_trouble(x)
+                threading.Thread(target=private, daemon=True).start()
+                return
             if self.helper and channel == self.helper.channel:
                 if self.helper.wants(ev):
                     def ask(e=ev):

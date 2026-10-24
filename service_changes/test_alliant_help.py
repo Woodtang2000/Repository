@@ -99,3 +99,22 @@ def test_ignores_bots_edits_and_other_channels(tmp_path):
 def test_no_notes_yet(tmp_path):
     h = alliant_help.Helper(Slack(), FakeClaude(), str(tmp_path), "CHELP", "UBOT")
     assert h.handle({"type": "message", "channel": "CHELP", "user": "UANA", "ts": "1.0", "text": "hi"}) == "notes missing"
+
+
+def test_private_messages_to_the_bot():
+    from types import SimpleNamespace
+    from .desk import Desk
+
+    class S(Slack):
+        def conversations_history(self, **kw):
+            return {"messages": []}
+
+    looked = []
+    d = SimpleNamespace(slack=S(), is_office=lambda u: u == "USONJA",
+                        office_lookup=lambda ev, top, channel=None: looked.append(channel) or "4000" in ev["text"],
+                        helper=SimpleNamespace(answer=lambda turns, user: ("Open Customer > Specials", False)))
+    ev = lambda user, text: {"type": "message", "channel_type": "im", "channel": "D1", "user": user, "ts": "1.0", "text": text}
+    assert Desk.dm(d, ev("UDRIVER", "how many mats at 4000?")) == "not office" and looked == []
+    assert Desk.dm(d, ev("USONJA", "how many mats at 4000?")) == "lookup" and looked == ["D1"]
+    assert Desk.dm(d, ev("USONJA", "how do I make a special?")) == "how-to"
+    assert d.slack.posts[-1] == {"channel": "D1", "text": "Open Customer > Specials", "unfurl_links": False}
