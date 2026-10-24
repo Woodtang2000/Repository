@@ -56,3 +56,18 @@ def test_office_group_questions():
     assert g("does Midas 7 get 1205 towels?", p("1205-1-00007")) == []
     f = group_facts(a, ["4000-1-00001", "4000-1-00002"])
     assert "2 accounts" in f and "4000-1-00002 SAFEWAY 1805 MEAT (route 3): MAT 3X5 2/delivery inv 2; MAT 4X6 1/delivery inv 1" in f
+
+
+def test_route_facts():
+    from .context import Customer, route_facts
+    a = Alliant(customers=[Customer("1205-1-00007", "MIDAS 7", "4", ["Mon", "Thu"]),
+                           Customer("1300-1-00000", "KOBUK COFFEE", "4", ["Thu"]),
+                           Customer("1400-1-00000", "OTHER", "5", ["Thu"])],
+                cards={"1205-1-00007": {"stop_sequence": "Mon:5;Thu:22"}, "1300-1-00000": {"stop_sequence": "Thu 3"}},
+                frequency={"1300-1-00000": {"MAT 3X5": "5", "BAR MOP": "7"}})
+    f = route_facts(a, "4")
+    assert "Route 4: 2 customers" in f and "OTHER" not in f
+    assert "- 1300-1-00000 KOBUK COFFEE: Thu; stops Thu 3; MAT 3X5 every other week" in f and "BAR MOP" not in f
+    assert "Stop order Thu: 3. 1300-1-00000 KOBUK COFFEE, 22. 1205-1-00007 MIDAS 7" in f
+    assert "Stop order Mon: 5. 1205-1-00007 MIDAS 7" in f
+    assert route_facts(a, "9") == ""

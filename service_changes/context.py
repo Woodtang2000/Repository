@@ -282,6 +282,32 @@ def garment_facts(alliant: "Alliant", account: str, question: str = "") -> str:
     return "\n".join(out)
 
 
+def route_facts(alliant: "Alliant", route: str) -> str:
+    """One route: every customer on it with delivery days, stop number on each day (from the record cards' stop
+    sequence, e.g. "Mon:5;Thu:22") and any item delivered less often than weekly."""
+    custs = [c for c in alliant.customers if c.route == route]
+    if not custs:
+        return ""
+    stops: dict[str, list[tuple[int, str]]] = {}
+    out = [f"Route {route}: {len(custs)} customers (account name: delivery days; stop number by day; items not delivered "
+           "weekly with how often)"]
+    for c in custs:
+        seq = alliant.cards.get(c.account, {}).get("stop_sequence") or ""
+        for day, num in re.findall(r"([A-Za-z]{3})[a-z]*\s*[:\s]\s*(\d+)", seq):
+            stops.setdefault(day.title(), []).append((int(num), f"{c.account} {c.name}"))
+        odd = []
+        for item, code in alliant.frequency.get(c.account, {}).items():
+            label = frequency_label(code)
+            if label and label != "weekly":
+                odd.append(f"{item} {label}")
+        out.append(f"- {c.account} {c.name}: {'/'.join(c.service_days) or '?'}; stops {seq or 'not on the card'}"
+                   + (f"; {', '.join(odd)}" if odd else ""))
+    for day in DAYS:
+        if day in stops:
+            out.append(f"Stop order {day}: " + ", ".join(f"{n}. {name}" for n, name in sorted(stops[day])))
+    return "\n".join(out)
+
+
 def group_facts(alliant: "Alliant", accounts: list[str]) -> str:
     """Several accounts at once (every Safeway under 4000), items and holds only: one line per account."""
     out = []

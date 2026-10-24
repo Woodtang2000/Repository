@@ -495,6 +495,16 @@ class Desk:
                                office=True)
         if parsed.category != Category.lookup:
             return False
+        route = re.search(r"\b(?:route|rte|rt)\s*#?\s*(\d{1,2})\b", text, re.I)
+        if route and not parsed.account_number:  # "what's the stop order on route 4 Tuesday?"
+            from .context import route_facts
+            facts = route_facts(self.alliant, route.group(1))
+            if facts:
+                ans = answer_lookup(self.claude, parsed.summary or text, facts, asker="office staff member")
+                as_of = f" _(Alliant as of {self.alliant.as_of})_" if self.alliant.as_of else ""
+                self.post(self.desk_id, f"<@{user}> *Route {route.group(1)}*: {ans.answer}{as_of}"[:3900],
+                          {"kind": "answer", "route": route.group(1)})
+                return True
         group = self.office_group(text, parsed)
         if group:
             from .context import group_facts
