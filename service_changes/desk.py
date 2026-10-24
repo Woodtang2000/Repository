@@ -481,7 +481,7 @@ class Desk:
         """A question typed in the office channel ("how many shop towels does Midas get?"), answered from the Alliant
         export right in the channel, like the route channels. Any customer on any route; no daily limit and no log,
         since it is the office. If the bot just asked this person which customer, this message is read as the answer."""
-        from .context import account_facts
+        from .context import account_facts, garment_facts
         from .parser import answer_lookup, parse_message
         user, text = h.get("user"), h.get("text", "")
         asked = next((b for b in reversed(top) if float(b["ts"]) < float(h["ts"]) and _is_bot(b, self.me)
@@ -499,7 +499,9 @@ class Desk:
             return True
         acct = parsed.account_number
         name = next((c.name for c in self.alliant.customers if c.account == acct), parsed.customer_as_written or acct)
-        ans = answer_lookup(self.claude, parsed.summary or text, account_facts(self.alliant, acct))
+        question = parsed.summary or text
+        facts = "\n".join(x for x in (account_facts(self.alliant, acct), garment_facts(self.alliant, acct, text + " " + question)) if x)
+        ans = answer_lookup(self.claude, question, facts, asker="office staff member")
         as_of = f" _(Alliant as of {self.alliant.as_of})_" if self.alliant.as_of else ""
         self.post(self.desk_id, f"<@{user}> *{acct}* {name}: {ans.answer}{as_of}", {"kind": "answer", "account": acct})
         return True

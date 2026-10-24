@@ -10,7 +10,7 @@ Optional CSV exports (any extra columns are ignored):
 import csv
 import re
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 ALASKA = ZoneInfo("America/Anchorage")
@@ -71,6 +71,10 @@ class Alliant:
     as_of: str = ""  # date of the export the data came from, e.g. "Oct 3"
     exported_at: datetime | None = None  # when the data was exported from Alliant (feed_done.txt, else file time)
     holds: dict[str, list[dict]] = field(default_factory=dict)  # account -> item-level holds (holds.csv)
+    # Garment tracking, for office lookups (garment_facts): barcoded garments by (account, wearer#) from
+    # garments_in_service.csv, and customer purchase-order lines by account from purchase_orders.csv.
+    in_service: dict[tuple[str, str], list[dict]] = field(default_factory=dict)
+    orders: dict[str, list[dict]] = field(default_factory=dict)
 
     def on_hold(self, account: str | None, item: str | None = None, sku: str | None = None) -> list[dict]:
         """Holds on this account, or on this item / SKU on it."""
@@ -102,6 +106,19 @@ class Alliant:
         if f("customer_cards.csv"):
             with open(f("customer_cards.csv"), newline="") as fh:
                 data.cards = {row["account"]: row for row in csv.DictReader(fh)}
+        if f("garments_in_service.csv"):
+            with open(f("garments_in_service.csv"), newline="", encoding="utf-8-sig") as fh:
+                for row in csv.DictReader(fh):
+                    row = {k: (v or "").strip() for k, v in row.items() if k}
+                    data.in_service.setdefault((row.get("cust_code", ""), row.get("wearer", "")), []).append(row)
+        if f("purchase_orders.csv"):
+            # Open lines going back to 2006 are dead orders: keep the last year only (agreed with the Mac session).
+            since = ((data.exported_at or datetime.now(ALASKA)).date() - timedelta(days=PO_DAYS)).isoformat()
+            with open(f("purchase_orders.csv"), newline="", encoding="utf-8-sig") as fh:
+                for row in csv.DictReader(fh):
+                    row = {k: (v or "").strip() for k, v in row.items() if k}
+                    if row.get("po_date", "") >= since:
+                        data.orders.setdefault(row.get("cust_code", ""), []).append(row)
         if f("card_lines.csv") and f("current_items.csv"):
             data._autocount_from_cards(f("current_items.csv"), f("card_lines.csv"))
         return data
@@ -195,6 +212,74 @@ class Alliant:
         The whole route stays in: drivers sometimes post a day after the stop."""
         on_route = [c for c in self.customers if route is None or c.route == route] or self.customers
         return sorted(on_route, key=lambda c: day not in c.service_days)
+
+
+PO_DAYS = 365
+# Alliant's garment count types / statuses (Alliant University file 12), in plain words.
+GARMENT_STATUS = {"I": "in soil (back at the plant)", "O": "out clean (going out to the customer)", "M": "in mending",
+                  "A": "replaced", "C": "cancelled (removed from service)", "E": "flagged for inspection",
+                  "R": "rewash", "U": "custom scan", "V": "at the customer (inventory)", "X": "decreased",
+                  "Y": "on-line mend", "Z": "size change"}
+MAX_GARMENT_LINES = 150
+
+
+def _num(v: str) -> int:
+    try:
+        return int(float(v))
+    except (TypeError, ValueError):
+        return 0
+
+
+def garment_facts(alliant: "Alliant", account: str, question: str = "") -> str:
+    """Barcoded garments and recent garment orders for the office: each garment's last scan, and PO lines with what's
+    been received. Detail for the wearers the question names (or everyone on a small account), else a summary."""
+    wearers = {w.employee: w for w in alliant.wearers.get(account, [])}
+    words = set(re.findall(r"[a-z]+", question.lower()))
+    named = [e for e, w in wearers.items() if words & {p for p in re.findall(r"[a-z]+", w.name.lower()) if len(p) > 2}]
+    pieces = {wr: rows for (acct, wr), rows in alliant.in_service.items() if acct == account}
+    orders = alliant.orders.get(account, [])
+    if not pieces and not orders:
+        return ""
+    detail = named or (list(wearers) if len(wearers) <= 15 else [])
+    who = lambda e: f"#{e} {wearers[e].name}" if e in wearers else f"#{e}"
+    out = []
+    if pieces:
+        out.append("Garments in service (barcode, garment, size: last scan; custom scan text is free text the driver "
+                   "or plant typed, up to 10 characters; if it names a different customer, say it may be misdelivered):")
+        lines = 0
+        for e in sorted(pieces, key=lambda e: (e not in detail, _num(e))):
+            rows = pieces[e]
+            if e in detail and lines < MAX_GARMENT_LINES:
+                out.append(f"- Wearer {who(e)}:")
+                for r in rows:
+                    st = GARMENT_STATUS.get(r.get("status", ""), f"status {r.get('status', '')}")
+                    txt = f' "{r["scan_text"]}"' if r.get("scan_text") else ""
+                    when = r.get("scan_date") or r.get("status_date", "")
+                    size = " ".join(x for x in (r.get("size_a"), r.get("size_b")) if x)
+                    last = f"; last delivered {r['last_delivered']}" if r.get("last_delivered") else ""
+                    out.append(f"  - {r.get('barcode', '')} {r.get('description') or r.get('sku', '')} {size}: {st}{txt} "
+                               f"{when}{last}".rstrip())
+                    lines += 1
+            else:
+                counts: dict[str, int] = {}
+                for r in rows:
+                    counts[r.get("status", "")] = counts.get(r.get("status", ""), 0) + 1
+                out.append(f"- Wearer {who(e)}: {len(rows)} garments (" + ", ".join(
+                    f"{n} {GARMENT_STATUS.get(k, 'status ' + k)}" for k, n in sorted(counts.items())) + ")")
+    recent = [o for o in orders if not detail or o.get("wearer") in detail]
+    if recent:
+        out.append(f"Garment orders (purchase orders from the last {PO_DAYS} days; open = not fully received):")
+        for o in sorted(recent, key=lambda o: o.get("po_date", ""), reverse=True)[:60]:
+            got, want = _num(o.get("qty_received")), _num(o.get("qty_ordered"))
+            state = (f"received {got} of {want}" + (f" on {o['received_date']}" if o.get("received_date") else "")
+                     if got else f"none received of {want}")
+            if got < want:
+                state += " (OPEN" + (f", expected {o['expected_date']}" if o.get("expected_date") else "") + ")"
+            size = " ".join(x for x in (o.get("size_a"), o.get("size_b")) if x)
+            out.append(f"- PO {o.get('po', '')} {o.get('po_date', '')}, wearer {who(o.get('wearer', ''))}: "
+                       f"{o.get('description') or o.get('sku', '')} {size}: {state}"
+                       + (f", from {o['vendor_name']}" if o.get("vendor_name") else ""))
+    return "\n".join(out)
 
 
 def account_facts(alliant: "Alliant", account: str) -> str:

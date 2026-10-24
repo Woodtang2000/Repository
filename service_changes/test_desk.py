@@ -325,7 +325,7 @@ def test_too_many_lookups_in_a_day_are_held_and_flagged(setup, monkeypatch):
     from .parser import Answer
     slack, d = setup
     monkeypatch.setattr(desk, "MAX_LOOKUPS_PER_DAY", 2)
-    monkeypatch.setattr(parser, "answer_lookup", lambda c, q, f: Answer(answer="4 mats", found=True))
+    monkeypatch.setattr(parser, "answer_lookup", lambda c, q, f, **kw: Answer(answer="4 mats", found=True))
     import time
     slack.clock = max(slack.clock, time.time())  # "today" in Alaska: right after midnight an hour ago is yesterday
     for i in range(3):
@@ -383,7 +383,7 @@ def test_office_can_ask_in_the_office_channel(setup, monkeypatch):
     import service_changes.parser as parser
     from .parser import Answer
     slack, d = setup
-    monkeypatch.setattr(parser, "answer_lookup", lambda c, q, f: Answer(answer="4 3x10 mats weekly", found=True))
+    monkeypatch.setattr(parser, "answer_lookup", lambda c, q, f, **kw: Answer(answer="4 3x10 mats weekly", found=True))
     q = slack.say("D1", "U2", "how many mats does wendys get?")
     assert d.run_once()["answered"] == 1
     [a] = slack.bot_posts("D1", "answer")
@@ -405,7 +405,7 @@ def test_office_answers_which_customer_in_the_channel(setup, monkeypatch):
                              account_number="W1" if known else None,
                              questions_for_driver=[] if known else ["Which Midas store?"])
     monkeypatch.setattr(parser, "parse_message", office_parse)
-    monkeypatch.setattr(parser, "answer_lookup", lambda c, q, f: Answer(answer="200 shop towels weekly", found=True))
+    monkeypatch.setattr(parser, "answer_lookup", lambda c, q, f, **kw: Answer(answer="200 shop towels weekly", found=True))
     slack.say("D1", "U2", "how many shop towels does midas get")
     d.run_once()
     [ask] = slack.bot_posts("D1", "office_ask")
@@ -527,7 +527,7 @@ def test_a_new_request_after_an_answer_is_its_own_request(setup, monkeypatch):
     import service_changes.parser as parser
     from .parser import Answer
     slack, d = setup
-    monkeypatch.setattr(parser, "answer_lookup", lambda c, q, f: Answer(answer="4 3x10 mats", found=True))
+    monkeypatch.setattr(parser, "answer_lookup", lambda c, q, f, **kw: Answer(answer="4 3x10 mats", found=True))
     monkeypatch.setattr(parser, "is_reply", lambda *a: pytest.fail("no reply check needed after an answer"))
     slack.say("C1", "U1", "how many mats does wendys get?")
     d.run_once()
@@ -549,7 +549,7 @@ def test_combined_lookup_across_a_customers_locations(setup, monkeypatch):
     seen = {}
     monkeypatch.setattr(parser, "parse_message", lambda *a, **k: ParsedMessage(
         category=Category.lookup, customer_as_written="costco", summary="bar mops at Costco, all departments"))
-    monkeypatch.setattr(parser, "answer_lookup", lambda c, q, facts: (seen.update(facts=facts), Answer(answer="1,560 bar mops", found=True))[1])
+    monkeypatch.setattr(parser, "answer_lookup", lambda c, q, facts, **kw: (seen.update(facts=facts), Answer(answer="1,560 bar mops", found=True))[1])
     slack.say("C1", "U1", "how many bar mops does costco get, all of them combined")
     assert d.run_once()["answered"] == 1
     assert "COSTCO 1342 DELI 63" in seen["facts"] and "COSTCO 1342 BAKERY 62" in seen["facts"] and "WENDY" not in seen["facts"]
