@@ -282,6 +282,24 @@ def garment_facts(alliant: "Alliant", account: str, question: str = "") -> str:
     return "\n".join(out)
 
 
+def group_facts(alliant: "Alliant", accounts: list[str]) -> str:
+    """Several accounts at once (every Safeway under 4000), items and holds only: one line per account."""
+    out = []
+    for acct in accounts:
+        cust = next((c for c in alliant.customers if c.account == acct), None)
+        items = alliant.items.get(acct, {})
+        parts = []
+        for item, inv in items.items():
+            auto = alliant.autocount.get(acct, {}).get(item)
+            parts.append(f"{item} {auto if auto is not None else inv}/delivery inv {inv}")
+        holds = alliant.on_hold(acct)
+        line = f"- {acct} {cust.name if cust else ''} (route {cust.route if cust else '?'}): " + ("; ".join(parts) or "no items")
+        if holds:
+            line += " | on hold: " + ", ".join(h.get("item", "") for h in holds)
+        out.append(line)
+    return f"{len(accounts)} accounts (item per-delivery autocount, inventory):\n" + "\n".join(out)
+
+
 def account_facts(alliant: "Alliant", account: str) -> str:
     """What a driver may be told about an account: stop, contact, notes, items and wearers. No prices or contract terms."""
     cust = next((c for c in alliant.customers if c.account == account), None)

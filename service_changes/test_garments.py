@@ -36,3 +36,23 @@ def test_small_account_without_a_name_shows_everyone(tmp_path):
     f = garment_facts(Alliant.from_dir(str(tmp_path)), "1205-1-00007", "any garments stuck?")
     assert "100003" in f and "100001" in f
     assert garment_facts(Alliant.from_dir(str(tmp_path)), "9999-1-00000") == ""
+
+
+def test_office_group_questions():
+    from types import SimpleNamespace
+    from .context import Customer, group_facts
+    from .desk import Desk
+    a = Alliant(customers=[Customer("4000-1-00001", "SAFEWAY 1805 DELI", "3", ["Mon"]),
+                           Customer("4000-1-00002", "SAFEWAY 1805 MEAT", "3", ["Mon"]),
+                           Customer("1205-1-00007", "MIDAS 7", "4", ["Tue"])],
+                items={"4000-1-00001": {"MAT 3X5": 4}, "4000-1-00002": {"MAT 3X5": 2, "MAT 4X6": 1}})
+    d = SimpleNamespace(alliant=a)
+    p = lambda acct=None, name=None: SimpleNamespace(account_number=acct, customer_as_written=name)
+    g = lambda text, parsed: Desk.office_group(d, text, parsed)
+    assert g("how many mats does account 4000 have on inventory?", p()) == ["4000-1-00001", "4000-1-00002"]
+    assert g("4000, all of the customers in 4000", p("4000-1-00001")) == ["4000-1-00001", "4000-1-00002"]
+    assert g("mat inventory for every safeway account", p(name="safeway")) == ["4000-1-00001", "4000-1-00002"]
+    assert g("how many mats does Safeway 1805 deli get?", p("4000-1-00001", "Safeway 1805 deli")) == []
+    assert g("does Midas 7 get 1205 towels?", p("1205-1-00007")) == []
+    f = group_facts(a, ["4000-1-00001", "4000-1-00002"])
+    assert "2 accounts" in f and "4000-1-00002 SAFEWAY 1805 MEAT (route 3): MAT 3X5 2/delivery inv 2; MAT 4X6 1/delivery inv 1" in f

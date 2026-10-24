@@ -97,10 +97,12 @@ class Desk:
         self.done_events: dict[str, str] = {}
         self.stale_warned: float | None = None  # when the office was last told the Alliant data is stale
         channels = {}
+        self.all_channels: dict[str, str] = {}  # every channel the bot can see, member or not
         cursor = None
         while True:
             r = slack.conversations_list(types="public_channel,private_channel", exclude_archived=True, limit=500, cursor=cursor)
             channels.update({c["name"]: c["id"] for c in r["channels"] if c.get("is_member")})
+            self.all_channels.update({c["name"]: c["id"] for c in r["channels"]})
             cursor = r.get("response_metadata", {}).get("next_cursor")
             if not cursor:
                 break
@@ -493,6 +495,16 @@ class Desk:
                                office=True)
         if parsed.category != Category.lookup:
             return False
+        group = self.office_group(text, parsed)
+        if group:
+            from .context import group_facts
+            ans = answer_lookup(self.claude, (parsed.summary or text) + "\n(Covers every account listed: give the total "
+                                "first, then a short per-location list if it helps.)", group_facts(self.alliant, group),
+                                asker="office staff member")
+            as_of = f" _(Alliant as of {self.alliant.as_of})_" if self.alliant.as_of else ""
+            self.post(self.desk_id, f"<@{user}> *{len(group)} accounts*: {ans.answer}{as_of}"[:3900],
+                      {"kind": "answer", "accounts": len(group)})
+            return True
         if not parsed.account_number:
             qs = parsed.questions_for_driver or ["Which customer? Add the account number or location."]
             self.post(self.desk_id, f"<@{user}> " + " ".join(qs), {"kind": "office_ask", "user": user, "q": text})
@@ -505,6 +517,24 @@ class Desk:
         as_of = f" _(Alliant as of {self.alliant.as_of})_" if self.alliant.as_of else ""
         self.post(self.desk_id, f"<@{user}> *{acct}* {name}: {ans.answer}{as_of}", {"kind": "answer", "account": acct})
         return True
+
+    def office_group(self, text: str, parsed) -> list[str]:
+        """Every location under an account number ("4000", "all of 4000") or every customer whose name has all the
+        words given ("all the Safeways"), when the question isn't about one location. Empty otherwise."""
+        if parsed.account_number and not re.search(r"\b(all|every|each|total|combined)\b", text, re.I):
+            return []
+        for base in re.findall(r"(?<![\d-])(\d{4})(?![\d-])", text):
+            hits = [c.account for c in self.alliant.customers if c.account.split("-")[0] == base]
+            if len(hits) >= 2:
+                return hits
+        words = re.findall(r"[a-z0-9]+", (parsed.customer_as_written or "").lower())
+        words = [w.rstrip("s") if len(w) > 3 else w for w in words if w not in ("all", "the", "every", "of")]
+        if words and re.search(r"\b(all|every|each|total|combined)\b", text, re.I):
+            hits = [c.account for c in self.alliant.customers
+                    if all(any(n.startswith(w) for n in re.findall(r"[a-z0-9]+", c.name.lower())) for w in words)]
+            if len(hits) >= 2:
+                return hits
+        return []
 
     def send_readback(self, t: dict, user: str, notes: list[str]) -> None:
         p = meta(t)
@@ -795,8 +825,9 @@ def main():
     desk.start_from(os.path.join(args.data, "first_watched.json"))
     desk.data_dir = args.data
     from . import alliant_help
-    if alliant_help.CHANNEL in desk.channels:
-        desk.helper = alliant_help.Helper(slack, claude, args.data, desk.channels[alliant_help.CHANNEL], desk.me,
+    # Set up even before the bot is invited: Slack starts sending the channel's messages the moment it joins.
+    if alliant_help.CHANNEL in desk.all_channels:
+        desk.helper = alliant_help.Helper(slack, claude, args.data, desk.all_channels[alliant_help.CHANNEL], desk.me,
                                           alliant_help.find_user(slack, alliant_help.ESCALATE))
     loaded = [time.time()]
 
