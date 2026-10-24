@@ -372,7 +372,9 @@ def account_facts(alliant: "Alliant", account: str) -> str:
     if card.get("stop_sequence") or cust:
         out.append(f"Route {cust.route if cust else card.get('route', '')} · stops: "
                    + (card.get("stop_sequence") or ", ".join(cust.service_days if cust else [])))
-    on_site = " ".join(x for x in [card.get("location_contact"), card.get("phone")] if x)
+    if card.get("address"):
+        out.append(f"Address: {card['address']}")
+    on_site = " ".join(x for x in [card.get("location_contact"), card.get("phone"), card.get("mobile")] if x)
     if on_site:
         out.append(f"On-site contact: {on_site}")
     if card.get("contact") or card.get("email"):  # the feed's contact/email = who gets the invoices

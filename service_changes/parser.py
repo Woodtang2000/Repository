@@ -74,7 +74,13 @@ Classify the message and extract every change in it. Rules:
   After Service Desk answered a lookup, a follow-up ("and shop towels?") is another lookup for the same customer.
   Questions about where garments are or whether they've been ordered or came in ("do we have garments on the way for
   new employee Dave?", "where are Joey's shirts?", "did the new coats come in?") are lookup too: put the wearer and
-  the question in summary. If the driver also asks the office to do something, keep that in summary as well.
+  the question in summary. A customer's address or phone number is a lookup.
+- Anything that asks the office to change something in Alliant (add, stop, size change, hold, a service code or
+  repair on a garment, an inventory count) is that request, never lookup, even if it also asks a question.
+- A question about the route itself, not one customer ("what are my stops today?", "who's after Midas?", "how many
+  stops on Thursday?", "what's the stop order?") is route_lookup: put the question in summary.
+- A question about how to do something in Alliant or on the handheld ("how do I add a stop on the handheld?", "how do I
+  scan a garment back in?", "how do I void a ticket?") is howto: put the question in summary.
 - A request to have the plant pull garments for repair or a closer look is service_code with NO changes: "put a
   service code on 1234567, torn pocket", "Joey's shirts need buttons", "audit all of Juan's garments", "inspect
   every garment at Midas 7, they look worn". Fill service: scope garment (barcodes given), wearer (all of one

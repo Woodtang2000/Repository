@@ -231,6 +231,10 @@ class Desk:
         did = "read"
         if parsed.category == Category.not_a_request:
             pass
+        elif parsed.category == Category.route_lookup:
+            did = self.route_answer(route_name, channel, src, parsed, replies, bot_posts)
+        elif parsed.category == Category.howto:
+            did = self.howto_answer(channel, src, parsed, replies, bot_posts)
         elif parsed.category == Category.lookup and parsed.account_number and not parsed.questions_for_driver:
             did = self.answer(route_name, channel, src, author, parsed, replies, bot_posts)
         elif (parsed.category == Category.lookup and not parsed.account_number and not parsed.questions_for_driver
@@ -321,6 +325,34 @@ class Desk:
                        "driver": author, "driver_id": src.get("user"), "account": acct, "msgs": replies})
         self.post(channel, text, {"kind": "answer", "src_ts": src["ts"], "driver_id": src.get("user"), "msgs": replies},
                   bot_posts)
+        return "answered"
+
+    def route_answer(self, route_name, channel, src, parsed, replies, bot_posts) -> str:
+        """"What are my stops today?": the stops, order and days of this channel's route only."""
+        from .context import route_facts
+        from .parser import answer_lookup
+        route = route_from_channel(route_name)
+        facts = route_facts(self.alliant, route) if route else ""
+        if not facts:
+            return "read"
+        day = service_day(src["ts"])
+        ans = answer_lookup(self.claude, f"(Today is {day}.) {parsed.summary or src.get('text', '')}", facts)
+        as_of = f" _(Alliant as of {self.alliant.as_of})_" if self.alliant.as_of else ""
+        self.post(channel, f"<@{src.get('user')}> {ans.answer}{as_of}",
+                  {"kind": "answer", "src_ts": src["ts"], "driver_id": src.get("user"), "msgs": replies}, bot_posts)
+        return "answered"
+
+    def howto_answer(self, channel, src, parsed, replies, bot_posts) -> str:
+        """"How do I ... on the handheld?": answered from the Alliant University notes, in the thread."""
+        if self.helper is None:
+            return "read"
+        reply, missed = self.helper.answer([{"role": "user", "content": src.get("text", "")}], src.get("user"))
+        if missed:
+            reply += "\n\n_I've asked the office to follow up._"
+            self.post(self.desk_id, f"❓ *Alliant how-to the notes don't cover* (from {self.name(src.get('user'))}): "
+                                    f"_{_short(src.get('text', ''), 200)}_", {"kind": "howto_missed"})
+        self.post(channel, reply[:3900], {"kind": "answer", "src_ts": src["ts"], "driver_id": src.get("user"),
+                                          "msgs": replies, "howto": True}, bot_posts, thread_ts=src["ts"])
         return "answered"
 
     def post_ticket(self, route_name, channel, src, author, parsed, result, replies, correction, replaces) -> str:

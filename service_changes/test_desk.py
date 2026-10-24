@@ -658,3 +658,29 @@ def test_entry_check_passes_what_was_entered():
     assert problems(a, "W1", bad) == ["bar mops: not on the account in Alliant (expected 20)",
                                       "MAT CHARCOAL HEATHER 3X10: should be stopped, Alliant still shows 6 (autocount)",
                                       "New wearer Joey Smith isn't on the account in Alliant"]
+
+
+def test_drivers_ask_about_their_route_and_the_handheld(setup, monkeypatch):
+    import service_changes.parser as parser
+    from types import SimpleNamespace
+    from .parser import Answer
+    slack, d = setup
+    asked = []
+
+    def parse(client, text, channel, ts, alliant, author="", office=False, previous=""):
+        cat = Category.route_lookup if "stops" in text.splitlines()[-1] else Category.howto
+        return ParsedMessage(category=cat, summary=text)
+    monkeypatch.setattr(parser, "parse_message", parse)
+    monkeypatch.setattr(parser, "answer_lookup", lambda c, q, f, **kw: (asked.append((q, f)), Answer(answer="1. Wendy's", found=True))[1])
+    d.helper = SimpleNamespace(answer=lambda turns, user: ('Tap "Start Route"', False))
+    slack.say("C1", "U1", "what are my stops today?")
+    d.run_once()
+    [a] = slack.bot_posts("C1", "answer")
+    assert a["text"].startswith("<@U1> 1. Wendy's")
+    q, facts = asked[0]
+    assert q.startswith("(Today is ") and "Route 1: 2 customers" in facts
+    post = slack.say("C1", "U1", "new: how do I start my route on the handheld?")
+    d.run_once()
+    howto = slack.bot_posts("C1", "answer")[-1]
+    assert howto["text"] == 'Tap "Start Route"' and howto["thread_ts"] == post["ts"]
+    assert not slack.bot_posts("D1", "ticket")

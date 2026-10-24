@@ -15,6 +15,8 @@ class Category(str, Enum):
     operational_issue = "operational_issue"  # missing/wrong items, damage, truck, pricing question
     lookup = "lookup"                        # a question about the account: "how many bar mops does Humpy's get?"
     service_code = "service_code"            # flag garments for the plant: repair, inspection/audit, relabel
+    route_lookup = "route_lookup"            # a question about the driver's route: today's stops, stop order, who's next
+    howto = "howto"                          # how to do something in Alliant or on the handheld
     not_a_request = "not_a_request"          # confirmations, plant completion posts, chatter
 
 
