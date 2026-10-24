@@ -387,22 +387,22 @@ ICONS = {Action.add: "➕", Action.decrease: "➖", Action.set: "🔢", Action.s
          Action.size_change: "📏", Action.other: "✏️"}
 
 
-INVENTORY_PRICED = {"21"}  # billed on inventory: a change to the auto count must move the inventory with it
-
-
 def _inventory_follows(cc: CheckedChange, alliant: Alliant, acct: str | None) -> str:
-    """Price type 21 bills on inventory, so inventory keeps its ratio to the auto count (Scott, 2026-10-24): equal
-    stays equal, double stays double. Anything else is for the office to set by hand."""
+    """Every item's inventory is either equal to its auto count or double it (Scott, 2026-10-24), so a change to the
+    auto count moves the inventory with it: equal stays equal, double stays double. Price types 14 and 21 bill on
+    inventory, which is why it matters. Any other ratio is an old entry mistake for the office to fix."""
     ch = cc.change
-    pt = alliant.price_type.get(acct or "", {}).get(cc.alliant_item or "")
-    if pt not in INVENTORY_PRICED or ch.inventory or ch.wearer or cc.current is None or cc.new_total is None:
+    if ch.inventory or ch.wearer or cc.wearer_number or cc.current is None or cc.new_total is None:
         return ""
+    pt = alliant.price_type.get(acct or "", {}).get(cc.alliant_item or "")
+    tag = f"PT {pt}: " if pt else ""
     inv = cc.inventory if cc.inventory is not None else cc.current
     if inv == cc.current:
-        return f"PT {pt}: inventory {inv} → *{cc.new_total}* too"
+        return f"{tag}inventory {inv} → *{cc.new_total}* too"
     if inv == 2 * cc.current:
-        return f"PT {pt}: inventory {inv} → *{2 * cc.new_total}* too (stays double)"
-    return f"⚠️ PT {pt}: inventory {inv} isn't equal to or double the auto count {cc.current}: set the inventory by hand"
+        return f"{tag}inventory {inv} → *{2 * cc.new_total}* too (stays double)"
+    return (f"⚠️ {tag}inventory {inv} isn't equal to or double the auto count {cc.current} (an old entry mistake): "
+            f"set the inventory to {cc.new_total} or {2 * cc.new_total}")
 
 
 def _do(ch: Change) -> str:

@@ -289,7 +289,7 @@ def test_office_ticket():
     assert ticket(r, a).splitlines() == [
         "*K1*  KOBUK COFFEE",
         "_📝 Back door only_",
-        "➖ *Remove 40*  TOWEL BAR MOP GOLD STRIPE `5-01-01` · 80 → *40* · weekly",
+        "➖ *Remove 40*  TOWEL BAR MOP GOLD STRIPE `5-01-01` · 80 → *40* · weekly · inventory 80 → *40* too",
         "Readback when done: ✅ K1 KOBUK COFFEE – 40 bar mops decreased – total now 40"]
 
 
@@ -445,5 +445,15 @@ def test_price_type_21_inventory_follows_the_auto_count():
                                                    changes=[Change(action=Action.add, item=item, quantity=n)]), a), a)
     assert "4 → *6*" in t("MAT 3X5", 2) and "PT 21: inventory 8 → *12* too (stays double)" in t("MAT 3X5", 2)
     assert "PT 21: inventory 40 → *50* too" in t("BAR MOP", 10)
-    assert "isn't equal to or double the auto count 4: set the inventory by hand" in t("APRON", 1)
-    assert "PT" not in t("TOWEL", 5)
+    assert "isn't equal to or double the auto count 4 (an old entry mistake): set the inventory to 5 or 10" in t("APRON", 1)
+    assert "inventory 10 → *15* too" in t("TOWEL", 5) and "PT 8: " in t("TOWEL", 5)
+
+
+def test_ratio_check_lists_old_entry_mistakes():
+    from .context import Alliant, Customer
+    from .ratio_check import mismatches
+    a = Alliant(customers=[Customer("K1", "KOBUK", "4", ["Tue"])],
+                items={"K1": {"MAT": 8, "BAR MOP": 40, "APRON": 7, "TOWEL": 20, "RAG": 5}},
+                autocount={"K1": {"MAT": 4, "BAR MOP": 20, "APRON": 4, "TOWEL": 10, "RAG": 0}})
+    [m] = mismatches(a)
+    assert (m["item"], m["auto_count"], m["inventory"], m["suggested_inventory"]) == ("APRON", 4, 7, 8)
