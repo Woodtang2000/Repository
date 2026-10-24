@@ -114,7 +114,7 @@ def test_private_messages_to_the_bot():
                         office_lookup=lambda ev, top, channel=None: looked.append(channel) or "4000" in ev["text"],
                         helper=SimpleNamespace(answer=lambda turns, user: ("Open Customer > Specials", False)))
     ev = lambda user, text: {"type": "message", "channel_type": "im", "channel": "D1", "user": user, "ts": "1.0", "text": text}
-    assert Desk.dm(d, ev("UDRIVER", "how many mats at 4000?")) == "not office" and looked == []
+    assert Desk.dm(d, ev("UDRIVER", "how do I start my route on the handheld?")) == "how-to" and looked == []
     assert Desk.dm(d, ev("USONJA", "how many mats at 4000?")) == "lookup" and looked == ["D1"]
     assert Desk.dm(d, ev("USONJA", "how do I make a special?")) == "how-to"
     assert d.slack.posts[-1] == {"channel": "D1", "text": "Open Customer > Specials", "unfurl_links": False}

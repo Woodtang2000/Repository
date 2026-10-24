@@ -560,20 +560,18 @@ class Desk:
         return True
 
     def dm(self, ev: dict) -> str | None:
-        """A private message to the bot from office staff: account, route and garment lookups like #service-desk, and
-        anything else is answered as an Alliant how-to from the Alliant University notes. Nobody else sees it."""
+        """A private message to the bot. Anyone can ask how to do something in Alliant (answered from the Alliant
+        University notes); office staff can also look up accounts, routes and garments like in #service-desk. Nobody
+        else sees it."""
         user, channel = ev.get("user"), ev["channel"]
-        if not self.is_office(user):
-            self.slack.chat_postMessage(channel=channel, text="Private questions here are for office staff. Drivers: post "
-                                        "in your route channel. For how to do something in Alliant, ask in #alliant-help.")
-            return "not office"
         try:
             self.slack.reactions_add(channel=channel, timestamp=ev["ts"], name=SEEN)
         except Exception:
             pass
-        top = list(reversed(list(_messages(self.slack, channel, time.time() - 900, include_all_metadata=True))))
-        if self.office_lookup(ev, top, channel=channel):
-            return "lookup"
+        if self.is_office(user):
+            top = list(reversed(list(_messages(self.slack, channel, time.time() - 900, include_all_metadata=True))))
+            if self.office_lookup(ev, top, channel=channel):
+                return "lookup"
         if self.helper is None:
             self.slack.chat_postMessage(channel=channel, text="I can answer account, route and garment questions here. "
                                         "The Alliant how-to notes aren't set up on the Service Desk yet.")
