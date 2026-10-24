@@ -109,6 +109,8 @@ class Desk:
             sys.exit("Invite @Service Desk to " + ", ".join("#" + n for n in missing) + " first.")
         self.desk_name, self.desk_id = desk, channels[desk]
         self.routes = {n: channels[n] for n in routes}
+        self.channels = channels
+        self.helper = None  # #alliant-help answers (alliant_help.py), set up in main when the bot is in that channel
 
     def name(self, user: str | None) -> str:
         return _name(self.slack, self.names, user)
@@ -628,6 +630,16 @@ class Desk:
                 return
             ev = req.payload.get("event", {})
             channel = ev.get("channel") or ev.get("item", {}).get("channel")
+            if self.helper and channel == self.helper.channel:
+                if self.helper.wants(ev):
+                    def ask(e=ev):
+                        try:
+                            print(time.strftime("%H:%M"), "alliant-help:", self.helper.handle(e), flush=True)
+                        except Exception as x:
+                            print(time.strftime("%H:%M"), "alliant-help error:", x, flush=True)
+                            self.api_trouble(x)
+                    threading.Thread(target=ask, daemon=True).start()
+                return
             if channel not in watched:
                 return
             if ev.get("type") == "message" and not ev.get("bot_id") and ev.get("subtype") in (None, "thread_broadcast") \
@@ -780,6 +792,10 @@ def main():
     desk = Desk(slack, claude, Alliant.from_dir(args.data), args.desk, routes)
     desk.start_from(os.path.join(args.data, "first_watched.json"))
     desk.data_dir = args.data
+    from . import alliant_help
+    if alliant_help.CHANNEL in desk.channels:
+        desk.helper = alliant_help.Helper(slack, claude, args.data, desk.channels[alliant_help.CHANNEL], desk.me,
+                                          alliant_help.find_user(slack, alliant_help.ESCALATE))
     loaded = [time.time()]
 
     def reload():  # pick up a fresh export without restarting

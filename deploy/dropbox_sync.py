@@ -183,10 +183,56 @@ def feed_age_hours(done_meta) -> float:
     return (datetime.now(timezone.utc) - t).total_seconds() / 3600
 
 
+NOTES_DIR = "/alliant_university"  # the Alliant University notes, for #alliant-help (service_changes/alliant_help.py)
+
+
+def sync_notes(conf, auth) -> None:
+    """Mirror Dropbox/Apps/<app>/alliant_university/ into data/alliant_university/, downloading only changed files.
+    The desk reads the folder on each question, so no restart is needed."""
+    if _meta(auth, NOTES_DIR) is None:
+        return
+    entries, body, url = [], {"path": NOTES_DIR, "recursive": True}, "https://api.dropboxapi.com/2/files/list_folder"
+    while True:
+        raw, _ = post(url, headers={**auth, "Content-Type": "application/json"}, body=json.dumps(body).encode())
+        r = json.loads(raw)
+        entries += [e for e in r["entries"] if e[".tag"] == "file" and e["name"].endswith(".md")]
+        if not r.get("has_more"):
+            break
+        url, body = url + "/continue", {"cursor": r["cursor"]}
+    old, new, local = conf.get("notes_hashes", {}), {}, os.path.join(DATA, "alliant_university")
+    changed = 0
+    for e in entries:
+        rel = e["path_display"][len(NOTES_DIR) + 1:]
+        if ".." in rel.split("/"):
+            continue
+        new[rel] = e["content_hash"]
+        dest = os.path.join(local, rel)
+        if old.get(rel) == e["content_hash"] and os.path.exists(dest):
+            continue
+        os.makedirs(os.path.dirname(dest), exist_ok=True)
+        with open(dest + ".new", "wb") as f:
+            f.write(_download(auth, e["path_lower"]))
+        os.replace(dest + ".new", dest)
+        changed += 1
+    for rel in set(old) - set(new):
+        try:
+            os.remove(os.path.join(local, rel))
+        except OSError:
+            pass
+    if changed or set(old) != set(new):
+        conf["notes_hashes"] = new
+        save(conf)
+        log(f"Alliant University notes: {changed} file(s) updated, {len(new)} in all.")
+
+
 def sync():
     conf = load()
     token = access_token(conf)
     auth = {"Authorization": f"Bearer {token}"}
+    try:
+        sync_notes(conf, auth)
+    except Exception as e:  # never let the notes get in the way of the customer data
+        log(f"Alliant University notes not synced: {e}")
     done = _meta(auth, "/feed_done.txt")
     if done and sync_feed(conf, auth, done) and feed_age_hours(done) <= STALE_HOURS:
         return  # the feed is current: the PDF is only a fallback

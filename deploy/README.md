@@ -103,6 +103,16 @@ to the Bird inbound address; `email_desk.py` polls Bird, keeps each sender to th
 Staff can forward a customer's email there too. Put `BIRD_API_KEY` in `/etc/service-desk.env`, then
 `sudo bash deploy/email_setup.sh`. Log: `journalctl -u service-desk-email -f`. Stop: `sudo bash deploy/email_setup.sh off`.
 
+## #alliant-help (Alliant how-to answers)
+
+Employees post a question in **#alliant-help** and the desk answers in the thread from the Alliant University notes
+(`service_changes/alliant_help.py`). It answers only: no Alliant changes, no customer data, no prices. Questions the
+notes don't cover tag Scott and are logged to `service_changes/data/alliant_unanswered.jsonl`.
+
+1. The Mac copies `Alliant Operations/Alliant University/` into the desk's Dropbox app folder as `alliant_university/`;
+   the hourly `dropbox_sync.py` mirrors it to `service_changes/data/alliant_university/`.
+2. `/invite @Service Desk` in #alliant-help, then `bash deploy/update.sh` (the desk picks the channel up on restart).
+
 ## Website chat (optional)
 
 The chat bubble for snowwhitelinen.com and thelaundrygroup.com (`service_changes/webchat.py`, widget in

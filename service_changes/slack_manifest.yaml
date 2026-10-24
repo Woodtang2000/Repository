@@ -26,7 +26,7 @@ settings:
       - message.channels
       - reaction_added
   interactivity:
-    is_enabled: false
+    is_enabled: true   # the "Give to" buttons on website leads in #sales-desk
   org_deploy_enabled: false
   socket_mode_enabled: true  # no public web address needed; the bot connects out to Slack
   token_rotation_enabled: false
