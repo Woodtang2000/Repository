@@ -12,6 +12,7 @@ import json
 import os
 import re
 from datetime import date, timedelta
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -39,8 +40,11 @@ def configured() -> bool:
 def _call(method: str, url: str, token: str, body: dict | None = None) -> dict:
     req = urllib.request.Request(url, data=json.dumps(body).encode() if body is not None else None, method=method,
                                  headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=30) as r:
-        return json.loads(r.read() or b"{}")
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            return json.loads(r.read() or b"{}")
+    except urllib.error.HTTPError as e:  # Salesforce says why in the body, e.g. [{"message": ..., "errorCode": ...}]
+        raise RuntimeError(f"{method} {url.split('/services/')[-1][:80]}: {e.code} {e.read().decode()[:400]}") from None
 
 
 def _token() -> tuple[str, str]:
@@ -90,38 +94,40 @@ def account_body(lead: dict, owner_id: str) -> dict:
     return {k: v for k, v in body.items() if v}
 
 
-def contact_body(lead: dict, account_id: str, owner_id: str) -> dict | None:
+def contact_body(lead: dict, account_id: str, owner_id: str, primary: bool = True) -> dict | None:
     parts = (lead.get("name") or "").split()
     if not parts:
         return None
     body = {"FirstName": " ".join(parts[:-1]), "LastName": parts[-1], "Phone": lead.get("phone"),
-            "Email": lead.get("email"), "AccountId": account_id, "OwnerId": owner_id, "LeadSource": "Website"}
+            "Email": lead.get("email"), "AccountId": account_id, "OwnerId": owner_id, "Primary_Contact__c": primary}
     return {k: v for k, v in body.items() if v}
 
 
-def opportunity_body(lead: dict, account_id: str, owner_id: str, today: date | None = None) -> dict:
+def opportunity_body(lead: dict, account_id: str, owner_id: str, contact_id: str | None = None,
+                     today: date | None = None) -> dict:
     today = today or date.today()
-    return {"Name": lead.get("business") or lead.get("name") or "Website lead", "AccountId": account_id,
+    body = {"Name": lead.get("business") or lead.get("name") or "Website lead", "AccountId": account_id,
             "StageName": STAGE, "CloseDate": (today + timedelta(days=30)).isoformat(), "Type": "New Business",
-            "LeadSource": "Website", "OwnerId": owner_id, "Description": description(lead)}
+            "LeadSource": "Website", "OwnerId": owner_id, "Description": description(lead),
+            "opportunityContact__c": contact_id}
+    return {k: v for k, v in body.items() if v}
 
 
 def create_opportunity(lead: dict, owner_id: str) -> tuple[str, str]:
-    """Account (reused by exact name), Contact (unless one with that email or name is on it) and Opportunity.
-    Returns (opportunity id, link)."""
+    """Account (reused by exact name), Contact (reused when one with that email or name is on it; primary on a new
+    Account) and Opportunity with that Contact. Returns (opportunity id, link)."""
     token, instance = _token()
     base = f"{instance}/services/data/{API}"
     name = account_body(lead, owner_id)["Name"]
     hit = _call("GET", f"{base}/query?" + urllib.parse.urlencode(
         {"q": f"SELECT Id FROM Account WHERE Name = {_q(name)} LIMIT 1"}), token).get("records") or []
     account_id = hit[0]["Id"] if hit else _call("POST", f"{base}/sobjects/Account", token, account_body(lead, owner_id))["id"]
-    contact = contact_body(lead, account_id, owner_id)
+    contact, contact_id = contact_body(lead, account_id, owner_id, primary=not hit), None
     if contact:
         match = " OR ".join(f"{k} = {_q(contact[k])}" for k in ("Email",) if contact.get(k)) or \
             f"(FirstName = {_q(contact.get('FirstName', ''))} AND LastName = {_q(contact['LastName'])})"
         same = _call("GET", f"{base}/query?" + urllib.parse.urlencode(
             {"q": f"SELECT Id FROM Contact WHERE AccountId = {_q(account_id)} AND ({match}) LIMIT 1"}), token)
-        if not same.get("records"):
-            _call("POST", f"{base}/sobjects/Contact", token, contact)
-    opp = _call("POST", f"{base}/sobjects/Opportunity", token, opportunity_body(lead, account_id, owner_id))
+        contact_id = (same.get("records") or [{}])[0].get("Id") or _call("POST", f"{base}/sobjects/Contact", token, contact)["id"]
+    opp = _call("POST", f"{base}/sobjects/Opportunity", token, opportunity_body(lead, account_id, owner_id, contact_id))
     return opp["id"], f"{instance}/lightning/r/Opportunity/{opp['id']}/view"

@@ -125,9 +125,12 @@ def test_salesforce_records_for_a_lead():
     assert "Products: Towels, Mats" in a["Description"]
     c = salesforce.contact_body(lead, "001A", "005X")
     assert c["FirstName"] == "Ana Marie" and c["LastName"] == "Lee" and c["Phone"] == "907-555-0101" and "Email" not in c
-    o = salesforce.opportunity_body(lead, "001A", "005X", today=date(2026, 10, 25))
+    assert c["Primary_Contact__c"] is True and "LeadSource" not in c
+    assert "Primary_Contact__c" not in salesforce.contact_body(lead, "001A", "005X", primary=False)
+    o = salesforce.opportunity_body(lead, "001A", "005X", "003C", today=date(2026, 10, 25))
     assert o["StageName"] == "Prospecting" and o["CloseDate"] == "2026-11-24" and o["LeadSource"] == "Website"
-    assert o["AccountId"] == "001A" and o["Type"] == "New Business"
+    assert o["AccountId"] == "001A" and o["Type"] == "New Business" and o["opportunityContact__c"] == "003C"
+    assert "opportunityContact__c" not in salesforce.opportunity_body(lead, "001A", "005X")
     no_web = salesforce.account_body({"business": "Bob's Garage", "town": "Palmer", "phone": "907-1"}, "005X")
     assert no_web["BillingCity"] == "Palmer" and no_web["BillingState"] == "AK" and no_web["Phone"] == "907-1"
     assert no_web["Industry"] == "Auto"
