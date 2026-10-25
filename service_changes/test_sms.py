@@ -197,3 +197,10 @@ def test_two_numbers_reply_from_the_one_texted(tmp_path, monkeypatch):
     sms.send_sms("+19075550199", "hello")
     sends = [p for m, p in calls if m == "POST"]
     assert sends[0]["From"] == "+18885197604" and sends[1]["From"] == "+18668278398"
+
+
+def test_messages_sign_as_the_customers_company():
+    from .context import company_for
+    assert company_for("1205-1-00007") == "Snow White Linen"
+    assert company_for("3100-2-00001") == "The Laundry Group"
+    assert company_for(None) == "Snow White Linen"

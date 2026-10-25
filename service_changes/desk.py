@@ -644,13 +644,16 @@ class Desk:
         msg += "".join(f"\nOffice note: {n}" for n in notes)
         if p.get("sms_to"):  # a customer's text (sms.py): the readback goes back by text, not to Slack
             from .sms import send_sms
-            send_sms(p["sms_to"], "Snow White Linen: " + msg)
+            from .context import company_for
+            send_sms(p["sms_to"], f"{company_for(p.get('account'))}: " + msg)
         elif p.get("email_to"):  # a customer's email (email_desk.py): the readback is a reply in their thread
             from . import bird
             from .sms import plain
-            subject = p.get("email_subject") or "Your Snow White Linen request"
+            from .context import company_for
+            company = company_for(p.get("account"))
+            subject = p.get("email_subject") or f"Your {company} request"
             bird.send(p["email_to"], subject if subject.lower().startswith("re:") else "Re: " + subject,
-                      plain(msg) + "\n\nSnow White Linen\n(907) 222-7738", in_reply_to=p.get("email_msgid", ""),
+                      plain(msg) + f"\n\n{company}\n(907) 222-7738", in_reply_to=p.get("email_msgid", ""),
                       key=f"readback/{t['ts']}")
         else:
             self.post(p["src_channel"], msg, {"kind": "readback", "src_ts": p["src_ts"], "driver_id": p.get("driver_id"),
