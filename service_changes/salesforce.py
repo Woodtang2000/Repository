@@ -88,7 +88,9 @@ def account_body(lead: dict, owner_id: str) -> dict:
             "OwnerId": owner_id, "Phone": found.get("phone") or lead.get("phone"), "Website": found.get("website"),
             "BillingStreet": found.get("street"), "BillingCity": found.get("city") or lead.get("town"),
             "BillingState": found.get("state") or ("AK" if lead.get("town") else None),
-            "BillingPostalCode": found.get("zip"), "Industry": industry,
+            "BillingPostalCode": found.get("zip"), "ShippingStreet": found.get("street"),
+            "ShippingCity": found.get("city") or lead.get("town"), "ShippingState": found.get("state") or ("AK" if lead.get("town") else None),
+            "ShippingPostalCode": found.get("zip"), "Industry": industry,
             "Current_Vendor__c": vendor or ("Other competitor" if lead.get("current_provider") else None),
             "Description": description(lead)}
     return {k: v for k, v in body.items() if v}
@@ -105,11 +107,13 @@ def contact_body(lead: dict, account_id: str, owner_id: str, primary: bool = Tru
 
 def opportunity_body(lead: dict, account_id: str, owner_id: str, contact_id: str | None = None,
                      today: date | None = None) -> dict:
-    today = today or date.today()
+    today, found = today or date.today(), lead.get("found") or {}
     body = {"Name": lead.get("business") or lead.get("name") or "Website lead", "AccountId": account_id,
             "StageName": STAGE, "CloseDate": (today + timedelta(days=30)).isoformat(), "Type": "New Business",
             "LeadSource": "Website", "OwnerId": owner_id, "Description": description(lead),
-            "opportunityContact__c": contact_id}
+            "opportunityContact__c": contact_id, "Address_1__c": found.get("street"),
+            "City__c": found.get("city") or lead.get("town"), "State__c": found.get("state") or ("AK" if lead.get("town") else None),
+            "Zip__c": found.get("zip"), "Phone__c": found.get("phone") or lead.get("phone")}
     return {k: v for k, v in body.items() if v}
 
 

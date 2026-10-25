@@ -120,6 +120,7 @@ def test_salesforce_records_for_a_lead():
     a = salesforce.account_body(lead, "005X")
     assert a["Name"] == "Moose Pizza" and a["Type"] == "Potential Customer" and a["OwnerId"] == "005X"
     assert a["BillingStreet"] == "123 Main St" and a["BillingPostalCode"] == "99654" and a["Phone"] == "907-555-0199"
+    assert a["ShippingStreet"] == "123 Main St" and a["ShippingCity"] == "Wasilla"
     assert a["Industry"] == "Restaurant" and a["Current_Vendor__c"] == "Alsco" and "Website" not in a
     assert a["Description"].startswith("[Snow White Linen Supply] Website chat lead\nCame in on the The Laundry Group site")
     assert "Products: Towels, Mats" in a["Description"]
@@ -130,6 +131,8 @@ def test_salesforce_records_for_a_lead():
     o = salesforce.opportunity_body(lead, "001A", "005X", "003C", today=date(2026, 10, 25))
     assert o["StageName"] == "Prospecting" and o["CloseDate"] == "2026-11-24" and o["LeadSource"] == "Website"
     assert o["AccountId"] == "001A" and o["Type"] == "New Business" and o["opportunityContact__c"] == "003C"
+    assert (o["Address_1__c"], o["City__c"], o["State__c"], o["Zip__c"], o["Phone__c"]) == \
+        ("123 Main St", "Wasilla", "AK", "99654", "907-555-0199")
     assert "opportunityContact__c" not in salesforce.opportunity_body(lead, "001A", "005X")
     no_web = salesforce.account_body({"business": "Bob's Garage", "town": "Palmer", "phone": "907-1"}, "005X")
     assert no_web["BillingCity"] == "Palmer" and no_web["BillingState"] == "AK" and no_web["Phone"] == "907-1"
