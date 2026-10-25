@@ -4,8 +4,9 @@
 #   sudo bash deploy/webchat_setup.sh off        stop it
 # Before running: in Lightsail, attach a static IP to the instance and open ports 80 and 443 (Networking tab), and
 # point chat.snowwhitelinen.com (an A record) at that static IP. Leads need a #sales-desk Slack channel with the bot
-# invited, and Interactivity turned on in the Slack app (for the "Give to" buttons). Salesforce Leads need SF_DOMAIN,
-# SF_CLIENT_ID and SF_CLIENT_SECRET in /etc/service-desk.env (a connected app with the client credentials flow).
+# invited, and Interactivity turned on in the Slack app (for the "Give to" buttons). Salesforce Accounts and
+# Opportunities need SF_DOMAIN, SF_CLIENT_ID and SF_CLIENT_SECRET in /etc/service-desk.env (an external client app
+# with the client credentials flow).
 set -euo pipefail
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
