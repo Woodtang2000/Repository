@@ -140,6 +140,42 @@ def test_salesforce_records_for_a_lead():
     assert salesforce._q("Bob's") == "'Bob\\'s'"
 
 
+def test_pick_account_prefers_phone_or_street_then_a_lone_name_match():
+    a = {"Id": "001A", "Name": "Joe's Diner", "Phone": "(907)555-0101", "BillingStreet": "1 Main St"}
+    b = {"Id": "001B", "Name": "Joe's Diner", "Phone": "907-555-0202", "ShippingStreet": "9 Elm St."}
+    assert salesforce.pick_account([a, b], ["+1 907 555 0202"], "") == ("001B", "")
+    assert salesforce.pick_account([a, b], [None], "9 ELM ST") == ("001B", "")
+    assert salesforce.pick_account([a], ["907-000-0000"], "") == ("001A", "")
+    acct, note = salesforce.pick_account([a, b], ["907-000-0000"], "5 Oak St")
+    assert acct is None and note.startswith("2 accounts are named Joe's Diner")
+    assert salesforce.pick_account([], ["907-555-0101"], "") == (None, "")
+    acct, note = salesforce.pick_account([a, dict(b, Phone="907 555 0101")], ["9075550101"], "")
+    assert acct == "001A" and note.startswith("2 accounts match")
+
+
+def test_duplicate_rule_points_the_chat_at_the_existing_account(monkeypatch):
+    dup = [{"errorCode": "DUPLICATES_DETECTED", "message": "Use one of these records?", "duplicateResult": {
+        "matchResults": [{"matchRecords": [{"record": {"attributes": {"type": "Account"}, "Id": "001OLD"}}]}]}}]
+    assert salesforce.duplicate_ids(dup) == ["001OLD"]
+    assert salesforce.duplicate_ids([{"errorCode": "REQUIRED_FIELD_MISSING"}]) == []
+    calls = []
+
+    def fake_call(method, url, token, body=None):
+        calls.append((method, url.split("/v62.0/")[-1][:40], body))
+        if "query" in url:
+            return {"records": []}
+        if url.endswith("/sobjects/Account"):
+            raise salesforce.SalesforceError("dup", dup)
+        return {"id": "003NEW" if url.endswith("Contact") else "006NEW"}
+    monkeypatch.setattr(salesforce, "_token", lambda: ("tok", "https://sf"))
+    monkeypatch.setattr(salesforce, "_call", fake_call)
+    opp, link, note = salesforce.create_opportunity({"business": "Joes Diner", "name": "Joe Smith", "phone": "907-1"}, "005X")
+    assert opp == "006NEW" and "duplicate rule" in note
+    contact = next(b for m, u, b in calls if u.endswith("sobjects/Contact"))
+    assert contact["AccountId"] == "001OLD" and "Primary_Contact__c" not in contact
+    assert next(b for m, u, b in calls if u.endswith("sobjects/Opportunity"))["AccountId"] == "001OLD"
+
+
 def test_find_business_reads_the_json_and_drops_blanks():
     class Claude:
         class messages:
@@ -171,7 +207,7 @@ def test_give_to_jesse_creates_the_salesforce_opportunity(tmp_path, monkeypatch)
     payload = {"actions": [jesse], "channel": {"id": "CSALES"}, "message": {"ts": "1.0"}, "user": {"id": "U1", "name": "bill"}}
     made = []
     out = sales.handle_action(Slack(), payload, str(tmp_path), find=lambda l: {"street": "1 Main St"},
-                              create=lambda l, o: (made.append((o, l["found"])), ("006A", "https://sf/006A"))[1])
+                              create=lambda l, o: (made.append((o, l["found"])), ("006A", "https://sf/006A", ""))[1])
     assert made == [("0051W000005qDzpQAE", {"street": "1 Main St"})] and "Jesse James Tingley" in out
     upd = calls[-1][1]
     footer = upd["blocks"][-1]["elements"][0]["text"]

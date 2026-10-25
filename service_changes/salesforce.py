@@ -37,6 +37,12 @@ def configured() -> bool:
     return all(os.environ.get(v) for v in ("SF_DOMAIN", "SF_CLIENT_ID", "SF_CLIENT_SECRET"))
 
 
+class SalesforceError(RuntimeError):
+    def __init__(self, message: str, errors):
+        super().__init__(message)
+        self.errors = errors if isinstance(errors, list) else []  # [{"message", "errorCode", "duplicateResult"...}]
+
+
 def _call(method: str, url: str, token: str, body: dict | None = None) -> dict:
     req = urllib.request.Request(url, data=json.dumps(body).encode() if body is not None else None, method=method,
                                  headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"})
@@ -44,7 +50,12 @@ def _call(method: str, url: str, token: str, body: dict | None = None) -> dict:
         with urllib.request.urlopen(req, timeout=30) as r:
             return json.loads(r.read() or b"{}")
     except urllib.error.HTTPError as e:  # Salesforce says why in the body, e.g. [{"message": ..., "errorCode": ...}]
-        raise RuntimeError(f"{method} {url.split('/services/')[-1][:80]}: {e.code} {e.read().decode()[:400]}") from None
+        text = e.read().decode()
+        try:
+            errors = json.loads(text)
+        except ValueError:
+            errors = []
+        raise SalesforceError(f"{method} {url.split('/services/')[-1][:80]}: {e.code} {text[:400]}", errors) from None
 
 
 def _token() -> tuple[str, str]:
@@ -117,16 +128,60 @@ def opportunity_body(lead: dict, account_id: str, owner_id: str, contact_id: str
     return {k: v for k, v in body.items() if v}
 
 
-def create_opportunity(lead: dict, owner_id: str) -> tuple[str, str]:
-    """Account (reused by exact name), Contact (reused when one with that email or name is on it; primary on a new
-    Account) and Opportunity with that Contact. Returns (opportunity id, link)."""
+def _digits(phone) -> str:
+    return re.sub(r"\D", "", phone or "")[-10:]
+
+
+def _street(street) -> str:
+    return re.sub(r"[^a-z0-9]", "", (street or "").lower())
+
+
+def pick_account(candidates: list[dict], phones: list[str], street: str) -> tuple[str | None, str]:
+    """Which same-name Account to reuse: one whose phone or street matches the lead's; else the only one with that
+    name. Several same-name Accounts and none matching: None (make a new Account) and a note for the Slack card."""
+    phones = {_digits(p) for p in phones if len(_digits(p)) == 10}
+    street = _street(street)
+    strong = [c for c in candidates if _digits(c.get("Phone")) in phones
+              or (street and street in (_street(c.get("BillingStreet")), _street(c.get("ShippingStreet"))))]
+    if strong:
+        return strong[0]["Id"], (f"{len(strong)} accounts match this name and phone/address; used the first" if len(strong) > 1 else "")
+    if len(candidates) == 1:
+        return candidates[0]["Id"], ""
+    if candidates:
+        return None, (f"{len(candidates)} accounts are named {candidates[0].get('Name')} and none has this phone or "
+                      "address, so this is a new account: merge it if it's the same business")
+    return None, ""
+
+
+def duplicate_ids(errors: list) -> list[str]:
+    """The existing records Salesforce's duplicate rule matched, from a DUPLICATES_DETECTED error."""
+    return [m["record"]["Id"] for e in errors if e.get("errorCode") == "DUPLICATES_DETECTED"
+            for r in (e.get("duplicateResult") or {}).get("matchResults") or []
+            for m in r.get("matchRecords") or [] if (m.get("record") or {}).get("Id")]
+
+
+def create_opportunity(lead: dict, owner_id: str) -> tuple[str, str, str]:
+    """Account (an existing one with that name, preferring a phone or street match; or the one Salesforce's duplicate
+    rule points to), Contact (reused when one with that email or name is on it; primary on a new Account) and
+    Opportunity with that Contact. Returns (opportunity id, link, a note for the Slack card or "")."""
     token, instance = _token()
     base = f"{instance}/services/data/{API}"
-    name = account_body(lead, owner_id)["Name"]
-    hit = _call("GET", f"{base}/query?" + urllib.parse.urlencode(
-        {"q": f"SELECT Id FROM Account WHERE Name = {_q(name)} LIMIT 1"}), token).get("records") or []
-    account_id = hit[0]["Id"] if hit else _call("POST", f"{base}/sobjects/Account", token, account_body(lead, owner_id))["id"]
-    contact, contact_id = contact_body(lead, account_id, owner_id, primary=not hit), None
+    new = account_body(lead, owner_id)
+    found = lead.get("found") or {}
+    same_name = _call("GET", f"{base}/query?" + urllib.parse.urlencode(
+        {"q": f"SELECT Id, Name, Phone, BillingStreet, ShippingStreet FROM Account WHERE Name = {_q(new['Name'])} "
+              "ORDER BY CreatedDate LIMIT 20"}), token).get("records") or []
+    account_id, note = pick_account(same_name, [found.get("phone"), lead.get("phone")], found.get("street"))
+    created = False
+    if not account_id:
+        try:
+            account_id, created = _call("POST", f"{base}/sobjects/Account", token, new)["id"], True
+        except SalesforceError as e:
+            dupes = duplicate_ids(e.errors)
+            if not dupes:
+                raise
+            account_id, note = dupes[0], "Salesforce's duplicate rule matched an existing account; used it"
+    contact, contact_id = contact_body(lead, account_id, owner_id, primary=created), None
     if contact:
         match = " OR ".join(f"{k} = {_q(contact[k])}" for k in ("Email",) if contact.get(k)) or \
             f"(FirstName = {_q(contact.get('FirstName', ''))} AND LastName = {_q(contact['LastName'])})"
@@ -134,4 +189,4 @@ def create_opportunity(lead: dict, owner_id: str) -> tuple[str, str]:
             {"q": f"SELECT Id FROM Contact WHERE AccountId = {_q(account_id)} AND ({match}) LIMIT 1"}), token)
         contact_id = (same.get("records") or [{}])[0].get("Id") or _call("POST", f"{base}/sobjects/Contact", token, contact)["id"]
     opp = _call("POST", f"{base}/sobjects/Opportunity", token, opportunity_body(lead, account_id, owner_id, contact_id))
-    return opp["id"], f"{instance}/lightning/r/Opportunity/{opp['id']}/view"
+    return opp["id"], f"{instance}/lightning/r/Opportunity/{opp['id']}/view", note

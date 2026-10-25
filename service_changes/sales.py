@@ -122,7 +122,7 @@ def handle_action(slack, payload: dict, data_dir: str, create=salesforce.create_
         lead["found"] = find(lead)
         save(data_dir, lead)
     try:
-        sf_id, link = create(lead, owner[1])
+        sf_id, link, note = create(lead, owner[1])
     except Exception as e:
         slack.chat_postEphemeral(channel=channel, user=payload["user"]["id"],
                                  text=f"Salesforce didn't take it: {str(e)[:300]}")
@@ -131,5 +131,6 @@ def handle_action(slack, payload: dict, data_dir: str, create=salesforce.create_
     save(data_dir, lead)
     slack.chat_update(channel=channel, ts=ts, text=card_text(lead),
                       blocks=blocks(lead, footer=f"✅ Given to *{owner[0]}* by {clicker} · <{link}|Salesforce Opportunity>"
-                                                    + ("" if lead["found"].get("street") else " · address not found online, add it in Salesforce")))
+                                                    + ("" if lead["found"].get("street") else " · address not found online, add it in Salesforce")
+                                                    + (f" · ⚠️ {note}" if note else "")))
     return f"lead {lead['id']} -> {owner[0]} ({sf_id})"
