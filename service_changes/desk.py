@@ -790,7 +790,7 @@ class Desk:
         def on_event(client, req):
             client.send_socket_mode_response(SocketModeResponse(envelope_id=req.envelope_id))
             if req.type == "interactive" and req.payload.get("type") == "block_actions":
-                # "Give to Bill/Jesse" on a website lead in #sales-desk: create the Salesforce Lead (sales.py)
+                # "Give to Bill/Jesse" on a website lead in #sales-desk: create the Salesforce Account and Opportunity (sales.py)
                 from . import sales
                 def give(p=req.payload):
                     try:

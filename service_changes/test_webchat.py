@@ -1,5 +1,6 @@
 import json
 import threading
+from datetime import date
 import urllib.request
 from types import SimpleNamespace
 
@@ -111,17 +112,42 @@ def test_http_widget_and_chat(posted):
         srv.shutdown()
 
 
-def test_lead_body_for_salesforce():
-    b = salesforce.lead_body({"name": "Ana Marie Lee", "business": "Moose Pizza", "town": "Wasilla", "phone": "907-555-0101",
-                              "company": "sw", "handed_from": "tlg", "current_provider": "alsco now", "needs": "bar mops and 3 mats",
-                              "transcript": "Visitor: hi"}, "005X")
-    assert b["FirstName"] == "Ana Marie" and b["LastName"] == "Lee" and b["OwnerId"] == "005X"
-    assert b["LeadSource"] == "Website" and b["Current_Vendor__c"] == "Alsco" and b["Products__c"] == "Towels;Mats"
-    assert b["Description"].startswith("[Snow White Linen Supply] Website chat lead\nCame in on the The Laundry Group site")
-    assert "Email" not in b
+def test_salesforce_records_for_a_lead():
+    lead = {"name": "Ana Marie Lee", "business": "Moose Pizza", "business_type": "restaurant", "town": "Wasilla",
+            "phone": "907-555-0101", "company": "sw", "handed_from": "tlg", "current_provider": "alsco now",
+            "needs": "bar mops and 3 mats", "transcript": "Visitor: hi",
+            "found": {"street": "123 Main St", "city": "Wasilla", "state": "AK", "zip": "99654", "phone": "907-555-0199"}}
+    a = salesforce.account_body(lead, "005X")
+    assert a["Name"] == "Moose Pizza" and a["Type"] == "Potential Customer" and a["OwnerId"] == "005X"
+    assert a["BillingStreet"] == "123 Main St" and a["BillingPostalCode"] == "99654" and a["Phone"] == "907-555-0199"
+    assert a["Industry"] == "Restaurant" and a["Current_Vendor__c"] == "Alsco" and "Website" not in a
+    assert a["Description"].startswith("[Snow White Linen Supply] Website chat lead\nCame in on the The Laundry Group site")
+    assert "Products: Towels, Mats" in a["Description"]
+    c = salesforce.contact_body(lead, "001A", "005X")
+    assert c["FirstName"] == "Ana Marie" and c["LastName"] == "Lee" and c["Phone"] == "907-555-0101" and "Email" not in c
+    o = salesforce.opportunity_body(lead, "001A", "005X", today=date(2026, 10, 25))
+    assert o["StageName"] == "Prospecting" and o["CloseDate"] == "2026-11-24" and o["LeadSource"] == "Website"
+    assert o["AccountId"] == "001A" and o["Type"] == "New Business"
+    no_web = salesforce.account_body({"business": "Bob's Garage", "town": "Palmer", "phone": "907-1"}, "005X")
+    assert no_web["BillingCity"] == "Palmer" and no_web["BillingState"] == "AK" and no_web["Phone"] == "907-1"
+    assert no_web["Industry"] == "Auto"
+    assert salesforce._q("Bob's") == "'Bob\\'s'"
 
 
-def test_give_to_jesse_creates_the_salesforce_lead(tmp_path, monkeypatch):
+def test_find_business_reads_the_json_and_drops_blanks():
+    class Claude:
+        class messages:
+            @staticmethod
+            def create(**kw):
+                assert kw["tools"][0]["type"] == "web_search_20250305" and "Moose Pizza" in kw["messages"][0]["content"]
+                text = 'Found it: {"street": "123 Main St", "city": "Wasilla", "state": "AK", "zip": "", "phone": null}'
+                return type("R", (), {"content": [type("B", (), {"type": "text", "text": text})()]})()
+    assert sales.find_business({"business": "Moose Pizza", "town": "Wasilla"}, Claude()) == \
+        {"street": "123 Main St", "city": "Wasilla", "state": "AK"}
+    assert sales.find_business({"name": "no business"}, Claude()) == {}
+
+
+def test_give_to_jesse_creates_the_salesforce_opportunity(tmp_path, monkeypatch):
     monkeypatch.setattr(salesforce, "configured", lambda: True)
     calls = []
 
@@ -138,8 +164,11 @@ def test_give_to_jesse_creates_the_salesforce_lead(tmp_path, monkeypatch):
     jesse = next(b for b in buttons if b["action_id"] == "sales_give_jesse")
     payload = {"actions": [jesse], "channel": {"id": "CSALES"}, "message": {"ts": "1.0"}, "user": {"id": "U1", "name": "bill"}}
     made = []
-    out = sales.handle_action(Slack(), payload, str(tmp_path), create=lambda l, o: (made.append(o), ("00Q1", "https://sf/00Q1"))[1])
-    assert made == ["0051W000005qDzpQAE"] and "Jesse James Tingley" in out
+    out = sales.handle_action(Slack(), payload, str(tmp_path), find=lambda l: {"street": "1 Main St"},
+                              create=lambda l, o: (made.append((o, l["found"])), ("006A", "https://sf/006A"))[1])
+    assert made == [("0051W000005qDzpQAE", {"street": "1 Main St"})] and "Jesse James Tingley" in out
     upd = calls[-1][1]
-    assert "Given to *Jesse James Tingley* by bill" in upd["blocks"][-1]["elements"][0]["text"]
+    footer = upd["blocks"][-1]["elements"][0]["text"]
+    assert "Given to *Jesse James Tingley* by bill" in footer and "Salesforce Opportunity" in footer
+    assert "address not found" not in footer
     assert sales.handle_action(Slack(), payload, str(tmp_path), create=lambda l, o: 1 / 0) == "already in Salesforce"

@@ -5,7 +5,7 @@
 Serves /widget.js (one <script> tag per site), the logos, and /api/chat. Each company's chat answers only for its own
 trade from the owner-approved fact sheet (website_chat/facts_by_company.json), hands a visitor to the sister company
 when they came to the wrong one, sends new business to #sales-desk (sales.py: "Give to" buttons that create the
-Salesforce Lead) and existing customers' service requests to #service-desk. It never sees customer accounts, prices or
+Salesforce Account and Opportunity) and existing customers' service requests to #service-desk. It never sees customer accounts, prices or
 balances. Conversations are kept in memory on the server; the page only sends the visitor's newest message.
 
 Limits so nobody can run up the bill: message length, turns per conversation, messages per visitor IP per hour, and a
