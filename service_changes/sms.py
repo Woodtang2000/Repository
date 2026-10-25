@@ -76,16 +76,47 @@ def plain(text: str) -> str:
     return text.replace("*", "").replace("_", "").replace("`", "").strip()
 
 
+def our_numbers() -> list[str]:
+    """TWILIO_NUMBER, or several comma-separated (866-TAP-TEXT and 888-519-7604): the first is the default sender."""
+    return [n.strip() for n in os.environ.get("TWILIO_NUMBER", "").split(",") if n.strip()]
+
+
+LAST_NUMBER = os.path.join(os.environ.get("SERVICE_DESK_DATA", "service_changes/data"), "sms_last_number.json")
+
+
+def _last_numbers() -> dict:
+    try:
+        with open(LAST_NUMBER) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
 def send_sms(to: str, body: str) -> None:
-    _twilio("POST", "Messages.json", {"From": os.environ["TWILIO_NUMBER"], "To": to, "Body": plain(body)[:1500]})
+    """Reply from the number the customer last texted (the readback is sent by the desk, a separate process, so
+    that is kept in a small file), else from the first number."""
+    mine = our_numbers()
+    frm = _last_numbers().get(phone_key(to))
+    _twilio("POST", "Messages.json", {"From": frm if frm in mine else mine[0], "To": to, "Body": plain(body)[:1500]})
 
 
 def inbound(since: datetime) -> list[dict]:
-    """Texts to our number since `since`, oldest first."""
-    r = _twilio("GET", "Messages.json", {"To": os.environ["TWILIO_NUMBER"], "DateSent>": since.strftime("%Y-%m-%d"),
-                                          "PageSize": 100})
-    msgs = [m for m in r.get("messages", []) if m.get("direction") == "inbound"]
-    return sorted(msgs, key=lambda m: m.get("date_created") or "")
+    """Texts to any of our numbers since `since`, oldest first."""
+    msgs = []
+    for number in our_numbers():
+        r = _twilio("GET", "Messages.json", {"To": number, "DateSent>": since.strftime("%Y-%m-%d"), "PageSize": 100})
+        msgs += [m for m in r.get("messages", []) if m.get("direction") == "inbound"]
+    msgs.sort(key=lambda m: m.get("date_created") or "")
+    if msgs:
+        last = _last_numbers()
+        last.update({phone_key(m.get("from", "")): m.get("to", "") for m in msgs})
+        try:
+            with open(LAST_NUMBER + ".tmp", "w") as f:
+                json.dump(last, f)
+            os.replace(LAST_NUMBER + ".tmp", LAST_NUMBER)
+        except OSError:
+            pass
+    return msgs
 
 
 # ---- who may see what -----------------------------------------------------------------------------------------
