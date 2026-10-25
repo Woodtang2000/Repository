@@ -50,3 +50,18 @@ def test_dark_is_dry_run_unless_apply(monkeypatch, capsys):
     audit.main(["--dark", "--apply"])
     assert deleted == [("anthc.ai", "CNAME", "www"), ("alsco.ai", "A", "@"), ("alsco.ai", "CNAME", "www"),
                        ("alsco.ai", "MX", "@")]
+
+
+def test_lookup_summary_and_order():
+    from . import lookup
+    data = {"events": [{"eventAction": "expiration", "eventDate": "2026-11-20T00:00:00Z"}],
+            "status": ["client transfer prohibited"], "nameservers": [{"ldhName": "NS1.DREAMHOST.COM"}],
+            "entities": [{"roles": ["registrar"], "vcardArray": ["vcard", [["version", {}, "text", "4.0"],
+                                                                          ["fn", {}, "text", "Network Solutions, LLC"]]]}]}
+    r = lookup.summary("swl.com", data)
+    assert (r["registrar"], r["expires"], r["nameservers"], r["locked"], r["action"]) == \
+        ("Network Solutions, LLC", "2026-11-20", "ns1.dreamhost.com", "yes", "transfer to GoDaddy")
+    gd = dict(r, domain="a.com", registrar="GoDaddy.com, LLC", action="stays (GoDaddy)", expires="2026-11-01")
+    assert lookup.summary("free.ai", None)["action"].startswith("available")
+    t = lookup.table([gd, r])
+    assert t.index("swl.com") < t.index("a.com")  # domains to move first
