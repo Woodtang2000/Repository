@@ -175,3 +175,32 @@ def test_phone_commands_are_recognised():
 
 def test_plain_text_for_phones():
     assert sms.plain("<@U1> ✅ *1205-1-00004* _MIDAS_ – `5-01` <https://x|#route-1>") == "✅ 1205-1-00004 MIDAS – 5-01 #route-1"
+
+
+def test_two_numbers_reply_from_the_one_texted(tmp_path, monkeypatch):
+    from . import sms
+    monkeypatch.setenv("TWILIO_NUMBER", "+18668278398, +18885197604")
+    monkeypatch.setattr(sms, "LAST_NUMBER", str(tmp_path / "last.json"))
+    calls = []
+
+    def twilio(method, path, params=None):
+        calls.append((method, params))
+        if method == "GET" and params["To"] == "+18885197604":
+            return {"messages": [{"direction": "inbound", "from": "+19075550101", "to": "+18885197604",
+                                  "date_created": "x", "sid": "SM1", "body": "hi"}]}
+        return {"messages": []}
+    monkeypatch.setattr(sms, "_twilio", twilio)
+    from datetime import datetime
+    assert [m["sid"] for m in sms.inbound(datetime(2026, 10, 25))] == ["SM1"]
+    assert {p["To"] for m, p in calls if m == "GET"} == {"+18668278398", "+18885197604"}
+    sms.send_sms("+19075550101", "done")
+    sms.send_sms("+19075550199", "hello")
+    sends = [p for m, p in calls if m == "POST"]
+    assert sends[0]["From"] == "+18885197604" and sends[1]["From"] == "+18668278398"
+
+
+def test_messages_sign_as_the_customers_company():
+    from .context import company_for
+    assert company_for("1205-1-00007") == "Snow White Linen"
+    assert company_for("3100-2-00001") == "The Laundry Group"
+    assert company_for(None) == "Snow White Linen"

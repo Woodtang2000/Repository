@@ -26,6 +26,12 @@ def service_day(ts: str | float) -> str:
     return DAYS[datetime.fromtimestamp(float(ts), ALASKA).weekday()]
 
 
+def company_for(account: str | None) -> str:
+    """Which company signs a message to this account: branch 2 is The Laundry Group, everything else Snow White."""
+    parts = (account or "").split("-")
+    return "The Laundry Group" if len(parts) > 1 and parts[1] == "2" else "Snow White Linen"
+
+
 def frequency_label(code: str | None) -> str | None:
     """Alliant delivery frequency code in plain words (codes per Snow White's office)."""
     code = (code or "").strip().upper()

@@ -5,6 +5,7 @@ import sys, pathlib
 from playwright.sync_api import sync_playwright
 
 number = sys.argv[1] if len(sys.argv) > 1 else "(8XX) XXX-XXXX"
+name = sys.argv[2] if len(sys.argv) > 2 else "Text-Snow-White-Linen"  # output file name, one per number
 html = f"""<!doctype html><html><head><meta charset="utf-8"><style>
 @page {{ size: Letter; margin: 0 }}
 * {{ box-sizing: border-box }}
@@ -53,7 +54,7 @@ with sync_playwright() as p:
     b = p.chromium.launch(executable_path="/opt/pw-browsers/chromium-1194/chrome-linux/chrome")
     pg = b.new_page(viewport={"width": 816, "height": 1056}, device_scale_factor=2)
     pg.set_content(html)
-    pg.pdf(path=str(out / "Text-Snow-White-Linen.pdf"), format="Letter", print_background=True)
-    pg.screenshot(path=str(out / "Text-Snow-White-Linen.png"), full_page=True)
+    pg.pdf(path=str(out / f"{name}.pdf"), format="Letter", print_background=True)
+    pg.screenshot(path=str(out / f"{name}.png"), full_page=True)
     b.close()
-print("wrote", out / "Text-Snow-White-Linen.pdf", out / "Text-Snow-White-Linen.png")
+print("wrote", out / f"{name}.pdf", out / f"{name}.png")
