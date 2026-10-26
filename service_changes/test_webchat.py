@@ -279,3 +279,19 @@ def test_portal_login_help(monkeypatch):
     sys_ = chat.system("tlg")
     assert "Sign-in page: https://portal.example/login" in sys_ and '"Forgot password"' in sys_
     assert "Never ask for or accept their password" in sys_
+
+
+def test_each_company_loads_from_its_own_address():
+    from http.server import ThreadingHTTPServer
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), webchat.make_handler(None, "https://chat.snowwhitelinen.com"))
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    get = lambda path, host: urllib.request.urlopen(urllib.request.Request(
+        f"http://127.0.0.1:{srv.server_port}{path}", headers={"Host": host})).read().decode()
+    try:
+        tlg = get("/try", "chat.thelaundrygroup.com")
+        assert "The Laundry Group" in tlg and "https://chat.thelaundrygroup.com/widget.js?site=tlg" in tlg
+        assert '"api": "https://chat.thelaundrygroup.com"' in get("/widget.js?site=tlg", "chat.thelaundrygroup.com")
+        assert "https://chat.snowwhitelinen.com/widget.js?site=sw" in get("/try", "chat.snowwhitelinen.com")
+        assert '"api": "https://chat.snowwhitelinen.com"' in get("/widget.js?site=sw", "evil.example")
+    finally:
+        srv.shutdown()

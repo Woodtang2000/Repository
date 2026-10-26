@@ -350,7 +350,12 @@ WIDGET = os.path.join(REPO, "website_chat", "widget.js")
 LOGOS = {"sw": os.path.join(REPO, "brand", "logo_sw.png"), "tlg": os.path.join(REPO, "brand", "logo_tlg.png")}
 
 
+TLG_HOST = os.environ.get("WEBCHAT_TLG_HOST", "chat.thelaundrygroup.com")  # TLG's own chat address, same server
+
+
 def make_handler(chat: Chat, public_url: str):
+    hosts = {urlparse(public_url).netloc, TLG_HOST}
+
     class H(BaseHTTPRequestHandler):
         server_version = "SWLChat"
 
@@ -377,9 +382,15 @@ def make_handler(chat: Chat, public_url: str):
         def do_OPTIONS(self):
             self._send(204, b"", "text/plain")
 
+        def _base(self) -> str:
+            """The address this visitor reached us on, so TLG's site loads everything from TLG's own address."""
+            host = (self.headers.get("Host") or "").split(":")[0].lower()
+            return f"https://{host}" if host in hosts else public_url
+
         def do_GET(self):
             u = urlparse(self.path)
             q = parse_qs(u.query)
+            base = self._base()
             if u.path == "/health":
                 return self._send(200, b"ok", "text/plain")
             if u.path == "/widget.js":
@@ -387,8 +398,8 @@ def make_handler(chat: Chat, public_url: str):
                 if site not in COMPANIES:
                     return self._send(404, b"unknown site", "text/plain")
                 c = COMPANIES[site]
-                cfg = {"api": public_url, "site": site, "companies": {k: {kk: v[kk] for kk in ("name", "short", "navy", "gold", "greeting", "chips")}
-                                                                      | {"logo": f"{public_url}/logo/{k}.png"} for k, v in COMPANIES.items()}}
+                cfg = {"api": base, "site": site, "companies": {k: {kk: v[kk] for kk in ("name", "short", "navy", "gold", "greeting", "chips")}
+                                                                      | {"logo": f"{base}/logo/{k}.png"} for k, v in COMPANIES.items()}}
                 with open(WIDGET) as f:
                     js = f.read().replace("__CONFIG__", json.dumps(cfg))
                 return self._send(200, js.encode(), "application/javascript; charset=utf-8", cache=300)
@@ -397,12 +408,13 @@ def make_handler(chat: Chat, public_url: str):
                 with open(LOGOS[m.group(1)], "rb") as f:
                     return self._send(200, f.read(), "image/png", cache=86400)
             if u.path == "/try":  # a bare test page with the widget, before it's on the real sites
-                site = (q.get("site") or ["sw"])[0] if (q.get("site") or ["sw"])[0] in COMPANIES else "sw"
+                default = "tlg" if base.endswith(TLG_HOST) else "sw"
+                site = (q.get("site") or [default])[0] if (q.get("site") or [default])[0] in COMPANIES else default
                 page = (f"<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>"
                         f"<title>{COMPANIES[site]['name']} chat test</title><body style='font-family:sans-serif;padding:24px'>"
                         f"<h1>{COMPANIES[site]['name']}</h1><p>Test page: the chat bubble is in the bottom right corner.</p>"
                         f"<p><a href='?site={'tlg' if site == 'sw' else 'sw'}'>Switch site</a></p>"
-                        f"<script src='{public_url}/widget.js?site={site}' async></script></body>")
+                        f"<script src='{base}/widget.js?site={site}' async></script></body>")
                 return self._send(200, page.encode(), "text/html; charset=utf-8")
             self._send(404, b"not found", "text/plain")
 

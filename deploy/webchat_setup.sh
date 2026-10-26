@@ -13,6 +13,7 @@ REPO="$(cd "$(dirname "$0")/.." && pwd)"
 RUN_AS="${SUDO_USER:-ubuntu}"
 ENV_FILE=/etc/service-desk.env
 HOST="${WEBCHAT_HOST:-chat.snowwhitelinen.com}"
+TLG_HOST="${WEBCHAT_TLG_HOST:-chat.thelaundrygroup.com}"   # TLG's own address: an A record on TLG's domain to the same IP
 
 if [ "${1:-}" = "off" ]; then
   systemctl disable --now service-desk-webchat
@@ -52,7 +53,7 @@ if ! command -v caddy >/dev/null; then
   apt-get update -q && apt-get install -y -q caddy
 fi
 cat > /etc/caddy/Caddyfile <<EOF3
-$HOST {
+$HOST, $TLG_HOST {
     encode gzip
     reverse_proxy 127.0.0.1:8088
 }
@@ -66,6 +67,6 @@ systemctl restart service-desk   # so the desk handles the "Give to" buttons
 sleep 4
 journalctl -u service-desk-webchat -n 3 --no-pager
 echo
-echo "Test page: https://$HOST/try   (switch sites with the link on the page)"
+echo "Test pages: https://$HOST/try   https://$TLG_HOST/try"
 echo "Snow White site:  <script src=\"https://$HOST/widget.js?site=sw\" async></script>"
-echo "TLG site:         <script src=\"https://$HOST/widget.js?site=tlg\" async></script>"
+echo "TLG site:         <script src=\"https://$TLG_HOST/widget.js?site=tlg\" async></script>"
