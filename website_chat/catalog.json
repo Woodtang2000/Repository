@@ -490,6 +490,12 @@
       "sku": "6-02-19"
      },
      {
+      "id": "pumice-soap",
+      "name": "Pumice hand soap",
+      "note": "Heavy-duty, for shops and garages",
+      "sku": "6-02-15"
+     },
+     {
       "id": "paper-towel",
       "name": "Paper towels",
       "sku": "6-02-07"
@@ -513,6 +519,11 @@
       "id": "urinal-screen",
       "name": "Urinal screens",
       "sku": "6-01-05"
+     },
+     {
+      "id": "urinal-mat",
+      "name": "Urinal mats",
+      "sku": "6-01-55"
      },
      {
       "id": "first-aid",
@@ -748,7 +759,13 @@
      "chef-pant",
      "air-freshener",
      "hands-free-soap",
-     "paper-towel"
+     "paper-towel",
+     "toilet-tissue",
+     "seat-cover",
+     "bowl-clip",
+     "urinal-screen",
+     "urinal-mat",
+     "first-aid"
     ]
    },
    {
@@ -770,7 +787,16 @@
      "mat-confetti-grey",
      "mat-charcoal-heather",
      "mat-black-comfort-flow",
-     "gloves"
+     "gloves",
+     "air-freshener",
+     "hands-free-soap",
+     "paper-towel",
+     "toilet-tissue",
+     "seat-cover",
+     "bowl-clip",
+     "urinal-screen",
+     "urinal-mat",
+     "first-aid"
     ]
    },
    {
@@ -797,7 +823,17 @@
      "mat-black",
      "mat-confetti-grey",
      "wet-mop",
-     "dust-mop"
+     "dust-mop",
+     "air-freshener",
+     "hands-free-soap",
+     "pumice-soap",
+     "paper-towel",
+     "toilet-tissue",
+     "seat-cover",
+     "bowl-clip",
+     "urinal-screen",
+     "urinal-mat",
+     "first-aid"
     ]
    },
    {
@@ -821,7 +857,17 @@
      "mat-scraper",
      "mat-confetti-grey",
      "mat-charcoal-heather",
-     "mat-black"
+     "mat-black",
+     "air-freshener",
+     "hands-free-soap",
+     "pumice-soap",
+     "paper-towel",
+     "toilet-tissue",
+     "seat-cover",
+     "bowl-clip",
+     "urinal-screen",
+     "urinal-mat",
+     "first-aid"
     ]
    },
    {
@@ -846,6 +892,7 @@
      "seat-cover",
      "bowl-clip",
      "urinal-screen",
+     "urinal-mat",
      "first-aid"
     ]
    },
@@ -868,6 +915,7 @@
      "seat-cover",
      "bowl-clip",
      "urinal-screen",
+     "urinal-mat",
      "first-aid"
     ]
    },
@@ -893,6 +941,7 @@
      "seat-cover",
      "bowl-clip",
      "urinal-screen",
+     "urinal-mat",
      "first-aid"
     ]
    },
