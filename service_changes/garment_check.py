@@ -1,10 +1,10 @@
-"""Wearer garments whose inventory is above the auto count with nothing on order to explain it.
+"""Wearer garments whose inventory doesn't match the auto count (equal, or double by the ratio rule) with nothing on order.
 
 Inventory above the auto count is normal for a while: a new or replacement order is waiting to be filled and the old
-garments stay in inventory until the new ones are assigned. Price type 9 bills the auto count, so the customer isn't
-charged rent on garments they don't have yet. With **nothing on order**, the extra inventory means the old garments
-were never stopped/deassigned (Scott, 2026-10-24). The data isn't clean, the customer may have garments they aren't
-billed for, and garments that never come back never get a loss or abuse charge.
+garments stay in inventory until the new ones are assigned. Otherwise every item's inventory should equal its auto
+count or be double it (the ratio rule, Scott 2026-10-24); anything else is a data mismatch for the office to fix,
+not a sign the customer did anything wrong (many customers simply don't turn in every garment, Scott 2026-10-26).
+Left out: customer-owned NOG garments, COG customers (cog_accounts.txt) and TLG's hospital scrub pools.
 
   python -m service_changes.garment_check --data service_changes/data > garment_fixes.csv
 
@@ -79,14 +79,14 @@ def findings(data_dir: str, alliant: Alliant | None = None) -> list[dict]:
     who = {(a, w.employee): w.name for a, ws in alliant.wearers.items() for w in ws}
     with open(path, newline="", encoding="utf-8-sig") as f:
         rows = list(csv.DictReader(f))
-    delivered: dict[str, int] = defaultdict(int)  # account -> its garments' total auto count
+    auto_total: dict[str, int] = defaultdict(int)  # account -> its garments' total auto count
     for r in rows:
         if not is_nog(r.get("sku", ""), r.get("item", "")):
-            delivered[r["account"]] += _int(r.get("autocount")) or 0
+            auto_total[r["account"]] += _int(r.get("autocount")) or 0
     out, cog = [], cog_accounts()
     for r in rows:
         if r["account"].split("-")[1:2] == ["2"]:
-            continue  # The Laundry Group: hospital scrub pools by size, not wearers; delivered is always 0
+            continue  # The Laundry Group: hospital scrub pools by size, counted as the carts are built; auto count always 0
         if r["account"].split("-")[0] in cog:
             continue  # COG: the customer bought these garments and pays per wash
         if is_nog(r.get("sku", ""), r.get("item", "")):
@@ -102,9 +102,9 @@ def findings(data_dir: str, alliant: Alliant | None = None) -> list[dict]:
                     "name": who.get((r["account"], r["employee"]), ""), "item": r.get("item", ""), "sku": key[2],
                     "size": r.get("size", ""), "inventory": inv, "auto_count": auto, "extra": extra,
                     "on_order": ordered, "barcodes_in_service": in_service.get(key, 0),
-                    "auto_count_unset": delivered[r["account"]] == 0,
-                    "issue": f"{extra - ordered} more in inventory than delivered, nothing on order: stop/deassign "
-                             "the old garments (charge loss if they don't come back) or fix the auto count"})
+                    "auto_count_unset": auto_total[r["account"]] == 0,
+                    "issue": f"inventory {inv} doesn't match the auto count {auto} (not equal or double), nothing on "
+                             "order: set the inventory to match, or fix the auto count"})
     return out
 
 

@@ -717,24 +717,22 @@ class Desk:
         tag = f"<@{self.stockroom_lead}> " if self.stockroom_lead else ""
         as_of = f" (Alliant as of {self.alliant.as_of})" if self.alliant.as_of else ""
         if not rows:
-            self.post(cid, f"🧺 *Weekly garment check*{as_of}: ✅ every wearer's garment inventory matches what's "
-                           "delivered or what's on order.", {"kind": "stockroom_check", "count": 0})
+            self.post(cid, f"🧺 *Weekly garment check*{as_of}: ✅ every wearer's garment inventory matches its auto count "
+                           "(or double it), or the difference is on order.", {"kind": "stockroom_check", "count": 0})
             return
         from .garment_check import by_account
-        unset = by_account([r for r in rows if r["auto_count_unset"]])  # whole account at 0 delivered: setup, not stockroom
+        unset = by_account([r for r in rows if r["auto_count_unset"]])  # auto count 0 on the whole account: setup or COG
         rows = [r for r in rows if not r["auto_count_unset"]]
         groups = by_account(rows)
-        extra = sum(r["extra"] - r["on_order"] for r in rows)
-        head = self.post(cid, f"🧺 {tag}*Weekly garment check*{as_of}: *{extra} garment{'s' if extra != 1 else ''}* at "
-                              f"*{len(groups)} account{'s' if len(groups) != 1 else ''}* "
-                              f"({len(rows)} wearer lines) are in inventory but not delivered, with nothing on order: old "
-                              "garments that were never stopped/deassigned. Worst first, in the thread 👇",
+        head = self.post(cid, f"🧺 {tag}*Weekly garment check*{as_of}: *{len(rows)} wearer line{'s' if len(rows) != 1 else ''}* "
+                              f"at *{len(groups)} account{'s' if len(groups) != 1 else ''}* where the inventory doesn't match "
+                              "the auto count (not equal or double), with nothing on order. Biggest differences first, "
+                              "in the thread 👇",
                          {"kind": "stockroom_check", "count": len(rows)})
         msgs, cur = [], []
         for acct, cust, rs in groups:
-            n = sum(r["extra"] - r["on_order"] for r in rs)
-            block = [f"*{acct}* {cust} · {n} extra"] + [
-                f"    #{r['wearer']} {r['name']} · {r['item']} {r['size']}: inventory {r['inventory']}, delivered "
+            block = [f"*{acct}* {cust}"] + [
+                f"    #{r['wearer']} {r['name']} · {r['item']} {r['size']}: inventory {r['inventory']}, auto count "
                 f"{r['auto_count']}" + (f", on order {r['on_order']}" if r["on_order"] else "") for r in rs[:8]]
             if len(rs) > 8:
                 block.append(f"    …and {len(rs) - 8} more wearer lines")
@@ -749,13 +747,13 @@ class Desk:
             self.post(cid, "\n".join(m)[:3900], {"kind": "stockroom_list"}, thread_ts=head["ts"])
         left = len(groups) - sum(1 for m in shown for line in m if line.startswith("*"))
         if unset:
-            self.post(cid, "*Every garment shows 0 delivered* (the auto count was never set, or it's a COG customer that "
-                           "owns its garments; tell Scott which, and COG accounts are left out from then on):\n" + "\n".join(
+            self.post(cid, "*Auto count is 0 on every garment* (not set up yet, or a COG customer that owns its "
+                           "garments; tell Scott which, and COG accounts are left out from then on):\n" + "\n".join(
                                f"• *{a}* {c}: {len({r['wearer'] for r in rs})} wearers" for a, c, rs in unset),
                       {"kind": "stockroom_list"}, thread_ts=head["ts"])
         self.post(cid, (f"…and {left} more accounts (full list on the server: `python -m service_changes.garment_check`)\n"
-                        if left > 0 else "") + "For each: stop/deassign the old garments (charge loss if they won't come "
-                  "back), or fix the delivered count if that's what's wrong. Not included: customer-owned (NOG) garments, "
+                        if left > 0 else "") + "For each: set the inventory equal to the auto count (or double it), or "
+                  "fix the auto count, whichever is wrong. Not included: customer-owned (NOG) garments, "
                   "COG customers and The Laundry Group's hospital scrub pools.",
                   {"kind": "stockroom_list"}, thread_ts=head["ts"])
 

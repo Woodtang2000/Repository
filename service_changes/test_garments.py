@@ -101,7 +101,7 @@ def test_garment_check_flags_extra_inventory_with_nothing_on_order(tmp_path):
     [f] = findings(str(tmp_path))
     assert (f["wearer"], f["name"], f["item"], f["extra"], f["on_order"], f["barcodes_in_service"]) == \
         ("12", "Joey Smith", "PNT NAVY", 6, 0, 1)
-    assert "stop/deassign the old garments" in f["issue"]
+    assert "doesn't match the auto count 5" in f["issue"]
 
 
 def test_weekly_stockroom_post(tmp_path, monkeypatch):
@@ -124,9 +124,9 @@ def test_weekly_stockroom_post(tmp_path, monkeypatch):
     desk.Desk.stockroom_pass(d, monday_8am)
     desk.Desk.stockroom_pass(d, monday_8am + 600)  # once a week
     (cid, head, _), (_, body, kw), (_, end, _) = posts
-    assert cid == "CSR" and head.startswith("🧺 <@UANA> *Weekly garment check*") and "*6 garments* at *1 account*" in head
-    assert kw == {"thread_ts": "1"} and body.startswith("*1205-1-00007* MIDAS 7 · 6 extra")
-    assert "#12 Joey Smith · PNT NAVY 34 32: inventory 11, delivered 5" in body and "NOG" not in body
+    assert cid == "CSR" and head.startswith("🧺 <@UANA> *Weekly garment check*") and "*1 wearer line* at *1 account*" in head
+    assert kw == {"thread_ts": "1"} and body.startswith("*1205-1-00007* MIDAS 7\n")
+    assert "#12 Joey Smith · PNT NAVY 34 32: inventory 11, auto count 5" in body and "NOG" not in body
     assert "customer-owned (NOG) garments" in end
     desk.Desk.stockroom_pass(d, monday_8am + 86400)  # Tuesday: nothing
     assert len(posts) == 3
