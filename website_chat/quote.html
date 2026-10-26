@@ -108,7 +108,7 @@ h3{font-size:17px;margin:22px 0 8px;color:var(--navy)}
   }
 
   function card(group, it) {
-    var s = state[it.id] = state[it.id] || { qty: 0, option: it.options ? it.options[0].label : '', how_often: group.garments ? '' : cat.frequencies[0] };
+    var s = state[it.id] = state[it.id] || { qty: 0, option: it.options ? it.options[0].label : '', how_often: group.garments ? '' : 'Weekly' };
     var pic = el('div', { cls: 'pic' });
     var showPic = function (sku) {
       pic.innerHTML = '';
@@ -135,14 +135,8 @@ h3{font-size:17px;margin:22px 0 8px;color:var(--navy)}
     var minus = el('button', { type: 'button', text: '−', 'aria-label': 'Less' }), plus = el('button', { type: 'button', text: '+', 'aria-label': 'More' });
     minus.onclick = function () { set(s.qty - 1); }; plus.onclick = function () { set(s.qty + 1); };
     input.oninput = function () { set(input.value); };
-    box.appendChild(el('div', { cls: 'qty' }, [el('label', { text: group.garments ? 'Employees' : 'Qty' }), minus, input, plus]));
+    box.appendChild(el('div', { cls: 'qty' }, [el('label', { text: group.garments ? 'Employees' : 'Per week' }), minus, input, plus]));
     if (s.qty) box.className = 'item on';
-    if (!group.garments) {
-      var how = el('select', { cls: 'how', 'aria-label': 'How often for ' + it.name }, cat.frequencies.map(function (f) { return el('option', { value: f, text: f }); }));
-      how.onchange = function () { s.how_often = how.value; };
-      how.value = s.how_often;
-      box.appendChild(how);
-    }
     return box;
   }
 
@@ -224,7 +218,7 @@ h3{font-size:17px;margin:22px 0 8px;color:var(--navy)}
     top.appendChild(change);
     step3.appendChild(top);
     step3.appendChild(el('h2', { text: all ? 'Pick what you need' : 'Popular with businesses like yours', cls: 'first' }));
-    step3.appendChild(el('p', { cls: 'lead', text: 'Choose a size or color, how many, and how often. Skip anything you don’t need.' }));
+    step3.appendChild(el('p', { cls: 'lead', text: 'Choose a size or color and how many you need each week. Skip anything you don’t need.' }));
     if (industry.note) step3.appendChild(el('p', { cls: 'box note2', text: industry.note }));
     function section(into, keep) {
       cat.groups.forEach(function (g) {

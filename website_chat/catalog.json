@@ -1,10 +1,6 @@
 {
  "_about": "The quote page's catalog (/quote): each branch's most-used Alliant items only (Snow White from branch 1, The Laundry Group from branch 2), kept small on purpose (economies of scale). Names are written for customers; sku is the Alliant SKU, which is also the Salesforce Product Code (pictures come from there). Anything else goes in the page's 'something else' box. Never put prices here.",
  "sw": {
-  "frequencies": [
-   "Weekly",
-   "Every other week"
-  ],
   "size_label": "Number of employees",
   "groups": [
    {
@@ -953,12 +949,6 @@
   ]
  },
  "tlg": {
-  "frequencies": [
-   "Daily",
-   "Three times a week",
-   "Twice a week",
-   "Weekly"
-  ],
   "size_label": "Beds or rooms",
   "interests": [
    "On-premise laundry equipment",
