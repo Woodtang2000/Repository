@@ -8,6 +8,7 @@
   var site = CFG.site, KEY = "swl-chat-" + CFG.site;
   var saved = {};
   try { saved = JSON.parse(localStorage.getItem(KEY) || "{}"); } catch (e) {}
+  if (!saved.at || Date.now() - saved.at > 6 * 3600 * 1000) saved = {};  // a visit after 6 quiet hours starts fresh (the server forgets it too)
   var session = saved.session || "", log = saved.log || [], busy = false;
   if (saved.site && CFG.companies[saved.site]) site = saved.site;
 
@@ -23,7 +24,8 @@
     '.panel[hidden]{display:none}' +
     '.head{display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:3px solid var(--gold);background:#fff}' +
     '.head img{height:30px;width:auto;display:block}.head b{display:block;font-size:13px;color:var(--navy)}.head small{font-size:11.5px;color:#55626a}' +
-    '.x{margin-left:auto;background:none;border:0;font-size:22px;line-height:1;color:#55626a;cursor:pointer;padding:4px 8px}' +
+    '.new{margin-left:auto;background:none;border:1px solid #d5dce0;border-radius:6px;font-size:11.5px;color:#55626a;cursor:pointer;padding:3px 8px}' +
+    '.x{background:none;border:0;font-size:22px;line-height:1;color:#55626a;cursor:pointer;padding:4px 8px}' +
     '.log{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px}' +
     '.m{max-width:86%;padding:8px 12px;border-radius:12px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px;line-height:1.45}' +
     '.bot{background:#eef2f3;align-self:flex-start;border-bottom-left-radius:3px}.me{background:var(--navy);color:#fff;align-self:flex-end;border-bottom-right-radius:3px}' +
@@ -35,7 +37,7 @@
     '.fine{font-size:10.5px;color:#7a868d;padding:0 12px 8px}' +
     'button:focus-visible,textarea:focus-visible{outline:2px solid var(--gold);outline-offset:2px}' +
     '</style>' +
-    '<div class="panel" hidden role="dialog" aria-label="Chat"><div class="head"><img alt=""><div><b></b><small>Usually replies in seconds</small></div><button class="x" aria-label="Close chat">×</button></div>' +
+    '<div class="panel" hidden role="dialog" aria-label="Chat"><div class="head"><img alt=""><div><b></b><small>Usually replies in seconds</small></div><button class="new" aria-label="Start a new chat" title="Start a new chat">New chat</button><button class="x" aria-label="Close chat">×</button></div>' +
     '<div class="log" aria-live="polite"></div><form><textarea aria-label="Your message" placeholder="Ask us anything…"></textarea><button class="send" type="submit">Send</button></form>' +
     '<div class="fine">Please don\'t share payment or medical details here.</div></div>' +
     '<button class="bubble" aria-label="Chat with us"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg></button>';
@@ -49,7 +51,7 @@
     root.host.style.setProperty("--navy", c.navy); root.host.style.setProperty("--gold", c.gold);
     $(".head img").src = c.logo; $(".head b").textContent = c.name;
   }
-  function store() { try { localStorage.setItem(KEY, JSON.stringify({ session: session, site: site, log: log.slice(-60) })); } catch (e) {} }
+  function store() { try { localStorage.setItem(KEY, JSON.stringify({ session: session, site: site, log: log.slice(-60), at: Date.now() })); } catch (e) {} }
   function add(cls, text, keep) {
     var d = document.createElement("div"); d.className = "m " + cls; d.textContent = text; logEl.appendChild(d);
     logEl.scrollTop = logEl.scrollHeight;
@@ -90,6 +92,12 @@
 
   $(".bubble").addEventListener("click", function () { panel.hidden = !panel.hidden; if (!panel.hidden) { render(); box.focus(); } });
   $(".x").addEventListener("click", function () { panel.hidden = true; });
+  $(".new").addEventListener("click", function () {  // forget this conversation and start fresh on this site's chat
+    if (busy) return;
+    session = ""; log = []; site = CFG.site;
+    try { localStorage.removeItem(KEY); } catch (e) {}
+    brand(); render(); box.focus();
+  });
   $("form").addEventListener("submit", function (e) { e.preventDefault(); var t = box.value; box.value = ""; send(t); });
   box.addEventListener("keydown", function (e) { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("form").dispatchEvent(new Event("submit", { cancelable: true })); } });
   brand();
