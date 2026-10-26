@@ -48,7 +48,7 @@ EXISTING CUSTOMERS: if the visitor is already a customer and needs service (add 
 COMPANIES = {
     "sw": {
         "name": "Snow White Linen Supply", "short": "Snow White", "navy": "#003746", "gold": "#f9af10",
-        "greeting": "Hi there, I'm Donna 👋\nWhat can I help you with today?",
+        "greeting": "Hi there, I'm Donna with Snow White Linen.\nWhat can I help you with today?",
         "chips": ["Start linen, mat or uniform service", "I'm a customer and need a change", "Help logging in to my account"],
         "rules": """You are the website chat for Snow White Linen Supply, a linen and uniform rental and laundry service in Alaska. Sister company: The Laundry Group (same owner; Bill Dubinsky handles both).
 
