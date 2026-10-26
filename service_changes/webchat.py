@@ -327,6 +327,9 @@ def account_hint(alliant, business: str, town: str, request: str) -> list[str]:
 PORTAL_HELP = """CUSTOMER PORTAL (online account: invoices, paying bills, statements, and requests for their own account).
 Walk customers through logging in, one step at a time, waiting for them after each step:
 - Sign-in page: {url}
+- The portal is run by our software company and can be slow to load, especially the first time. When you give the link,
+  tell them to give it a little time and not to click again or refresh while it loads. If it still won't load, or shows an
+  error, call service_request so the office can help.
 - First time: they need a login set up by our office. If they've never had one, they can click "New User" on the sign-in
   page and register; the office approves it and they get an email with a link to set their password. Or the office can
   set it up for them (call service_request: "portal login for <name>, <email>").
