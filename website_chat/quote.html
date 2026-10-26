@@ -30,6 +30,8 @@ h2{font-size:22px;margin:30px 0 4px;letter-spacing:-.015em;color:var(--navy)}
 .name{font-weight:700;font-size:13px;letter-spacing:.04em;text-transform:uppercase;line-height:1.25;text-align:center;color:var(--navy);min-height:2.5em;display:flex;align-items:center;justify-content:center}
 .note{font-size:12.5px;color:var(--sub);margin-top:2px;text-align:center}
 .seg{justify-content:center}
+.seg.yn{justify-content:flex-start;gap:8px}
+.seg.yn button{padding:10px 26px;font-size:15px}
 .seg{display:flex;flex-wrap:wrap;gap:4px}
 .seg button{border:0;border-radius:8px;padding:5px 8px;font:inherit;font-size:13px;font-weight:600;background:var(--tint);color:var(--navy);cursor:pointer}
 .seg button.on{background:var(--navy);color:#fff}
@@ -156,6 +158,19 @@ h3{font-size:17px;margin:22px 0 8px;color:var(--navy)}
     var lab = el('label', { 'for': id }); lab.innerHTML = label;
     return el('div', { cls: wide ? 'wide' : '' }, [lab, input]);
   };
+  var contractEnd = f('contract_end', 'When does that contract end? <i>(optional)</i>', 'month');
+  contractEnd.hidden = true;
+  function yesNo() {
+    var hidden = el('input', { type: 'hidden', id: 'current_provider', value: '' });
+    var seg = el('div', { cls: 'seg yn', role: 'group', 'aria-label': 'Currently using a linen supply company' });
+    [['Yes', 'Yes, has a linen company now'], ['No', 'No linen company now']].forEach(function (o) {
+      var b = el('button', { type: 'button', text: o[0] });
+      b.onclick = function () { hidden.value = o[1]; [].forEach.call(seg.children, function (x) { x.className = x === b ? 'on' : ''; }); contractEnd.hidden = o[0] !== 'Yes'; if (o[0] !== 'Yes') $('contract_end').value = ''; };
+      seg.appendChild(b);
+    });
+    var lab = el('label'); lab.innerHTML = 'Are you currently using a linen supply company? <i>(optional)</i>';
+    return el('div', {}, [lab, seg, hidden]);
+  }
   step1.appendChild(el('p', { cls: 'step', text: 'Step 1 of 3' }));
   step1.appendChild(el('h2', { text: 'About your business' }));
   step1.appendChild(el('p', { cls: 'lead', text: 'So Bill can send your quote and plan your route stop.' }));
@@ -165,8 +180,8 @@ h3{font-size:17px;margin:22px 0 8px;color:var(--navy)}
     f('street', 'Street address', 'text', 'street-address', true),
     f('town', 'City', 'text', 'address-level2'), f('zip', 'ZIP', 'text', 'postal-code'),
     f('size', cat.size_label + ' <i>(optional)</i>', 'text'),
-    f('current_provider', 'Who do you use now? <i>(optional)</i>', 'select', [''].concat(C.vendors)),
-    f('contract_end', 'When does that contract end? <i>(optional)</i>', 'month'),
+    yesNo(),
+    contractEnd,
     f('best_time', 'Best time to reach you <i>(optional)</i>', 'text'),
     el('input', { id: 'website', cls: 'hp', tabindex: '-1', autocomplete: 'off', 'aria-hidden': 'true' })
   ]));

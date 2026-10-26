@@ -111,7 +111,8 @@ def account_body(lead: dict, owner_id: str) -> dict:
             "BillingPostalCode": lead.get("zip") or found.get("zip"), "ShippingStreet": lead.get("street") or found.get("street"),
             "ShippingCity": found.get("city") or lead.get("town"), "ShippingState": found.get("state") or ("AK" if lead.get("town") else None),
             "ShippingPostalCode": lead.get("zip") or found.get("zip"), "Industry": industry,
-            "Current_Vendor__c": vendor or ("Other competitor" if lead.get("current_provider") else None),
+            "Current_Vendor__c": vendor or ("Other competitor" if lead.get("current_provider")
+                                            and not lead["current_provider"].lower().startswith("no") else None),
             "Description": description(lead)}
     return {k: v for k, v in body.items() if v}
 

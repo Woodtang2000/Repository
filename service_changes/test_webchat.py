@@ -335,6 +335,8 @@ def test_quote_request_goes_to_sales_with_items():
     desc = salesforce.description(lead)
     assert "- Bar mops [5-01-01]: 40 weekly" in desc and "Chat:" not in desc
     assert salesforce.account_body(lead, "005")["BillingStreet"] == "123 Main St"
+    assert "Current_Vendor__c" not in salesforce.account_body({**lead, "current_provider": "No linen company now"}, "005")
+    assert salesforce.account_body({**lead, "current_provider": "Yes, has a linen company now"}, "005")["Current_Vendor__c"] == "Other competitor"
     assert chat.quote("tlg", {**base, "items": [], "other": "", "interests": ["Laundry soap and chemicals"]}) == {"ok": True}
     assert "Interested in: Laundry soap and chemicals" in sales.card_text({**posted[-1][1], "id": "2"})
 
