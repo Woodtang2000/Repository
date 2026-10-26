@@ -92,8 +92,8 @@ def findings(data_dir: str, alliant: Alliant | None = None) -> list[dict]:
         if is_nog(r.get("sku", ""), r.get("item", "")):
             continue  # customer-owned goods we only launder: never delivered as rental, so nothing to stop
         inv, auto = _int(r.get("quantity")), _int(r.get("autocount"))
-        if inv is None or auto is None or inv <= auto:
-            continue
+        if inv is None or auto is None or inv <= auto or (auto and inv == 2 * auto):
+            continue  # equal or double the auto count is a correct setup (the ratio rule), not old garments
         key = (r["account"], r["employee"], r.get("sku", ""))
         extra, ordered = inv - auto, open_qty.get(key, 0)
         if ordered >= extra:

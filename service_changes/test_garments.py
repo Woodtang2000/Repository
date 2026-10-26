@@ -96,7 +96,8 @@ def test_garment_check_flags_extra_inventory_with_nothing_on_order(tmp_path):
         "account,employee,sku,size,item,quantity,autocount\n"
         "1205-1-00007,12,2-01-01,L,SHT NAVY L/S,11,5\n"    # 6 extra, PO 900 has 6 open: waiting, fine
         "1205-1-00007,12,2-21-01,34 32,PNT NAVY,11,5\n"    # 6 extra, nothing on order: flag
-        "1205-1-00007,13,2-21-01,30 30,PNT NAVY,11,11\n")  # matches
+        "1205-1-00007,13,2-21-01,30 30,PNT NAVY,11,11\n"  # matches
+        "1205-1-00007,14,2-21-01,32 30,PNT NAVY,22,11\n")  # double: the ratio rule allows it
     [f] = findings(str(tmp_path))
     assert (f["wearer"], f["name"], f["item"], f["extra"], f["on_order"], f["barcodes_in_service"]) == \
         ("12", "Joey Smith", "PNT NAVY", 6, 0, 1)
