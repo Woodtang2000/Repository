@@ -8,35 +8,13 @@
   "size_label": "Number of employees",
   "groups": [
    {
-    "name": "Kitchen and bar",
+    "name": "Towels",
     "items": [
      {
       "id": "bar-mop",
       "name": "Bar mops",
       "sku": "5-01-01",
       "note": "Gold stripe"
-     },
-     {
-      "id": "apron",
-      "name": "Bib aprons",
-      "options": [
-       {
-        "label": "Black",
-        "sku": "5-22-02"
-       },
-       {
-        "label": "White",
-        "sku": "5-22-01"
-       },
-       {
-        "label": "Red",
-        "sku": "5-22-04"
-       },
-       {
-        "label": "Navy",
-        "sku": "5-22-03"
-       }
-      ]
      },
      {
       "id": "microfiber",
@@ -79,6 +57,103 @@
       ]
      },
      {
+      "id": "shop-towel",
+      "name": "Shop towels",
+      "sku": "5-02-01"
+     }
+    ]
+   },
+   {
+    "name": "Aprons",
+    "items": [
+     {
+      "id": "apron-black",
+      "name": "Bib aprons, black",
+      "sku": "5-22-02"
+     },
+     {
+      "id": "apron-white",
+      "name": "Bib aprons, white",
+      "sku": "5-22-01"
+     },
+     {
+      "id": "apron-red",
+      "name": "Bib aprons, red",
+      "sku": "5-22-04"
+     },
+     {
+      "id": "apron-navy",
+      "name": "Bib aprons, navy",
+      "sku": "5-22-03"
+     }
+    ]
+   },
+   {
+    "name": "Napkins",
+    "items": [
+     {
+      "id": "napkin-black",
+      "name": "Napkins, black",
+      "sku": "1-01-03"
+     },
+     {
+      "id": "napkin-white",
+      "name": "Napkins, white",
+      "sku": "1-01-01"
+     },
+     {
+      "id": "napkin-burgundy",
+      "name": "Napkins, burgundy",
+      "sku": "1-01-02"
+     },
+     {
+      "id": "napkin-forest-green",
+      "name": "Napkins, forest green",
+      "sku": "1-01-04"
+     }
+    ]
+   },
+   {
+    "name": "Table linens",
+    "items": [
+     {
+      "id": "tablecloth-black",
+      "name": "Tablecloths, black",
+      "options": [
+       {
+        "label": "52 x 120",
+        "sku": "1-02-51"
+       },
+       {
+        "label": "52 x 52",
+        "sku": "1-02-16"
+       }
+      ]
+     },
+     {
+      "id": "tablecloth-white",
+      "name": "Tablecloths, white",
+      "options": [
+       {
+        "label": "52 x 120",
+        "sku": "1-02-04"
+       },
+       {
+        "label": "52 x 52",
+        "sku": "1-02-02"
+       },
+       {
+        "label": "85 x 85",
+        "sku": "1-02-06"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "name": "Kitchen and shop accessories",
+    "items": [
+     {
       "id": "oven-mitt",
       "name": "Oven mitts",
       "sku": "5-81-02"
@@ -87,69 +162,6 @@
       "id": "gloves",
       "name": "Gloves, white",
       "sku": "5-81-05"
-     }
-    ]
-   },
-   {
-    "name": "Table linens",
-    "items": [
-     {
-      "id": "napkin",
-      "name": "Napkins",
-      "options": [
-       {
-        "label": "Black",
-        "sku": "1-01-03"
-       },
-       {
-        "label": "White",
-        "sku": "1-01-01"
-       },
-       {
-        "label": "Burgundy",
-        "sku": "1-01-02"
-       },
-       {
-        "label": "Forest green",
-        "sku": "1-01-04"
-       }
-      ]
-     },
-     {
-      "id": "tablecloth",
-      "name": "Tablecloths",
-      "options": [
-       {
-        "label": "Black 52 x 120",
-        "sku": "1-02-51"
-       },
-       {
-        "label": "Black 52 x 52",
-        "sku": "1-02-16"
-       },
-       {
-        "label": "White 52 x 120",
-        "sku": "1-02-04"
-       },
-       {
-        "label": "White 52 x 52",
-        "sku": "1-02-02"
-       },
-       {
-        "label": "White 85 x 85",
-        "sku": "1-02-06"
-       }
-      ]
-     }
-    ]
-   },
-   {
-    "name": "Shop and auto",
-    "items": [
-     {
-      "id": "shop-towel",
-      "name": "Shop towels",
-      "sku": "5-02-01"
      },
      {
       "id": "fender-cover",
@@ -440,23 +452,14 @@
     ]
    },
    {
-    "name": "Employee uniforms",
+    "name": "White uniforms",
     "garments": true,
-    "note": "Pick the garments and how many employees wear each. Each employee gets enough sets for a clean one every day; we'll get sizes and names after you sign up.",
+    "note": "Uniforms: pick the garments and how many employees wear each. Each employee gets enough sets for a clean one every day; we'll get sizes and names after you sign up.",
     "items": [
      {
-      "id": "cook-shirt",
-      "name": "Cook shirts",
-      "options": [
-       {
-        "label": "White",
-        "sku": "2-5020WH"
-       },
-       {
-        "label": "Black",
-        "sku": "2-5020BK"
-       }
-      ]
+      "id": "cook-shirt-white",
+      "name": "Cook shirts, white",
+      "sku": "2-5020WH"
      },
      {
       "id": "chef-pant",
@@ -481,6 +484,17 @@
         "sku": "2-4016WH"
        }
       ]
+     }
+    ]
+   },
+   {
+    "name": "Work shirts",
+    "garments": true,
+    "items": [
+     {
+      "id": "cook-shirt-black",
+      "name": "Cook shirts, black",
+      "sku": "2-5020BK"
      },
      {
       "id": "work-shirt-ls",
@@ -527,7 +541,13 @@
       "id": "industrial-shirt",
       "name": "Industrial shirts, charcoal oil-block",
       "sku": "2-SY32CH"
-     },
+     }
+    ]
+   },
+   {
+    "name": "Work pants",
+    "garments": true,
+    "items": [
      {
       "id": "work-pant",
       "name": "Work pants, black",
@@ -550,29 +570,39 @@
         "sku": "2-PT2ACH"
        }
       ]
+     }
+    ]
+   },
+   {
+    "name": "Coveralls",
+    "garments": true,
+    "items": [
+     {
+      "id": "coverall-navy",
+      "name": "Coveralls, navy",
+      "sku": "2-CT10NV"
      },
      {
-      "id": "coverall",
-      "name": "Coveralls",
-      "options": [
-       {
-        "label": "Navy",
-        "sku": "2-CT10NV"
-       },
-       {
-        "label": "Charcoal",
-        "sku": "2-CT10CH"
-       },
-       {
-        "label": "Black",
-        "sku": "2-CT10BK"
-       },
-       {
-        "label": "Navy hi-vis",
-        "sku": "2-CT10EN"
-       }
-      ]
+      "id": "coverall-charcoal",
+      "name": "Coveralls, charcoal",
+      "sku": "2-CT10CH"
      },
+     {
+      "id": "coverall-black",
+      "name": "Coveralls, black",
+      "sku": "2-CT10BK"
+     },
+     {
+      "id": "coverall-navy-hi-vis",
+      "name": "Coveralls, navy hi-vis",
+      "sku": "2-CT10EN"
+     }
+    ]
+   },
+   {
+    "name": "Jackets",
+    "garments": true,
+    "items": [
      {
       "id": "crew-jacket",
       "name": "Crew jackets, black",
