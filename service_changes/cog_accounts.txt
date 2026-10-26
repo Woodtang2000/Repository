@@ -1,0 +1,5 @@
+# COG customers (customer-owned garments): they buy their garments and pay only for washes and ancillary charges.
+# Counts show on their invoice only when a garment is scanned in soil, so there is no delivered count to check.
+# One 4-digit account number per line (covers every location under it), then a note. Scott, 2026-10-26.
+7487 Alyeska Tire
+1950 Matson Navigation

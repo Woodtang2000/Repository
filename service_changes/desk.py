@@ -749,14 +749,14 @@ class Desk:
             self.post(cid, "\n".join(m)[:3900], {"kind": "stockroom_list"}, thread_ts=head["ts"])
         left = len(groups) - sum(1 for m in shown for line in m if line.startswith("*"))
         if unset:
-            self.post(cid, "*Auto count never set* (every garment on the account shows 0 delivered; a setup fix for the "
-                           "office, not old garments):\n" + "\n".join(
+            self.post(cid, "*Every garment shows 0 delivered* (the auto count was never set, or it's a COG customer that "
+                           "owns its garments; tell Scott which, and COG accounts are left out from then on):\n" + "\n".join(
                                f"• *{a}* {c}: {len({r['wearer'] for r in rs})} wearers" for a, c, rs in unset),
                       {"kind": "stockroom_list"}, thread_ts=head["ts"])
         self.post(cid, (f"…and {left} more accounts (full list on the server: `python -m service_changes.garment_check`)\n"
                         if left > 0 else "") + "For each: stop/deassign the old garments (charge loss if they won't come "
-                  "back), or fix the delivered count if that's what's wrong. Not included: customer-owned (NOG) garments "
-                  "and The Laundry Group's hospital scrub pools.",
+                  "back), or fix the delivered count if that's what's wrong. Not included: customer-owned (NOG) garments, "
+                  "COG customers and The Laundry Group's hospital scrub pools.",
                   {"kind": "stockroom_list"}, thread_ts=head["ts"])
 
     # ---- one pass -------------------------------------------------------------------------------------------

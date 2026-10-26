@@ -137,10 +137,11 @@ def test_garment_check_skips_tlg_pools_and_flags_accounts_never_set_up(tmp_path)
     (tmp_path / "garments.csv").write_text(
         "account,employee,sku,size,item,quantity,autocount\n"
         "6000-2-00000,2,7-600NTJ,S,MEDICAL SCRUB PANT JADE,798,0\n"   # TLG scrub pool: skipped
-        "7487-1-00004,1,2-PT2ABK,36x30,PANT INDUSTRIAL SHOP,11,0\n"   # every line 0 delivered: never set up
-        "7487-1-00004,2,2-PT2ABK,34x30,PANT INDUSTRIAL SHOP,11,0\n"
+        "5026-1-00003,1,2-CT10NV,44 R,COVERALL,2,0\n"   # every line 0 delivered: never set up, or COG not listed yet
+        "5026-1-00003,2,2-CT10NV,46 R,COVERALL,2,0\n"
+        "7487-1-00004,1,2-PT2ABK,36x30,PANT INDUSTRIAL SHOP,11,0\n"  # Alyeska Tire: COG, skipped
         "1205-1-00007,12,2-21-01,34 32,PNT NAVY,11,5\n")
     rows = findings(str(tmp_path))
-    assert {r["account"] for r in rows} == {"7487-1-00004", "1205-1-00007"}
-    assert [r["auto_count_unset"] for r in rows if r["account"] == "7487-1-00004"] == [True, True]
+    assert {r["account"] for r in rows} == {"5026-1-00003", "1205-1-00007"}
+    assert [r["auto_count_unset"] for r in rows if r["account"] == "5026-1-00003"] == [True, True]
     assert [r["auto_count_unset"] for r in rows if r["account"] == "1205-1-00007"] == [False]

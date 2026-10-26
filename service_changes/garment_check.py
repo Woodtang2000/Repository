@@ -27,6 +27,18 @@ def _int(v) -> int | None:
         return None
 
 
+COG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cog_accounts.txt")
+
+
+def cog_accounts() -> set[str]:
+    """4-digit account numbers of COG customers (cog_accounts.txt): they own their garments, so nothing to check."""
+    try:
+        with open(COG_FILE) as f:
+            return {ln.split()[0] for ln in f if ln.strip() and not ln.startswith("#")}
+    except OSError:
+        return set()
+
+
 def is_nog(sku: str, item: str) -> bool:
     """NOG ("not our goods"): the customer's own garments we launder, e.g. 4-01-01 NOG GARMENTS."""
     return sku.startswith("4-01-") or bool(re.search(r"\bNOG\b", item or "", re.I))
@@ -71,10 +83,12 @@ def findings(data_dir: str, alliant: Alliant | None = None) -> list[dict]:
     for r in rows:
         if not is_nog(r.get("sku", ""), r.get("item", "")):
             delivered[r["account"]] += _int(r.get("autocount")) or 0
-    out = []
+    out, cog = [], cog_accounts()
     for r in rows:
         if r["account"].split("-")[1:2] == ["2"]:
             continue  # The Laundry Group: hospital scrub pools by size, not wearers; delivered is always 0
+        if r["account"].split("-")[0] in cog:
+            continue  # COG: the customer bought these garments and pays per wash
         if is_nog(r.get("sku", ""), r.get("item", "")):
             continue  # customer-owned goods we only launder: never delivered as rental, so nothing to stop
         inv, auto = _int(r.get("quantity")), _int(r.get("autocount"))
