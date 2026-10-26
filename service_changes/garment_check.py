@@ -65,24 +65,32 @@ def findings(data_dir: str, alliant: Alliant | None = None) -> list[dict]:
                 in_service[(acct, wr, r.get("sku", ""))] += 1
     names = {c.account: c.name for c in alliant.customers}
     who = {(a, w.employee): w.name for a, ws in alliant.wearers.items() for w in ws}
-    out = []
     with open(path, newline="", encoding="utf-8-sig") as f:
-        for r in csv.DictReader(f):
-            if is_nog(r.get("sku", ""), r.get("item", "")):
-                continue  # customer-owned goods we only launder: never delivered as rental, so nothing to stop
-            inv, auto = _int(r.get("quantity")), _int(r.get("autocount"))
-            if inv is None or auto is None or inv <= auto:
-                continue
-            key = (r["account"], r["employee"], r.get("sku", ""))
-            extra, ordered = inv - auto, open_qty.get(key, 0)
-            if ordered >= extra:
-                continue  # waiting on an order: normal until it's filled
-            out.append({"account": r["account"], "customer": names.get(r["account"], ""), "wearer": r["employee"],
-                        "name": who.get((r["account"], r["employee"]), ""), "item": r.get("item", ""), "sku": key[2],
-                        "size": r.get("size", ""), "inventory": inv, "auto_count": auto, "extra": extra,
-                        "on_order": ordered, "barcodes_in_service": in_service.get(key, 0),
-                        "issue": f"{extra - ordered} more in inventory than delivered, nothing on order: stop/deassign "
-                                 "the old garments (charge loss if they don't come back) or fix the auto count"})
+        rows = list(csv.DictReader(f))
+    delivered: dict[str, int] = defaultdict(int)  # account -> its garments' total auto count
+    for r in rows:
+        if not is_nog(r.get("sku", ""), r.get("item", "")):
+            delivered[r["account"]] += _int(r.get("autocount")) or 0
+    out = []
+    for r in rows:
+        if r["account"].split("-")[1:2] == ["2"]:
+            continue  # The Laundry Group: hospital scrub pools by size, not wearers; delivered is always 0
+        if is_nog(r.get("sku", ""), r.get("item", "")):
+            continue  # customer-owned goods we only launder: never delivered as rental, so nothing to stop
+        inv, auto = _int(r.get("quantity")), _int(r.get("autocount"))
+        if inv is None or auto is None or inv <= auto:
+            continue
+        key = (r["account"], r["employee"], r.get("sku", ""))
+        extra, ordered = inv - auto, open_qty.get(key, 0)
+        if ordered >= extra:
+            continue  # waiting on an order: normal until it's filled
+        out.append({"account": r["account"], "customer": names.get(r["account"], ""), "wearer": r["employee"],
+                    "name": who.get((r["account"], r["employee"]), ""), "item": r.get("item", ""), "sku": key[2],
+                    "size": r.get("size", ""), "inventory": inv, "auto_count": auto, "extra": extra,
+                    "on_order": ordered, "barcodes_in_service": in_service.get(key, 0),
+                    "auto_count_unset": delivered[r["account"]] == 0,
+                    "issue": f"{extra - ordered} more in inventory than delivered, nothing on order: stop/deassign "
+                             "the old garments (charge loss if they don't come back) or fix the auto count"})
     return out
 
 
@@ -91,7 +99,7 @@ def main():
     ap.add_argument("--data", default="service_changes/data")
     rows = findings(ap.parse_args().data)
     fields = ["account", "customer", "wearer", "name", "item", "sku", "size", "inventory", "auto_count", "extra",
-              "on_order", "barcodes_in_service", "issue"]
+              "on_order", "barcodes_in_service", "auto_count_unset", "issue"]
     w = csv.DictWriter(sys.stdout, fieldnames=fields)
     w.writeheader()
     w.writerows(rows)

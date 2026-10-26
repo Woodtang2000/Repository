@@ -126,6 +126,21 @@ def test_weekly_stockroom_post(tmp_path, monkeypatch):
     assert cid == "CSR" and head.startswith("🧺 <@UANA> *Weekly garment check*") and "*6 garments* at *1 account*" in head
     assert kw == {"thread_ts": "1"} and body.startswith("*1205-1-00007* MIDAS 7 · 6 extra")
     assert "#12 Joey Smith · PNT NAVY 34 32: inventory 11, delivered 5" in body and "NOG" not in body
-    assert "NOG) garments aren't included" in end
+    assert "customer-owned (NOG) garments" in end
     desk.Desk.stockroom_pass(d, monday_8am + 86400)  # Tuesday: nothing
     assert len(posts) == 3
+
+
+def test_garment_check_skips_tlg_pools_and_flags_accounts_never_set_up(tmp_path):
+    from .garment_check import findings
+    write(tmp_path)
+    (tmp_path / "garments.csv").write_text(
+        "account,employee,sku,size,item,quantity,autocount\n"
+        "6000-2-00000,2,7-600NTJ,S,MEDICAL SCRUB PANT JADE,798,0\n"   # TLG scrub pool: skipped
+        "7487-1-00004,1,2-PT2ABK,36x30,PANT INDUSTRIAL SHOP,11,0\n"   # every line 0 delivered: never set up
+        "7487-1-00004,2,2-PT2ABK,34x30,PANT INDUSTRIAL SHOP,11,0\n"
+        "1205-1-00007,12,2-21-01,34 32,PNT NAVY,11,5\n")
+    rows = findings(str(tmp_path))
+    assert {r["account"] for r in rows} == {"7487-1-00004", "1205-1-00007"}
+    assert [r["auto_count_unset"] for r in rows if r["account"] == "7487-1-00004"] == [True, True]
+    assert [r["auto_count_unset"] for r in rows if r["account"] == "1205-1-00007"] == [False]
