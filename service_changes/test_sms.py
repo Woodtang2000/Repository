@@ -150,7 +150,8 @@ def test_new_number_signs_up_and_the_office_approves(desk, monkeypatch):
     slack.react(card["ts"])
     assert td.office_pass() == 1
     assert "+15551110000,M8,Bob" in open(td.data_dir + "/customer_phones.csv").read()
-    assert texts[2] == ("+15551110000", sms.SET_UP.format(names="MIDAS #8 (PALMER)"))
+    assert texts[2][0] == "+15551110000" and texts[2][1].startswith(sms.SET_UP.format(names="MIDAS #8 (PALMER)"))
+    assert len(texts) == 3 and texts[2][1].count("Got it") == 1  # welcome and answer in one text
     assert [c.account for c in seen["alliant"].customers] == ["M8"]  # the held request ran, for M8 only
     assert card["meta"]["kind"] == "sms_approved" and td.office_pass() == 0
 

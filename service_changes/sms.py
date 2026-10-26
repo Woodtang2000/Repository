@@ -464,9 +464,14 @@ class TextDesk:
         now = self.save_contact(self.addr(key), accounts, name)
         to = (p or {}).get("phone") or self.addr(key)
         names = " and ".join(self.name(self.alliant, a) for a in now)
-        self.send(to, self.set_up.format(names=names))
-        for body, sid in (p or {}).get("held", []):  # what they texted before being set up
-            self.handle(to, body, sid)
+        said, send = [self.set_up.format(names=names)], self.send
+        self.send = lambda _to, msg: said.append(msg)  # the welcome and the answer to what they sent go out together
+        try:
+            for body, sid in (p or {}).get("held", []):  # what they sent before being set up
+                self.handle(to, body, sid)
+        finally:
+            self.send = send
+        self.send(to, "\n\n".join(dict.fromkeys(said)))  # the same acknowledgement twice reads as once
 
     def ask(self, phone: str, lines: list[str], questions: list[str], convo: dict | None) -> None:
         msg = "Quick question: " + questions[0] if len(questions) == 1 else \

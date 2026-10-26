@@ -68,7 +68,7 @@ def test_already_entered_is_not_a_question():
 def test_stated_total_matches():
     r = check(msg("A3", Change(action=Action.add, item="3x10 mat", quantity=4, stated_total=6), customer="Tacos Cancun"), ALLIANT)
     assert r.ready and r.changes[0].current == 2 and r.changes[0].new_total == 6
-    assert readback(r) == "✅ A3 Tacos Cancun – 4 3x10 mat added – total now 6"
+    assert readback(r) == "✅ A3 Tacos Cancun – 4 3x10 mat added – from 2 to 6"
 
 
 def test_stated_total_mismatch_asks_driver():
@@ -81,7 +81,7 @@ def test_stated_total_mismatch_asks_driver():
 def test_set_shows_previous_quantity():
     r = check(msg("A1", Change(action=Action.set, item="wet mops", quantity=28), customer="Denali Brewing"), ALLIANT)
     assert r.ready and r.changes[0].new_total == 28
-    assert readback(r) == "✅ A1 Denali Brewing Company – wet mops set to 28 (was 16)"
+    assert readback(r) == "✅ A1 Denali Brewing Company – wet mops changed – from 16 to 28"
 
 
 def test_decrease_below_zero_asks_driver():
@@ -141,7 +141,7 @@ def test_frequency_codes():
     assert frequency_label("B3") == "frequency B3"  # not defined yet
     assert frequency_label("") is None
     p = msg(None, Change(action=Action.add, item="3x10 charcoal heather mat", quantity=1, frequency="frequency 7"), customer="10th & M")
-    assert readback(check(p, ALLIANT)) == "✅ 10th & M – 1 3x10 charcoal heather mat added (weekly)"
+    assert readback(check(p, ALLIANT)) == "✅ 10th & M – 1 3x10 charcoal heather mat added – new on the account (weekly)"
 
 
 def test_wearer_checks():
@@ -290,7 +290,7 @@ def test_office_ticket():
         "*K1*  KOBUK COFFEE",
         "_📝 Back door only_",
         "➖ *Remove 40*  TOWEL BAR MOP GOLD STRIPE `5-01-01` · 80 → *40* · weekly · inventory 80 → *40* too",
-        "Readback when done: ✅ K1 KOBUK COFFEE – 40 bar mops decreased – total now 40"]
+        "Readback when done: ✅ K1 KOBUK COFFEE – 40 bar mops decreased – from 80 to 40"]
 
 
 def test_add_matching_current_asks():
@@ -383,7 +383,7 @@ def test_review_fixes():
     # "Fix the inventory to 20": the inventory is 20, not the autocount doubled.
     a = Alliant(items={"S": {"TOWEL BAR MOP GOLD STRIPE": 40}}, autocount={"S": {"TOWEL BAR MOP GOLD STRIPE": 20}})
     r = check(msg("S", Change(action=Action.set, item="bar mops", quantity=20, inventory=True)), a)
-    assert r.changes[0].current == 40 and r.changes[0].new_total == 20 and "inventory set to 20" in readback(r)
+    assert r.changes[0].current == 40 and r.changes[0].new_total == 20 and "inventory changed – from 40 to 20" in readback(r)
     # Butcher coats kept on a pool wearer are found; a size alone ("stop L") is not a garment.
     a = Alliant(items={"T": {}}, garments={("T", "2"): {"COAT BUTCHER WHITE XL": 64}, ("T", "4"): {"COAT BUTCHER WHITE L": 10}})
     r = check(msg("T", Change(action=Action.decrease, item="butcher coats", size="XL", quantity=20)), a)

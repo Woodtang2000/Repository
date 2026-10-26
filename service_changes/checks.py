@@ -338,11 +338,14 @@ def _freq_words(text: str) -> str:
 
 
 def _tail(cc: CheckedChange) -> str:
+    """What changed, from and to: "– from 2 to 6"; a new item: "– new on the account"."""
     ch, s = cc.change, ""
-    if cc.new_total is not None and ch.action not in (Action.stop, Action.set) and not ch.wearer:
-        s += f" – total now {cc.new_total}"
-    if cc.current is not None and ch.action in (Action.set, Action.stop):
-        s += f" (was {cc.current})"
+    after = 0 if ch.action == Action.stop else cc.new_total
+    if not ch.wearer and ch.action in (Action.add, Action.decrease, Action.set, Action.stop):
+        if cc.current is not None and after is not None:
+            s += f" – from {cc.current} to {after}"
+        elif cc.current is None and ch.action == Action.add and cc.alliant_item is None:
+            s += " – new on the account"
     if ch.frequency:
         s += f" ({_freq_words(ch.frequency)})"
     if ch.effective:
@@ -376,8 +379,10 @@ def readback(result: Result) -> str:
                          + f" {VERBS.get(ch.action, 'changed')}" + _tail(group[-1]))
             i += len(group)
             continue
-        verb = (("inventory " if ch.inventory else "") + f"set to {ch.quantity}") if ch.action == Action.set \
-            else VERBS.get(ch.action, "changed")
+        if ch.action == Action.set:  # "wet mops – from 16 to 28" (the from/to says it all); "set to 28" when the old count isn't known
+            verb = ("inventory " if ch.inventory else "") + ("changed" if cc.current is not None else f"set to {ch.quantity}")
+        else:
+            verb = VERBS.get(ch.action, "changed")
         parts.append(f"{_what(ch)} {verb}{_tail(cc)}")
         i += 1
     return f"✅ {who} – " + "; ".join(parts) if parts else ""

@@ -164,7 +164,7 @@ def test_main_channel_loop(setup):
     slack.say("D1", "U2", "done, only had 1 in stock today")
     assert d.run_once()["readback"] == 1
     [rb] = slack.bot_posts("C1", "readback")
-    assert "thread_ts" not in rb and rb["text"].startswith("<@U1> ") and "set to 6" in rb["text"]
+    assert "thread_ts" not in rb and rb["text"].startswith("<@U1> ") and "from 4 to 6" in rb["text"]
     assert "entered by Sonja Burke" in rb["text"] and "Office note: only had 1 in stock today" in rb["text"]
     t = slack.find("D1", t["ts"])
     assert desk.meta(t)["kind"] == "done" and "Entered by Sonja Burke" in t["text"]

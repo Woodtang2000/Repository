@@ -73,7 +73,7 @@ def test_unknown_sender_gets_a_card_and_is_answered_after_approval(desk):
     assert "office will confirm" in sent[-1][1]
     slack.react(card["ts"])
     ed.run_once()
-    assert "You're all set" in sent[-2][1]
+    assert "You're all set" in sent[-1][1] and "Got it" in sent[-1][1]  # one email, not two
     [t] = [p for p in slack.posts if p["meta"].get("kind") == "ticket"]  # the held email, now handled
     assert t["meta"]["email_to"] == "bob@midas.com"
 
