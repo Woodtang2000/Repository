@@ -110,6 +110,41 @@
       "id": "napkin-forest-green",
       "name": "Napkins, forest green",
       "sku": "1-01-04"
+     },
+     {
+      "id": "napkin-red",
+      "name": "Napkins, red",
+      "sku": "1-01-07"
+     },
+     {
+      "id": "napkin-sandalwood",
+      "name": "Napkins, sandalwood",
+      "sku": "1-01-09"
+     },
+     {
+      "id": "napkin-purple",
+      "name": "Napkins, purple",
+      "sku": "1-01-11"
+     },
+     {
+      "id": "napkin-grey-chop-house",
+      "name": "Napkins, grey chop house",
+      "sku": "1-01-23"
+     },
+     {
+      "id": "napkin-white-bistro-blue",
+      "name": "Napkins, white with blue bistro stripe",
+      "sku": "1-01-14"
+     },
+     {
+      "id": "napkin-white-bistro-black",
+      "name": "Napkins, white with black bistro stripe",
+      "sku": "1-01-12"
+     },
+     {
+      "id": "napkin-grey-bistro-white",
+      "name": "Napkins, grey with white bistro stripe",
+      "sku": "1-01-22"
      }
     ]
    },
@@ -117,34 +152,78 @@
     "name": "Table linens",
     "items": [
      {
-      "id": "tablecloth-black",
-      "name": "Tablecloths, black",
-      "options": [
-       {
-        "label": "52 x 120",
-        "sku": "1-02-51"
-       },
-       {
-        "label": "52 x 52",
-        "sku": "1-02-16"
-       }
-      ]
-     },
-     {
       "id": "tablecloth-white",
       "name": "Tablecloths, white",
       "options": [
-       {
-        "label": "52 x 120",
-        "sku": "1-02-04"
-       },
        {
         "label": "52 x 52",
         "sku": "1-02-02"
        },
        {
+        "label": "52 x 69",
+        "sku": "1-02-03"
+       },
+       {
+        "label": "52 x 92",
+        "sku": "1-02-30"
+       },
+       {
+        "label": "52 x 120",
+        "sku": "1-02-04"
+       },
+       {
+        "label": "71 x 71",
+        "sku": "1-02-29"
+       },
+       {
         "label": "85 x 85",
         "sku": "1-02-06"
+       }
+      ]
+     },
+     {
+      "id": "tablecloth-black",
+      "name": "Tablecloths, black",
+      "options": [
+       {
+        "label": "52 x 52",
+        "sku": "1-02-16"
+       },
+       {
+        "label": "71 x 71",
+        "sku": "1-02-49"
+       },
+       {
+        "label": "52 x 120",
+        "sku": "1-02-51"
+       }
+      ]
+     },
+     {
+      "id": "tablecloth-ivory",
+      "name": "Tablecloths, ivory",
+      "options": [
+       {
+        "label": "85 x 85",
+        "sku": "1-02-12"
+       }
+      ]
+     },
+     {
+      "id": "tablecloth-round",
+      "name": "Round tablecloths",
+      "options": [
+       {
+        "label": "White 90 in",
+        "sku": "1-03-01"
+       },
+       {
+        "label": "White 120 in",
+        "sku": "1-02-47"
+       },
+       {
+        "label": "Black 90 in",
+        "sku": "1-03-05"
        }
       ]
      }
@@ -643,8 +722,19 @@
      "apron-red",
      "napkin-black",
      "napkin-white",
-     "tablecloth-black",
+     "napkin-burgundy",
+     "napkin-forest-green",
+     "napkin-red",
+     "napkin-sandalwood",
+     "napkin-purple",
+     "napkin-grey-chop-house",
+     "napkin-white-bistro-blue",
+     "napkin-white-bistro-black",
+     "napkin-grey-bistro-white",
      "tablecloth-white",
+     "tablecloth-black",
+     "tablecloth-ivory",
+     "tablecloth-round",
      "oven-mitt",
      "mat-confetti-grey",
      "mat-charcoal-heather",

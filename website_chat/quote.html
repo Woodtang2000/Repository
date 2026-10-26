@@ -27,8 +27,9 @@ h2{font-size:22px;margin:30px 0 4px;letter-spacing:-.015em;color:var(--navy)}
 .pic{aspect-ratio:3/2;border-radius:10px;background:var(--tint);display:flex;align-items:center;justify-content:center;overflow:hidden}
 .pic img{width:100%;height:100%;object-fit:contain;background:#fff}
 .pic span{font-size:30px;font-weight:700;color:rgba(0,55,70,.35)}
-.name{font-weight:600;font-size:15px;line-height:1.2}
-.note{font-size:13px;color:var(--sub);margin-top:2px}
+.name{font-weight:700;font-size:13px;letter-spacing:.04em;text-transform:uppercase;line-height:1.25;text-align:center;color:var(--navy);min-height:2.5em;display:flex;align-items:center;justify-content:center}
+.note{font-size:12.5px;color:var(--sub);margin-top:2px;text-align:center}
+.seg{justify-content:center}
 .seg{display:flex;flex-wrap:wrap;gap:4px}
 .seg button{border:0;border-radius:8px;padding:5px 8px;font:inherit;font-size:13px;font-weight:600;background:var(--tint);color:var(--navy);cursor:pointer}
 .seg button.on{background:var(--navy);color:#fff}
@@ -66,14 +67,15 @@ textarea{min-height:90px;resize:vertical}
 [hidden]{display:none!important}
 h3{font-size:17px;margin:22px 0 8px;color:var(--navy)}
 .tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
-.tile{border:2px solid transparent;border-radius:14px;background:var(--card);box-shadow:0 1px 2px rgba(0,0,0,.06);padding:18px 16px;font:inherit;font-size:17px;font-weight:600;color:var(--navy);text-align:left;cursor:pointer;min-height:72px}
-.tile:hover,.tile.on{border-color:var(--gold)}
+.tile{display:flex;align-items:center;justify-content:center;text-align:center;height:76px;padding:8px 14px;background:#fff;color:var(--navy);border:1.5px solid var(--navy);border-radius:8px;font:inherit;font-size:14px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;line-height:1.25;cursor:pointer;transition:background-color .15s,color .15s}
+.tile:after{content:"\00a0\203A";font-weight:700}
+.tile:hover,.tile.on{background:var(--navy);color:#fff}
 .typeline{display:flex;align-items:center;gap:10px;margin-top:26px}
 .typeline span{font-weight:700;color:var(--navy)}
 .typeline button{border:0;border-radius:8px;padding:5px 9px;font:inherit;font-size:13px;font-weight:600;background:var(--tint);color:var(--navy);cursor:pointer}
 .more{display:block;margin:22px auto 0;border:2px solid var(--navy);border-radius:12px;background:#fff;color:var(--navy);font:inherit;font-weight:600;padding:12px 20px;cursor:pointer}
 .note2{color:var(--ink);margin:0 0 6px}
-@media (max-width:640px){.tiles{grid-template-columns:1fr 1fr}.tile{font-size:15px;padding:14px 12px}}
+@media (max-width:640px){.tiles{grid-template-columns:1fr 1fr;gap:8px}.tile{font-size:12.5px;height:70px;padding:6px 8px}}
 @media (max-width:640px){.hero h1{font-size:26px}.top img{height:44px}.fields{grid-template-columns:1fr}.grid{grid-template-columns:1fr 1fr;gap:8px}.pic{aspect-ratio:auto;height:92px}.qty label{display:none}.qty{justify-content:space-between}.bar div{padding-right:92px}.bar span{font-size:14px}}
 </style>
 </head>
