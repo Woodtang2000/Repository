@@ -48,7 +48,8 @@ EXISTING CUSTOMERS: if the visitor is already a customer and needs service (add 
 COMPANIES = {
     "sw": {
         "name": "Snow White Linen Supply", "short": "Snow White", "navy": "#003746", "gold": "#f9af10",
-        "greeting": "Hi! I'm Donna with Snow White Linen. Tell me a little about your business and I'll help you figure out what linens, mats or uniforms you'd need. Already a customer? I can pass a request to the office too.",
+        "greeting": "Hi there, I'm Donna 👋\nWhat can I help you with today?",
+        "chips": ["Start linen, mat or uniform service", "I'm a customer and need a change", "Help logging in to my account"],
         "rules": """You are the website chat for Snow White Linen Supply, a linen and uniform rental and laundry service in Alaska. Sister company: The Laundry Group (same owner; Bill Dubinsky handles both).
 
 Snow White serves: restaurants, bars, cafés and caterers; grocery, deli, meat and bakery; auto repair, tire and fleet; industrial, construction and oilfield; offices, retail and services; schools, churches and government; salons and fitness. Weekly (or more often) route delivery and pickup; we launder, repair and replace. Products: kitchen towels and bar mops, aprons, chef coats, table linens and napkins (for table-service restaurants and caterers), floor mats (charcoal, grey, black, Waterhog, custom logo mats), employee uniforms with names and emblems (shirts, pants, coveralls incl. FR and hi-vis, butcher coats), shop towels, microfiber, mops, restroom and janitorial supplies, first aid. Service area: Anchorage, Eagle River, Mat-Su (Wasilla, Palmer), Kenai Peninsula (Kenai, Soldotna, Homer), with routes reaching Fairbanks and Delta Junction; if a town is outside that, Bill will check. Customers can text or email changes any time.
@@ -57,7 +58,8 @@ HAND-OFF: hospitals, care facilities, clinics' patient linen, hotels and lodging
     },
     "tlg": {
         "name": "The Laundry Group", "short": "The Laundry Group", "navy": "#003f50", "gold": "#ffb807",
-        "greeting": "Hi! I'm Donna with The Laundry Group. Are you looking for healthcare or hotel linen service, laundry equipment, or soap and chemicals? Already a customer? I can pass a request to the office too.",
+        "greeting": "Hi there, I'm Donna with The Laundry Group 👋\nWhat can I help you with today?",
+        "chips": ["Hospital, clinic or hotel linen", "Laundry equipment or repair", "Soap and chemicals", "I'm a customer and need something"],
         "rules": """You are the website chat for The Laundry Group, Alaska ("Systems · Service · Supplies"). Sister company: Snow White Linen Supply (same owner; Bill Dubinsky handles both).
 
 The Laundry Group serves healthcare and hospitality: hospitals, care facilities, clinics' patient linen, hotels and lodging. What we do: (1) linen service for patients and guests: gowns, sheets, blankets, pillow cases, towels, scrubs and lab coats, laundered and delivered on a schedule sized to beds, rooms and occupancy; (2) on-premise laundry equipment: sales, installation, and service and repair; (3) laundry supplies: laundry soap and chemicals. Never name equipment brands or models, response times or service contracts; Bill will cover specifics. Healthcare and hotel linen is sized by beds, rooms and occupancy, so don't quote typical quantities.
@@ -385,7 +387,7 @@ def make_handler(chat: Chat, public_url: str):
                 if site not in COMPANIES:
                     return self._send(404, b"unknown site", "text/plain")
                 c = COMPANIES[site]
-                cfg = {"api": public_url, "site": site, "companies": {k: {kk: v[kk] for kk in ("name", "short", "navy", "gold", "greeting")}
+                cfg = {"api": public_url, "site": site, "companies": {k: {kk: v[kk] for kk in ("name", "short", "navy", "gold", "greeting", "chips")}
                                                                       | {"logo": f"{public_url}/logo/{k}.png"} for k, v in COMPANIES.items()}}
                 with open(WIDGET) as f:
                     js = f.read().replace("__CONFIG__", json.dumps(cfg))

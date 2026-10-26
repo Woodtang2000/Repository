@@ -30,6 +30,7 @@
     '.bot{background:#eef2f3;align-self:flex-start;border-bottom-left-radius:3px}.me{background:var(--navy);color:#fff;align-self:flex-end;border-bottom-right-radius:3px}' +
     '.typing{display:flex;gap:4px;align-items:center;padding:12px 14px}.typing i{width:7px;height:7px;border-radius:50%;background:#8a979e;animation:swlb 1.2s infinite}' +
     '.typing i:nth-child(2){animation-delay:.2s}.typing i:nth-child(3){animation-delay:.4s}@keyframes swlb{0%,60%,100%{opacity:.3;transform:translateY(0)}30%{opacity:1;transform:translateY(-3px)}}' +
+    '.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:2px}.chip{background:#fff;color:var(--navy);border:1.5px solid var(--navy);border-radius:16px;padding:6px 12px;font-size:13px;cursor:pointer;text-align:left}.chip:hover{background:var(--navy);color:#fff}' +
     '.note{align-self:center;color:#1f7a4d;font-size:12.5px;font-weight:600;background:none;padding:2px}' +
     '.hand{align-self:stretch;max-width:100%;background:#eaf0f1;color:var(--navy);border-left:3px solid var(--gold);font-size:12.5px;border-radius:6px}' +
     'form{display:flex;gap:8px;padding:10px;border-top:1px solid #e3e8ea}' +
@@ -62,8 +63,15 @@
   }
   function render() {
     logEl.textContent = "";
-    if (!log.length) add("bot", CFG.companies[site].greeting);
-    else log.forEach(function (x) { add(x[0], x[1], false); });
+    if (log.length) return log.forEach(function (x) { add(x[0], x[1], false); });
+    // A fresh chat: a short hello in a couple of bubbles, then a few one-tap choices.
+    CFG.companies[site].greeting.split("\n").forEach(function (line) { add("bot", line, false); });
+    var chips = document.createElement("div"); chips.className = "chips";
+    (CFG.companies[site].chips || []).forEach(function (label) {
+      var b = document.createElement("button"); b.type = "button"; b.className = "chip"; b.textContent = label;
+      b.addEventListener("click", function () { send(label); }); chips.appendChild(b);
+    });
+    logEl.appendChild(chips);
   }
 
   // Replies show after a short "typing" pause, like a fast typist: about 1 second plus a little per character,
@@ -76,6 +84,8 @@
     text = (text || "").trim();
     if (!text || busy) return;
     busy = true; sendBtn.disabled = true;
+    var chips = logEl.querySelector(".chips"); if (chips) chips.remove();
+    if (!log.length) CFG.companies[site].greeting.split("\n").forEach(function (line) { log.push(["bot", line]); });
     add("me", text);
     var started = Date.now(), wait;
     pause(400).then(function () { if (busy) wait = typing(); });  // the dots appear a moment after sending
