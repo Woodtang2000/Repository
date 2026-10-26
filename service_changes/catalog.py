@@ -29,7 +29,7 @@ def load() -> dict:
 
 def skus(site_catalog: dict) -> list[str]:
     return [s for g in site_catalog["groups"] for it in g["items"]
-            for s in ([o["sku"] for o in it.get("options", [])] or ([it["sku"]] if it.get("sku") else []))]
+            for s in ([o.get("sku") for o in it.get("options", [])] or [it.get("sku")]) if s]
 
 
 def public(site_catalog: dict, have_picture) -> dict:
@@ -37,7 +37,7 @@ def public(site_catalog: dict, have_picture) -> dict:
     out = json.loads(json.dumps(site_catalog))
     for g in out["groups"]:
         for it in g["items"]:
-            first = (it.get("options") or [{}])[0].get("sku") or it.get("sku")
+            first = next((o["sku"] for o in it.get("options", []) if o.get("sku")), it.get("sku"))
             it["picture"] = first if first and have_picture(first) else None
     return out
 
@@ -75,7 +75,7 @@ def lines(site_catalog: dict, picked: list) -> tuple[list[dict], str | None]:
 
 def line_text(line: dict) -> str:
     name = line["name"] + (f" ({line['option']})" if line.get("option") else "")
-    sku = f" [{line['sku']}]" if line.get("sku") else ""
+    sku = f" [{line['sku']}]" if line.get("sku") else (" [no SKU yet]" if line.get("option") else "")
     if "wearers" in line:
         return f"{name}{sku}: {line['wearers']} employee{'s' if line['wearers'] != 1 else ''}"
     return f"{name}{sku}: {line['qty']} {line['how_often'].lower()}"

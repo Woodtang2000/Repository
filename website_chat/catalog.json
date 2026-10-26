@@ -199,12 +199,22 @@
         "sku": "1-02-16"
        },
        {
-        "label": "71 x 71",
-        "sku": "1-02-49"
+        "label": "52 x 69",
+        "sku": "1-02-50"
+       },
+       {
+        "label": "52 x 92"
        },
        {
         "label": "52 x 120",
         "sku": "1-02-51"
+       },
+       {
+        "label": "71 x 71",
+        "sku": "1-02-49"
+       },
+       {
+        "label": "85 x 85"
        }
       ]
      },
@@ -212,6 +222,21 @@
       "id": "tablecloth-ivory",
       "name": "Tablecloths, ivory",
       "options": [
+       {
+        "label": "52 x 52"
+       },
+       {
+        "label": "52 x 69"
+       },
+       {
+        "label": "52 x 92"
+       },
+       {
+        "label": "52 x 120"
+       },
+       {
+        "label": "71 x 71"
+       },
        {
         "label": "85 x 85",
         "sku": "1-02-12"
@@ -223,8 +248,48 @@
       "name": "Tablecloths, burgundy",
       "options": [
        {
+        "label": "52 x 52"
+       },
+       {
         "label": "52 x 69",
         "sku": "1-02-15"
+       },
+       {
+        "label": "52 x 92"
+       },
+       {
+        "label": "52 x 120"
+       },
+       {
+        "label": "71 x 71"
+       },
+       {
+        "label": "85 x 85"
+       }
+      ]
+     },
+     {
+      "id": "tablecloth-red",
+      "name": "Tablecloths, red",
+      "options": [
+       {
+        "label": "52 x 52",
+        "sku": "1-02-26"
+       },
+       {
+        "label": "52 x 69"
+       },
+       {
+        "label": "52 x 92"
+       },
+       {
+        "label": "52 x 120"
+       },
+       {
+        "label": "71 x 71"
+       },
+       {
+        "label": "85 x 85"
        }
       ]
      },
