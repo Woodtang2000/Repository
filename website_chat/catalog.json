@@ -56,6 +56,11 @@
       "id": "shop-towel",
       "name": "Shop towels",
       "sku": "5-02-01"
+     },
+     {
+      "id": "hand-towel",
+      "name": "Hand towels",
+      "sku": "5-08-01"
      }
     ]
    },
@@ -81,6 +86,26 @@
       "id": "apron-navy",
       "name": "Bib aprons, navy",
       "sku": "5-22-03"
+     },
+     {
+      "id": "apron-4way-white",
+      "name": "4-way aprons, white",
+      "sku": "5-21-01"
+     },
+     {
+      "id": "apron-4way-black",
+      "name": "4-way aprons, black",
+      "sku": "5-21-02"
+     },
+     {
+      "id": "apron-bistro-white",
+      "name": "Bistro aprons, white with pocket",
+      "sku": "5-23-02"
+     },
+     {
+      "id": "apron-bar-black",
+      "name": "Bar aprons, black",
+      "sku": "5-25-02"
      }
     ]
    },
@@ -206,6 +231,16 @@
       ]
      },
      {
+      "id": "tablecloth-burgundy",
+      "name": "Tablecloths, burgundy",
+      "options": [
+       {
+        "label": "52 x 69",
+        "sku": "1-02-15"
+       }
+      ]
+     },
+     {
       "id": "tablecloth-round",
       "name": "Round tablecloths",
       "options": [
@@ -242,6 +277,16 @@
       "id": "fender-cover",
       "name": "Fender covers, grey",
       "sku": "5-81-01"
+     },
+     {
+      "id": "grill-pad",
+      "name": "Grill pads",
+      "sku": "5-61-01"
+     },
+     {
+      "id": "rags",
+      "name": "Shop rags, 25 lb box",
+      "sku": "5-03-03"
      }
     ]
    },
@@ -421,6 +466,218 @@
     ]
    },
    {
+    "name": "White uniforms",
+    "garments": true,
+    "note": "Uniforms: pick the garments and how many employees wear each. Each employee gets enough sets for a clean one every day; we'll get sizes and names after you sign up.",
+    "items": [
+     {
+      "id": "cook-shirt-white",
+      "name": "Cook shirts, white",
+      "sku": "2-5020WH"
+     },
+     {
+      "id": "chef-pant",
+      "name": "Chef pants, white",
+      "sku": "2-2020WH"
+     },
+     {
+      "id": "chef-coat",
+      "name": "Chef coats, white",
+      "sku": "2-0413WH"
+     },
+     {
+      "id": "butcher-coat",
+      "name": "Butcher coats, white",
+      "sku": "2-4004WH"
+     },
+     {
+      "id": "butcher-coat-pocket",
+      "name": "Butcher coats, white with pocket",
+      "sku": "2-4016WH"
+     },
+     {
+      "id": "chef-coat-knotted",
+      "name": "Chef coats, white knotted buttons",
+      "sku": "2-0414WH"
+     }
+    ]
+   },
+   {
+    "name": "Work shirts",
+    "garments": true,
+    "items": [
+     {
+      "id": "cook-shirt-black",
+      "name": "Cook shirts, black",
+      "sku": "2-5020BK"
+     },
+     {
+      "id": "work-shirt-ls",
+      "name": "Work shirts, long sleeve",
+      "options": [
+       {
+        "label": "Black",
+        "sku": "2-SP14BK"
+       },
+       {
+        "label": "Navy",
+        "sku": "2-SP14NV"
+       },
+       {
+        "label": "Charcoal",
+        "sku": "2-SP14CH"
+       }
+      ]
+     },
+     {
+      "id": "work-shirt-ss",
+      "name": "Work shirts, short sleeve",
+      "options": [
+       {
+        "label": "Black",
+        "sku": "2-SP24BK"
+       },
+       {
+        "label": "Navy",
+        "sku": "2-SP24NV"
+       },
+       {
+        "label": "Charcoal",
+        "sku": "2-SP24CH"
+       }
+      ]
+     },
+     {
+      "id": "two-tone-shirt",
+      "name": "Two-tone shirts, black and charcoal",
+      "sku": "2-SY42BK"
+     },
+     {
+      "id": "industrial-shirt",
+      "name": "Industrial shirts, charcoal oil-block",
+      "sku": "2-SY32CH"
+     },
+     {
+      "id": "chef-coat-black",
+      "name": "Chef coats, black",
+      "sku": "2-0425BK"
+     },
+     {
+      "id": "hi-vis-shirt",
+      "name": "Hi-vis work shirts, long sleeve",
+      "sku": "2-SP14EN"
+     }
+    ]
+   },
+   {
+    "name": "Work pants",
+    "garments": true,
+    "items": [
+     {
+      "id": "work-pant",
+      "name": "Work pants, black",
+      "sku": "2-LP700BK"
+     },
+     {
+      "id": "work-pant-navy",
+      "name": "Work pants, navy",
+      "sku": "2-LP700NV"
+     },
+     {
+      "id": "work-pant-charcoal",
+      "name": "Work pants, dark charcoal",
+      "sku": "2-LP700DC"
+     },
+     {
+      "id": "shop-pant",
+      "name": "Industrial shop pants, black",
+      "sku": "2-PT2ABK"
+     },
+     {
+      "id": "shop-pant-navy",
+      "name": "Industrial shop pants, navy",
+      "sku": "2-PT2ANV"
+     },
+     {
+      "id": "shop-pant-charcoal",
+      "name": "Industrial shop pants, charcoal",
+      "sku": "2-PT2ACH"
+     }
+    ]
+   },
+   {
+    "name": "Coveralls",
+    "garments": true,
+    "items": [
+     {
+      "id": "coverall-navy",
+      "name": "Coveralls, navy",
+      "sku": "2-CT10NV"
+     },
+     {
+      "id": "coverall-charcoal",
+      "name": "Coveralls, charcoal",
+      "sku": "2-CT10CH"
+     },
+     {
+      "id": "coverall-black",
+      "name": "Coveralls, black",
+      "sku": "2-CT10BK"
+     },
+     {
+      "id": "coverall-navy-hi-vis",
+      "name": "Coveralls, navy hi-vis",
+      "sku": "2-CT10EN"
+     },
+     {
+      "id": "coverall-fr-navy",
+      "name": "Coveralls, navy FR deluxe",
+      "sku": "2-CED2NV"
+     },
+     {
+      "id": "coverall-electric-blue",
+      "name": "Coveralls, electric blue",
+      "sku": "2-CT10EB"
+     },
+     {
+      "id": "coverall-insulated-navy",
+      "name": "Coveralls, navy insulated",
+      "sku": "2-CT30NV"
+     }
+    ]
+   },
+   {
+    "name": "Jackets",
+    "garments": true,
+    "items": [
+     {
+      "id": "crew-jacket",
+      "name": "Crew jackets, black",
+      "sku": "2-JY20BK"
+     },
+     {
+      "id": "team-jacket",
+      "name": "Team jackets, black",
+      "sku": "2-JT38BK"
+     },
+     {
+      "id": "hip-jacket",
+      "name": "Hip jackets, charcoal",
+      "sku": "2-JT50CH"
+     },
+     {
+      "id": "hip-jacket-navy",
+      "name": "Hip jackets, navy",
+      "sku": "2-JT50NV"
+     },
+     {
+      "id": "hip-jacket-black",
+      "name": "Hip jackets, black",
+      "sku": "2-JT50BK"
+     }
+    ]
+   },
+   {
     "name": "Mops",
     "items": [
      {
@@ -532,184 +789,6 @@
        {
         "label": "Restaurant",
         "sku": "6-02-73"
-       }
-      ]
-     }
-    ]
-   },
-   {
-    "name": "White uniforms",
-    "garments": true,
-    "note": "Uniforms: pick the garments and how many employees wear each. Each employee gets enough sets for a clean one every day; we'll get sizes and names after you sign up.",
-    "items": [
-     {
-      "id": "cook-shirt-white",
-      "name": "Cook shirts, white",
-      "sku": "2-5020WH"
-     },
-     {
-      "id": "chef-pant",
-      "name": "Chef pants, white",
-      "sku": "2-2020WH"
-     },
-     {
-      "id": "chef-coat",
-      "name": "Chef coats, white",
-      "sku": "2-0413WH"
-     },
-     {
-      "id": "butcher-coat",
-      "name": "Butcher coats, white",
-      "options": [
-       {
-        "label": "Standard",
-        "sku": "2-4004WH"
-       },
-       {
-        "label": "With pocket",
-        "sku": "2-4016WH"
-       }
-      ]
-     }
-    ]
-   },
-   {
-    "name": "Work shirts",
-    "garments": true,
-    "items": [
-     {
-      "id": "cook-shirt-black",
-      "name": "Cook shirts, black",
-      "sku": "2-5020BK"
-     },
-     {
-      "id": "work-shirt-ls",
-      "name": "Work shirts, long sleeve",
-      "options": [
-       {
-        "label": "Black",
-        "sku": "2-SP14BK"
-       },
-       {
-        "label": "Navy",
-        "sku": "2-SP14NV"
-       },
-       {
-        "label": "Charcoal",
-        "sku": "2-SP14CH"
-       }
-      ]
-     },
-     {
-      "id": "work-shirt-ss",
-      "name": "Work shirts, short sleeve",
-      "options": [
-       {
-        "label": "Black",
-        "sku": "2-SP24BK"
-       },
-       {
-        "label": "Navy",
-        "sku": "2-SP24NV"
-       },
-       {
-        "label": "Charcoal",
-        "sku": "2-SP24CH"
-       }
-      ]
-     },
-     {
-      "id": "two-tone-shirt",
-      "name": "Two-tone shirts, black and charcoal",
-      "sku": "2-SY42BK"
-     },
-     {
-      "id": "industrial-shirt",
-      "name": "Industrial shirts, charcoal oil-block",
-      "sku": "2-SY32CH"
-     }
-    ]
-   },
-   {
-    "name": "Work pants",
-    "garments": true,
-    "items": [
-     {
-      "id": "work-pant",
-      "name": "Work pants, black",
-      "sku": "2-LP700BK"
-     },
-     {
-      "id": "shop-pant",
-      "name": "Industrial shop pants",
-      "options": [
-       {
-        "label": "Black",
-        "sku": "2-PT2ABK"
-       },
-       {
-        "label": "Navy",
-        "sku": "2-PT2ANV"
-       },
-       {
-        "label": "Charcoal",
-        "sku": "2-PT2ACH"
-       }
-      ]
-     }
-    ]
-   },
-   {
-    "name": "Coveralls",
-    "garments": true,
-    "items": [
-     {
-      "id": "coverall-navy",
-      "name": "Coveralls, navy",
-      "sku": "2-CT10NV"
-     },
-     {
-      "id": "coverall-charcoal",
-      "name": "Coveralls, charcoal",
-      "sku": "2-CT10CH"
-     },
-     {
-      "id": "coverall-black",
-      "name": "Coveralls, black",
-      "sku": "2-CT10BK"
-     },
-     {
-      "id": "coverall-navy-hi-vis",
-      "name": "Coveralls, navy hi-vis",
-      "sku": "2-CT10EN"
-     }
-    ]
-   },
-   {
-    "name": "Jackets",
-    "garments": true,
-    "items": [
-     {
-      "id": "crew-jacket",
-      "name": "Crew jackets, black",
-      "sku": "2-JY20BK"
-     },
-     {
-      "id": "team-jacket",
-      "name": "Team jackets, black",
-      "sku": "2-JT38BK"
-     },
-     {
-      "id": "hip-jacket",
-      "name": "Hip jackets",
-      "options": [
-       {
-        "label": "Charcoal",
-        "sku": "2-JT50CH"
-       },
-       {
-        "label": "Navy",
-        "sku": "2-JT50NV"
        }
       ]
      }
@@ -944,7 +1023,8 @@
    {
     "id": "other",
     "name": "Something else",
-    "all": true
+    "all": true,
+    "suggest": []
    }
   ]
  },
@@ -1137,6 +1217,20 @@
       "id": "baby-shirt",
       "name": "Baby shirts",
       "sku": "7-03-10"
+     },
+     {
+      "id": "birth-sheet",
+      "name": "Birth sheets",
+      "options": [
+       {
+        "label": "Bottom, yellow",
+        "sku": "7-00-08"
+       },
+       {
+        "label": "Top, black",
+        "sku": "7-00-09"
+       }
+      ]
      }
     ]
    },
@@ -1265,6 +1359,11 @@
       "id": "lab-coat",
       "name": "Lab coats, white",
       "sku": "7-6623BQW"
+     },
+     {
+      "id": "lab-coat-navy",
+      "name": "Lab coats, navy",
+      "sku": "7-6623BNW"
      }
     ]
    }

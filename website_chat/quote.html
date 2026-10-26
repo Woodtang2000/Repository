@@ -213,6 +213,11 @@ h3{font-size:17px;margin:22px 0 8px;color:var(--navy)}
     step3.appendChild(el('p', { cls: 'step', text: 'Step 3 of 3' }));
     var all = industry.all, pick = {};
     (industry.suggest || []).forEach(function (id) { pick[id] = true; });
+    // each section shown gets at least five items (or all it has), topped up in catalog order, which is most used first
+    cat.groups.forEach(function (g) {
+      var n = g.items.filter(function (it) { return pick[it.id]; }).length;
+      g.items.forEach(function (it) { if (n && n < 5 && !pick[it.id]) { pick[it.id] = true; n++; } });
+    });
     var top = el('div', { cls: 'typeline' }, [el('span', { text: industry.name })]);
     var change = el('button', { type: 'button', text: 'Change' }); change.onclick = function () { show(2); };
     top.appendChild(change);
