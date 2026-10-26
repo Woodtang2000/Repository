@@ -335,6 +335,9 @@ def main(data_dir, out_dir, today):
         else:
             merged[k] = [row, chase, credit]
     batch = list(merged.values())
+    # Week 3 is a phone call (brief v2): no email for those customers, they go on the call list instead.
+    calls = [b for b in batch if b[0]["suggested_action"] == "flag for phone call"]
+    batch = [b for b in batch if b[0]["suggested_action"] != "flag for phone call"]
 
     ddir = os.path.join(out_dir, "drafts", today.isoformat())
     os.makedirs(ddir, exist_ok=True)
@@ -365,11 +368,16 @@ def main(data_dir, out_dir, today):
          "contacted_on": today.isoformat(),
          "action": "reminder" if b["step"] == "friendly reminder" else b["step"],
          "amount": b["past_due"], "response": "drafted for Sonja"}
-        for b in brows for a in b["account"].split("+")])
+        for b in brows for a in b["account"].split("+")] + [
+        {"customer": f"{r['company']} {a}", "name": r["name"], "route_day": r["delivery_day"],
+         "contacted_on": today.isoformat(), "action": "flag for phone call",
+         "amount": round(sum(i["balance"] for i in ch), 2), "response": "call list for Sonja/Scott (no email)"}
+        for r, ch, cr in calls for a in r["account"].split("+")])
     # Batch list for Sonja (shared folder): who to contact today and the items to mention. No company totals.
     with open(os.path.join(out_dir, f"batch_list_{today.isoformat()}.md"), "w") as f:
         f.write(f"# Collections batch for {today:%A %-m/%-d/%Y}\n\n"
-                f"{len(batch)} customers. The emails are in the accounting@snowwhitelinen.com Drafts folder.\n")
+                f"{len(batch)} customers with emails. The emails are in the accounting@snowwhitelinen.com Drafts folder.\n"
+                f"{len(calls)} more are on the call list (week 3: Sonja/Scott phone call, no email), listed at the end.\n")
         for row, chase, credit in sorted(batch, key=lambda b: -sum(i["balance"] for i in b[1])):
             f.write(f"\n## {nice(row['name'])}\n\n"
                     f"- Email: {row['email']}\n- Route day: {row['delivery_day']}\n"
@@ -382,6 +390,13 @@ def main(data_dir, out_dir, today):
                 f.write(f"| {i['invoice']} | {i['date']:%m/%d/%Y} | {money(i['balance'])} |\n")
             for c in credit:
                 f.write(f"| Credit {c['invoice']} | {c['date']:%m/%d/%Y} | -{money(c['amount'])} |\n")
+        if calls:
+            f.write("\n# Call list (week 3, no email)\n")
+        for row, chase, credit in sorted(calls, key=lambda b: -sum(i["balance"] for i in b[1])):
+            f.write(f"\n## {nice(row['name'])}\n\n"
+                    f"- Email on file: {row['email']}\n- Route day: {row['delivery_day']}\n"
+                    f"- Past due: {money(sum(i['balance'] for i in chase))} on {len(chase)} invoice(s); "
+                    f"oldest {min(i['date'] for i in chase):%m/%d/%Y}\n")
     return work, unifirst, writeoffs, brows, sonja_fix
 
 
