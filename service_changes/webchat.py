@@ -226,8 +226,71 @@ class Chat:
         return "Error: unknown tool"
 
 
+NAME_FILLER = {"the", "inc", "llc", "co", "company", "corp", "of", "and", "&", "alaska", "ak", "store", "shop", "location"}
+WORD_FILLER = {"we", "need", "more", "some", "please", "add", "send", "get", "our", "for", "a", "an", "the", "and", "to",
+               "of", "on", "next", "week", "weekly", "every", "each", "can", "you", "i", "would", "like", "extra", "few"}
+
+
+def _words(text: str) -> list[str]:
+    return [w[:-1] if len(w) > 3 and w.endswith("s") else w for w in re.findall(r"[a-z0-9]+", (text or "").lower())]
+
+
+def account_hint(alliant, business: str, town: str, request: str) -> list[str]:
+    """For the office only, never the visitor: the account(s) a website request most likely means, and the lines on
+    it that match the request ("bar towels" -> TOWEL BAR MOP). A guess from names, so the ticket says to confirm."""
+    if alliant is None or not alliant.customers:
+        return []
+    want = [w for w in _words(business) if w not in NAME_FILLER]
+    if not want:
+        return []
+    place = set(_words(town))
+    scored = []
+    for c in alliant.customers:
+        names = set(_words(c.name)) | {w for a in alliant.aliases.get(c.account, []) for w in _words(a)}
+        hits = sum(w in names for w in want)
+        if hits == len(want) or (hits and hits >= len(want) - 1 and len(want) > 2):
+            scored.append((hits + (2 if place & names else 0), c))
+    if not scored:
+        return ["🔎 _No account matched that business name; look it up by phone or address._"]
+    best = max(sc for sc, _ in scored)
+    tied = [c for sc, c in scored if sc == best]
+    top = tied[:4]
+    if len(tied) > 1:
+        more = f" · _and {len(tied) - 4} more_" if len(tied) > 4 else ""
+        return ["🔎 _Possible accounts:_ " + " · ".join(f"*{c.account}* {c.name} (route {c.route})" for c in top) + more]
+    c = top[0]
+    asked = {w for w in _words(request) if w not in WORD_FILLER and not w.isdigit()}
+    out = [f"🔎 _Probably_ *{c.account}* {c.name} · route {c.route} · {'/'.join(c.service_days)}"]
+    lines = []
+    for item, inv in alliant.items.get(c.account, {}).items():
+        if asked & set(_words(item)):
+            auto = alliant.autocount.get(c.account, {}).get(item)
+            lines.append(f"{item} {auto if auto is not None else inv}/delivery" + (f" (inventory {inv})" if auto not in (None, inv) else ""))
+    if lines:
+        out.append("    Matching lines: " + "; ".join(lines[:6]))
+    named = [w for w in alliant.wearers.get(c.account, []) if {w.first.lower(), w.last.lower()} & asked]
+    if named:
+        out.append("    Wearers named: " + ", ".join(f"#{w.employee} {w.name}" for w in named[:4]))
+    elif any(w in asked for w in ("uniform", "shirt", "pant", "coat", "garment", "employee", "wearer")):
+        out.append(f"    {len(alliant.wearers.get(c.account, []))} wearers on the account")
+    return out
+
+
 def slack_poster(slack, data_dir: str, sales_channel: str, desk_channel: str):
     ids: dict[str, str] = {}
+    cache: dict = {"stamp": None, "alliant": None}
+
+    def alliant():
+        """Last night's Alliant data, reloaded when a new feed arrives. Office-side hints only."""
+        from .context import Alliant
+        path = os.path.join(data_dir, "feed_done.txt")
+        stamp = os.path.getmtime(path) if os.path.exists(path) else os.path.exists(os.path.join(data_dir, "customers.csv"))
+        if cache["stamp"] != stamp:
+            try:
+                cache["alliant"], cache["stamp"] = Alliant.from_dir(data_dir), stamp
+            except Exception as e:
+                print(time.strftime("%H:%M"), "chat: Alliant data not loaded:", e, flush=True)
+        return cache["alliant"]
 
     def channel(name: str) -> str | None:
         """Channel ids, looked up again when one is missing (a channel created or joined after the chat started)."""
@@ -251,7 +314,8 @@ def slack_poster(slack, data_dir: str, sales_channel: str, desk_channel: str):
             f"🌐 *Website request from an existing customer · {company}*" + (" · ⚠️ urgent" if item.get("urgent") else ""),
             f"*{item['business']}*" + (f" · {item['town']}" if item.get("town") else ""),
             "Contact: " + " · ".join(x for x in (item.get("name"), item.get("phone"), item.get("email")) if x),
-            f"Request: {item['request']}", "",
+            f"Request: {item['request']}",
+            *account_hint(alliant(), item.get("business", ""), item.get("town", ""), item.get("request", "")), "",
             "_Not verified: confirm with the customer at the number on the account before changing anything. React ✅ when it's handled._"])
         slack.chat_postMessage(channel=channel(desk_channel), text=text, unfurl_links=False,
                                metadata={"event_type": sales.KIND, "event_payload": {"kind": "web_request"}})

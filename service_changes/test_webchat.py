@@ -252,3 +252,20 @@ def test_existing_customers_are_pointed_to_the_text_line(monkeypatch):
     monkeypatch.setenv("TEXT_LINE", "(866) TAP-TEXT, (866) 827-8398")
     assert "text (866) TAP-TEXT, (866) 827-8398: it recognizes them by their phone number" in chat.system("tlg")
     assert "{next_time}" not in chat.system("sw") and "519-7604" not in chat.system("sw")
+
+
+def test_website_request_gets_an_office_only_account_hint():
+    from .context import Alliant, Customer, Wearer
+    a = Alliant(customers=[Customer("1300-1-00000", "KOBUK COFFEE (WASILLA)", "4", ["Tue"]),
+                           Customer("1300-1-00001", "KOBUK COFFEE (PALMER)", "4", ["Wed"]),
+                           Customer("1205-1-00007", "MIDAS #7", "4", ["Tue"])],
+                items={"1300-1-00000": {"TOWEL BAR MOP GOLD STRIPE": 80, "MAT 3X5": 2}},
+                autocount={"1300-1-00000": {"TOWEL BAR MOP GOLD STRIPE": 40}},
+                wearers={"1300-1-00000": [Wearer("3", "Jo", "Lee")]})
+    hint = webchat.account_hint(a, "Kobuk Coffee", "Wasilla", "2 more bar towels and a shirt for Jo")
+    assert hint[0].startswith("🔎 _Probably_ *1300-1-00000* KOBUK COFFEE (WASILLA)")
+    assert "TOWEL BAR MOP GOLD STRIPE 40/delivery (inventory 80)" in hint[1] and "MAT" not in hint[1]
+    assert "#3 Jo Lee" in hint[2]
+    assert webchat.account_hint(a, "Kobuk Coffee", "", "mats")[0].startswith("🔎 _Possible accounts:_")
+    assert "No account matched" in webchat.account_hint(a, "Moose Pizza", "Wasilla", "mats")[0]
+    assert webchat.account_hint(None, "Kobuk", "", "") == []
