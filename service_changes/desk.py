@@ -720,18 +720,36 @@ class Desk:
             self.post(cid, f"🧺 *Weekly garment check*{as_of}: ✅ every wearer's garment inventory matches what's "
                            "delivered or what's on order.", {"kind": "stockroom_check", "count": 0})
             return
-        head = self.post(cid, f"🧺 {tag}*Weekly garment check*{as_of}: *{len(rows)} garment line"
-                              f"{'s' if len(rows) != 1 else ''}* with more in inventory than delivered and nothing on "
-                              "order. Old garments that were never stopped/deassigned. List in the thread 👇",
+        from .garment_check import by_account
+        groups = by_account(rows)
+        extra = sum(r["extra"] - r["on_order"] for r in rows)
+        head = self.post(cid, f"🧺 {tag}*Weekly garment check*{as_of}: *{extra} garment{'s' if extra != 1 else ''}* at "
+                              f"*{len(groups)} account{'s' if len(groups) != 1 else ''}* "
+                              f"({len(rows)} wearer lines) are in inventory but not delivered, with nothing on order: old "
+                              "garments that were never stopped/deassigned. Worst first, in the thread 👇",
                          {"kind": "stockroom_check", "count": len(rows)})
-        lines = [f"• *{r['account']}* {r['customer']} · #{r['wearer']} {r['name']} · {r['item']} {r['size']}: "
-                 f"inventory {r['inventory']}, delivered {r['auto_count']}, on order {r['on_order']}, "
-                 f"{r['barcodes_in_service']} barcodes in service" for r in rows[:40]]
-        if len(rows) > 40:
-            lines.append(f"…and {len(rows) - 40} more (full list on the server: `python -m service_changes.garment_check`)")
-        lines.append("For each: stop/deassign the old garments (charge loss if they won't come back), or fix the "
-                     "delivered count if that's what's wrong. React ✅ on a line's reply when it's fixed.")
-        self.post(cid, "\n".join(lines)[:3900], {"kind": "stockroom_list"}, thread_ts=head["ts"])
+        msgs, cur = [], []
+        for acct, cust, rs in groups:
+            n = sum(r["extra"] - r["on_order"] for r in rs)
+            block = [f"*{acct}* {cust} · {n} extra"] + [
+                f"    #{r['wearer']} {r['name']} · {r['item']} {r['size']}: inventory {r['inventory']}, delivered "
+                f"{r['auto_count']}" + (f", on order {r['on_order']}" if r["on_order"] else "") for r in rs[:8]]
+            if len(rs) > 8:
+                block.append(f"    …and {len(rs) - 8} more wearer lines")
+            if cur and len("\n".join(cur + block)) > 3500:
+                msgs.append(cur)
+                cur = []
+            cur += block
+        if cur:
+            msgs.append(cur)
+        shown = msgs[:12]
+        for m in shown:
+            self.post(cid, "\n".join(m)[:3900], {"kind": "stockroom_list"}, thread_ts=head["ts"])
+        left = len(groups) - sum(1 for m in shown for line in m if line.startswith("*"))
+        self.post(cid, (f"…and {left} more accounts (full list on the server: `python -m service_changes.garment_check`)\n"
+                        if left > 0 else "") + "For each: stop/deassign the old garments (charge loss if they won't come "
+                  "back), or fix the delivered count if that's what's wrong. Customer-owned (NOG) garments aren't included.",
+                  {"kind": "stockroom_list"}, thread_ts=head["ts"])
 
     # ---- one pass -------------------------------------------------------------------------------------------
 

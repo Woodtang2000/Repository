@@ -108,7 +108,8 @@ def test_weekly_stockroom_post(tmp_path, monkeypatch):
     from . import desk
     write(tmp_path)
     (tmp_path / "garments.csv").write_text("account,employee,sku,size,item,quantity,autocount\n"
-                                           "1205-1-00007,12,2-21-01,34 32,PNT NAVY,11,5\n")
+                                           "1205-1-00007,12,2-21-01,34 32,PNT NAVY,11,5\n"
+                                           "1205-1-00007,13,4-01-01,L,NOG GARMENTS,3,0\n")  # customer-owned: skipped
     posts = []
 
     def post(cid, text, payload, **kw):
@@ -121,8 +122,10 @@ def test_weekly_stockroom_post(tmp_path, monkeypatch):
     assert posts == []
     desk.Desk.stockroom_pass(d, monday_8am)
     desk.Desk.stockroom_pass(d, monday_8am + 600)  # once a week
-    (cid, head, _), (_, body, kw) = posts
-    assert cid == "CSR" and head.startswith("🧺 <@UANA> *Weekly garment check*") and "*1 garment line*" in head
-    assert kw == {"thread_ts": "1"} and "#12 Joey Smith · PNT NAVY 34 32: inventory 11, delivered 5, on order 0" in body
+    (cid, head, _), (_, body, kw), (_, end, _) = posts
+    assert cid == "CSR" and head.startswith("🧺 <@UANA> *Weekly garment check*") and "*6 garments* at *1 account*" in head
+    assert kw == {"thread_ts": "1"} and body.startswith("*1205-1-00007* MIDAS 7 · 6 extra")
+    assert "#12 Joey Smith · PNT NAVY 34 32: inventory 11, delivered 5" in body and "NOG" not in body
+    assert "NOG) garments aren't included" in end
     desk.Desk.stockroom_pass(d, monday_8am + 86400)  # Tuesday: nothing
-    assert len(posts) == 2
+    assert len(posts) == 3

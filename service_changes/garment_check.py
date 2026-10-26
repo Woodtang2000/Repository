@@ -11,6 +11,7 @@ billed for, and garments that never come back never get a loss or abuse charge.
 Needs the auto count in garments.csv (the nightly feed). Open orders come from purchase_orders.csv (last 12 months,
 not fully received), matched by account, wearer and SKU; open_work_orders.csv is used too once the feed has it."""
 import argparse
+import re
 import csv
 import os
 import sys
@@ -24,6 +25,19 @@ def _int(v) -> int | None:
         return int(float(v))
     except (TypeError, ValueError):
         return None
+
+
+def is_nog(sku: str, item: str) -> bool:
+    """NOG ("not our goods"): the customer's own garments we launder, e.g. 4-01-01 NOG GARMENTS."""
+    return sku.startswith("4-01-") or bool(re.search(r"\bNOG\b", item or "", re.I))
+
+
+def by_account(rows: list[dict]) -> list[tuple[str, str, list[dict]]]:
+    """The findings grouped by account, the accounts with the most extra garments first."""
+    groups: dict[tuple, list] = defaultdict(list)
+    for r in rows:
+        groups[(r["account"], r["customer"])].append(r)
+    return sorted(((a, c, rs) for (a, c), rs in groups.items()), key=lambda g: -sum(r["extra"] - r["on_order"] for r in g[2]))
 
 
 def findings(data_dir: str, alliant: Alliant | None = None) -> list[dict]:
@@ -54,6 +68,8 @@ def findings(data_dir: str, alliant: Alliant | None = None) -> list[dict]:
     out = []
     with open(path, newline="", encoding="utf-8-sig") as f:
         for r in csv.DictReader(f):
+            if is_nog(r.get("sku", ""), r.get("item", "")):
+                continue  # customer-owned goods we only launder: never delivered as rental, so nothing to stop
             inv, auto = _int(r.get("quantity")), _int(r.get("autocount"))
             if inv is None or auto is None or inv <= auto:
                 continue
