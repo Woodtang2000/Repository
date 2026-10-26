@@ -27,11 +27,13 @@ def _int(v) -> int | None:
         return None
 
 
+COG_PRICE_TYPE = "11"  # Alliant price type 11 = COG on any item, whatever its SKU (Scott, 2026-10-26)
 COG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cog_accounts.txt")
 
 
 def cog_accounts() -> set[str]:
-    """4-digit account numbers of COG customers (cog_accounts.txt): they own their garments, so nothing to check."""
+    """4-digit account numbers of COG customers (cog_accounts.txt): they own their garments, so nothing to check. Kept for
+    accounts the feed can't show yet; price type 11 on an item marks it COG by itself."""
     try:
         with open(COG_FILE) as f:
             return {ln.split()[0] for ln in f if ln.strip() and not ln.startswith("#")}
@@ -87,7 +89,8 @@ def findings(data_dir: str, alliant: Alliant | None = None) -> list[dict]:
     for r in rows:
         if r["account"].split("-")[1:2] == ["2"]:
             continue  # The Laundry Group: hospital scrub pools by size, counted as the carts are built; auto count always 0
-        if r["account"].split("-")[0] in cog:
+        pt = (r.get("price_type") or alliant.price_type.get(r["account"], {}).get((r.get("item") or "").strip(), "")).strip()
+        if pt == COG_PRICE_TYPE or r["account"].split("-")[0] in cog:
             continue  # COG: the customer bought these garments and pays per wash
         if is_nog(r.get("sku", ""), r.get("item", "")):
             continue  # customer-owned goods we only launder: never delivered as rental, so nothing to stop

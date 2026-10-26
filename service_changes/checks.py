@@ -400,6 +400,8 @@ def _inventory_follows(cc: CheckedChange, alliant: Alliant, acct: str | None) ->
     if ch.inventory or ch.wearer or cc.wearer_number or cc.current is None or cc.new_total is None:
         return ""
     pt = alliant.price_type.get(acct or "", {}).get(cc.alliant_item or "")
+    if pt == "11":
+        return ""  # COG: the customer owns it and pays per wash, so the inventory ratio doesn't apply
     tag = f"PT {pt}: " if pt else ""
     inv = cc.inventory if cc.inventory is not None else cc.current
     if inv == cc.current:
