@@ -12,9 +12,9 @@
     "items": [
      {
       "id": "bar-mop",
-      "name": "Bar mop towels",
-      "note": "Gold-stripe kitchen towels",
-      "sku": "5-01-01"
+      "name": "Bar mops",
+      "sku": "5-01-01",
+      "note": "Gold stripe"
      },
      {
       "id": "apron",
@@ -27,29 +27,134 @@
        {
         "label": "White",
         "sku": "5-22-01"
+       },
+       {
+        "label": "Red",
+        "sku": "5-22-04"
+       },
+       {
+        "label": "Navy",
+        "sku": "5-22-03"
        }
       ]
      },
      {
       "id": "microfiber",
       "name": "Microfiber towels",
-      "sku": "5-07-02"
+      "options": [
+       {
+        "label": "White",
+        "sku": "5-07-02"
+       },
+       {
+        "label": "Yellow",
+        "sku": "5-07-06"
+       },
+       {
+        "label": "Black",
+        "sku": "5-07-01"
+       },
+       {
+        "label": "White ribbed",
+        "sku": "5-07-05"
+       },
+       {
+        "label": "Blue",
+        "sku": "5-07-07"
+       }
+      ]
      },
      {
       "id": "utility-towel",
       "name": "Utility towels",
-      "note": "Yellow",
-      "sku": "5-03-02"
+      "options": [
+       {
+        "label": "Yellow",
+        "sku": "5-03-02"
+       },
+       {
+        "label": "Blue",
+        "sku": "5-03-01"
+       }
+      ]
+     },
+     {
+      "id": "oven-mitt",
+      "name": "Oven mitts",
+      "sku": "5-81-02"
+     },
+     {
+      "id": "gloves",
+      "name": "Gloves, white",
+      "sku": "5-81-05"
      }
     ]
    },
    {
-    "name": "Shop",
+    "name": "Table linens",
+    "items": [
+     {
+      "id": "napkin",
+      "name": "Napkins",
+      "options": [
+       {
+        "label": "Black",
+        "sku": "1-01-03"
+       },
+       {
+        "label": "White",
+        "sku": "1-01-01"
+       },
+       {
+        "label": "Burgundy",
+        "sku": "1-01-02"
+       },
+       {
+        "label": "Forest green",
+        "sku": "1-01-04"
+       }
+      ]
+     },
+     {
+      "id": "tablecloth",
+      "name": "Tablecloths",
+      "options": [
+       {
+        "label": "Black 52 x 120",
+        "sku": "1-02-51"
+       },
+       {
+        "label": "Black 52 x 52",
+        "sku": "1-02-16"
+       },
+       {
+        "label": "White 52 x 120",
+        "sku": "1-02-04"
+       },
+       {
+        "label": "White 52 x 52",
+        "sku": "1-02-02"
+       },
+       {
+        "label": "White 85 x 85",
+        "sku": "1-02-06"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "name": "Shop and auto",
     "items": [
      {
       "id": "shop-towel",
       "name": "Shop towels",
       "sku": "5-02-01"
+     },
+     {
+      "id": "fender-cover",
+      "name": "Fender covers, grey",
+      "sku": "5-81-01"
      }
     ]
    },
@@ -57,53 +162,173 @@
     "name": "Floor mats",
     "items": [
      {
-      "id": "mat-charcoal",
-      "name": "Charcoal entrance mat",
+      "id": "mat-charcoal-heather",
+      "name": "Charcoal Heather",
       "options": [
        {
-        "label": "3 x 5 ft",
+        "label": "2x3",
+        "sku": "10-07-01"
+       },
+       {
+        "label": "3x5",
         "sku": "10-07-03"
        },
        {
-        "label": "3 x 10 ft",
+        "label": "3x10",
         "sku": "10-07-02"
        },
        {
-        "label": "4 x 6 ft",
+        "label": "4x6",
         "sku": "10-07-04"
        },
        {
-        "label": "4 x 8 ft",
+        "label": "4x8",
         "sku": "10-07-05"
        }
       ]
      },
      {
-      "id": "mat-grey",
-      "name": "Grey entrance mat",
+      "id": "mat-confetti-grey",
+      "name": "Confetti Grey",
       "options": [
        {
-        "label": "3 x 5 ft",
+        "label": "2x3",
+        "sku": "10-10-01"
+       },
+       {
+        "label": "3x5",
         "sku": "10-10-03"
        },
        {
-        "label": "3 x 10 ft",
+        "label": "3x10",
         "sku": "10-10-02"
        },
        {
-        "label": "4 x 6 ft",
+        "label": "4x6",
         "sku": "10-10-04"
        },
        {
-        "label": "4 x 8 ft",
+        "label": "4x8",
         "sku": "10-10-05"
+       }
+      ]
+     },
+     {
+      "id": "mat-black",
+      "name": "Black",
+      "options": [
+       {
+        "label": "3x5",
+        "sku": "10-01-03"
+       },
+       {
+        "label": "3x10",
+        "sku": "10-01-02"
+       },
+       {
+        "label": "4x6",
+        "sku": "10-01-04"
+       },
+       {
+        "label": "4x8",
+        "sku": "10-01-05"
+       }
+      ]
+     },
+     {
+      "id": "mat-black-galaxy-brush",
+      "name": "Black Galaxy Brush",
+      "options": [
+       {
+        "label": "3x5",
+        "sku": "10-03-03"
+       },
+       {
+        "label": "3x10",
+        "sku": "10-03-02"
+       },
+       {
+        "label": "4x6",
+        "sku": "10-03-04"
+       },
+       {
+        "label": "4x8",
+        "sku": "10-03-05"
+       }
+      ]
+     },
+     {
+      "id": "mat-black-comfort-flow",
+      "name": "Black Comfort Flow",
+      "options": [
+       {
+        "label": "3x5",
+        "sku": "10-09-03"
+       },
+       {
+        "label": "3x10",
+        "sku": "10-09-02"
+       }
+      ]
+     },
+     {
+      "id": "mat-charcoal-waterhog",
+      "name": "Charcoal Waterhog",
+      "options": [
+       {
+        "label": "3x5",
+        "sku": "10-08-03"
+       },
+       {
+        "label": "3x10",
+        "sku": "10-08-02"
+       },
+       {
+        "label": "4x6",
+        "sku": "10-08-04"
+       },
+       {
+        "label": "6x10",
+        "sku": "10-08-10"
+       }
+      ]
+     },
+     {
+      "id": "mat-brandywine",
+      "name": "Brandywine",
+      "options": [
+       {
+        "label": "3x5",
+        "sku": "10-05-03"
+       },
+       {
+        "label": "3x10",
+        "sku": "10-05-02"
+       },
+       {
+        "label": "4x6",
+        "sku": "10-05-04"
+       }
+      ]
+     },
+     {
+      "id": "mat-scraper",
+      "name": "Scraper",
+      "options": [
+       {
+        "label": "3x5",
+        "sku": "10-11-03"
+       },
+       {
+        "label": "4x6",
+        "sku": "10-11-04"
        }
       ]
      },
      {
       "id": "mat-logo",
       "name": "Custom logo mat",
-      "note": "Your logo, made to order. Bill will go over the design with you.",
+      "note": "Made to order with your logo. Bill will go over the design with you.",
       "custom": true
      }
     ]
@@ -161,12 +386,32 @@
     ]
    },
    {
-    "name": "Restroom",
+    "name": "Restroom and first aid",
     "items": [
      {
       "id": "air-freshener",
       "name": "Air freshener service",
       "sku": "6-02-03"
+     },
+     {
+      "id": "hands-free-soap",
+      "name": "Hands-free soap",
+      "sku": "6-02-19"
+     },
+     {
+      "id": "paper-towel",
+      "name": "Paper towels",
+      "sku": "6-02-07"
+     },
+     {
+      "id": "toilet-tissue",
+      "name": "Toilet tissue",
+      "sku": "6-02-12"
+     },
+     {
+      "id": "seat-cover",
+      "name": "Toilet seat covers",
+      "sku": "6-02-10"
      },
      {
       "id": "bowl-clip",
@@ -177,6 +422,20 @@
       "id": "urinal-screen",
       "name": "Urinal screens",
       "sku": "6-01-05"
+     },
+     {
+      "id": "first-aid",
+      "name": "First aid kit service",
+      "options": [
+       {
+        "label": "Standard",
+        "sku": "6-02-71"
+       },
+       {
+        "label": "Restaurant",
+        "sku": "6-02-73"
+       }
+      ]
      }
     ]
    },
@@ -187,8 +446,17 @@
     "items": [
      {
       "id": "cook-shirt",
-      "name": "Cook shirt, white",
-      "sku": "2-5020WH"
+      "name": "Cook shirts",
+      "options": [
+       {
+        "label": "White",
+        "sku": "2-5020WH"
+       },
+       {
+        "label": "Black",
+        "sku": "2-5020BK"
+       }
+      ]
      },
      {
       "id": "chef-pant",
@@ -196,23 +464,68 @@
       "sku": "2-2020WH"
      },
      {
+      "id": "chef-coat",
+      "name": "Chef coats, white",
+      "sku": "2-0413WH"
+     },
+     {
       "id": "butcher-coat",
-      "name": "Butcher coat, white",
-      "sku": "2-4004WH"
+      "name": "Butcher coats, white",
+      "options": [
+       {
+        "label": "Standard",
+        "sku": "2-4004WH"
+       },
+       {
+        "label": "With pocket",
+        "sku": "2-4016WH"
+       }
+      ]
      },
      {
       "id": "work-shirt-ls",
-      "name": "Work shirt, black, long sleeve",
-      "sku": "2-SP14BK"
+      "name": "Work shirts, long sleeve",
+      "options": [
+       {
+        "label": "Black",
+        "sku": "2-SP14BK"
+       },
+       {
+        "label": "Navy",
+        "sku": "2-SP14NV"
+       },
+       {
+        "label": "Charcoal",
+        "sku": "2-SP14CH"
+       }
+      ]
      },
      {
       "id": "work-shirt-ss",
-      "name": "Work shirt, black and charcoal, short sleeve",
+      "name": "Work shirts, short sleeve",
+      "options": [
+       {
+        "label": "Black",
+        "sku": "2-SP24BK"
+       },
+       {
+        "label": "Navy",
+        "sku": "2-SP24NV"
+       },
+       {
+        "label": "Charcoal",
+        "sku": "2-SP24CH"
+       }
+      ]
+     },
+     {
+      "id": "two-tone-shirt",
+      "name": "Two-tone shirts, black and charcoal",
       "sku": "2-SY42BK"
      },
      {
       "id": "industrial-shirt",
-      "name": "Industrial shirt, charcoal, oil-blocking",
+      "name": "Industrial shirts, charcoal oil-block",
       "sku": "2-SY32CH"
      },
      {
@@ -223,7 +536,20 @@
      {
       "id": "shop-pant",
       "name": "Industrial shop pants",
-      "sku": "2-PT2ABK"
+      "options": [
+       {
+        "label": "Black",
+        "sku": "2-PT2ABK"
+       },
+       {
+        "label": "Navy",
+        "sku": "2-PT2ANV"
+       },
+       {
+        "label": "Charcoal",
+        "sku": "2-PT2ACH"
+       }
+      ]
      },
      {
       "id": "coverall",
@@ -236,13 +562,40 @@
        {
         "label": "Charcoal",
         "sku": "2-CT10CH"
+       },
+       {
+        "label": "Black",
+        "sku": "2-CT10BK"
+       },
+       {
+        "label": "Navy hi-vis",
+        "sku": "2-CT10EN"
        }
       ]
      },
      {
       "id": "crew-jacket",
-      "name": "Crew jacket, black",
+      "name": "Crew jackets, black",
       "sku": "2-JY20BK"
+     },
+     {
+      "id": "team-jacket",
+      "name": "Team jackets, black",
+      "sku": "2-JT38BK"
+     },
+     {
+      "id": "hip-jacket",
+      "name": "Hip jackets",
+      "options": [
+       {
+        "label": "Charcoal",
+        "sku": "2-JT50CH"
+       },
+       {
+        "label": "Navy",
+        "sku": "2-JT50NV"
+       }
+      ]
      }
     ]
    }

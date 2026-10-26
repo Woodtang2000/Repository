@@ -64,7 +64,8 @@ def lines(site_catalog: dict, picked: list) -> tuple[list[dict], str | None]:
         how = p.get("how_often") or ""
         if not g.get("garments") and how not in site_catalog["frequencies"]:
             return [], f"Please pick how often you'd like {it['name']}."
-        line = {"sku": (option or it).get("sku", ""), "name": it["name"], "option": option["label"] if option else "",
+        name = it["name"] + (" mat" if g["name"] == "Floor mats" and "mat" not in it["name"].lower() else "")  # "Confetti Grey mat"
+        line = {"sku": (option or it).get("sku", ""), "name": name, "option": option["label"] if option else "",
                 "custom": bool(it.get("custom"))}
         if g.get("garments"):
             line["wearers"] = qty

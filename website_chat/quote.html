@@ -21,21 +21,23 @@ header{background:#fff;border-bottom:4px solid var(--gold)}
 main{max-width:1040px;margin:0 auto;padding:8px 16px 140px}
 h2{font-size:22px;margin:30px 0 4px;letter-spacing:-.015em;color:var(--navy)}
 .lead{margin:0 0 14px;color:var(--sub)}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
-.item{background:var(--card);border:2px solid transparent;border-radius:16px;padding:12px;box-shadow:0 1px 2px rgba(0,0,0,.06);display:flex;flex-direction:column;gap:10px;transition:border-color .15s}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(178px,1fr));gap:10px}
+.item{background:var(--card);border:2px solid transparent;border-radius:14px;padding:9px;box-shadow:0 1px 2px rgba(0,0,0,.06);display:flex;flex-direction:column;gap:7px;transition:border-color .15s}
 .item.on{border-color:var(--gold)}
-.pic{aspect-ratio:4/3;border-radius:12px;background:var(--tint);display:flex;align-items:center;justify-content:center;overflow:hidden}
+.pic{aspect-ratio:3/2;border-radius:10px;background:var(--tint);display:flex;align-items:center;justify-content:center;overflow:hidden}
 .pic img{width:100%;height:100%;object-fit:contain;background:#fff}
-.pic span{font-size:40px;font-weight:700;color:rgba(0,55,70,.35)}
-.name{font-weight:600;line-height:1.25}
-.note{font-size:14px;color:var(--sub);margin-top:2px}
-.seg{display:flex;flex-wrap:wrap;gap:6px}
-.seg button{border:0;border-radius:9px;padding:7px 11px;font:inherit;font-size:14px;font-weight:600;background:var(--tint);color:var(--navy);cursor:pointer}
+.pic span{font-size:30px;font-weight:700;color:rgba(0,55,70,.35)}
+.name{font-weight:600;font-size:15px;line-height:1.2}
+.note{font-size:13px;color:var(--sub);margin-top:2px}
+.seg{display:flex;flex-wrap:wrap;gap:4px}
+.seg button{border:0;border-radius:8px;padding:5px 8px;font:inherit;font-size:13px;font-weight:600;background:var(--tint);color:var(--navy);cursor:pointer}
 .seg button.on{background:var(--navy);color:#fff}
-.qty{display:flex;align-items:center;gap:8px}
-.qty label{font-size:14px;color:var(--sub);margin-right:auto;white-space:nowrap}
-.qty button{width:36px;height:36px;border:0;border-radius:10px;background:var(--tint);color:var(--navy);font-size:22px;font-weight:600;line-height:1;cursor:pointer}
-.qty input{width:64px;height:36px;border:1px solid var(--line);border-radius:10px;text-align:center;font:inherit;font-weight:600}
+.qty{display:flex;align-items:center;gap:6px;margin-top:auto}
+.qty label{font-size:13px;color:var(--sub);margin-right:auto;white-space:nowrap}
+.qty button{width:30px;height:30px;flex:none;border:0;border-radius:8px;background:var(--tint);color:var(--navy);font-size:19px;font-weight:600;line-height:1;cursor:pointer}
+.qty input{width:46px;height:30px;flex:none;border:1px solid var(--line);border-radius:8px;text-align:center;font:inherit;font-size:15px;font-weight:600;-moz-appearance:textfield}
+.qty input::-webkit-inner-spin-button{-webkit-appearance:none}
+.how{width:100%;border:0;border-radius:8px;padding:6px 8px;font:inherit;font-size:13px;font-weight:600;background:var(--tint);color:var(--navy)}
 .box{background:var(--card);border-radius:16px;padding:16px;box-shadow:0 1px 2px rgba(0,0,0,.06)}
 textarea,input[type=text],input[type=email],input[type=tel],input[type=month],select{width:100%;border:1px solid var(--line);border-radius:10px;padding:11px 12px;font:inherit;background:#fff;color:var(--ink)}
 textarea{min-height:90px;resize:vertical}
@@ -56,7 +58,7 @@ textarea{min-height:90px;resize:vertical}
 .done{background:var(--card);border-radius:16px;padding:28px 20px;margin-top:24px;text-align:center;box-shadow:0 1px 2px rgba(0,0,0,.06)}
 .done h2{margin-top:0}
 .small{font-size:14px;color:var(--sub)}
-@media (max-width:640px){.hero h1{font-size:26px}.top img{height:44px}.fields{grid-template-columns:1fr}.grid{grid-template-columns:1fr;gap:10px}.pic{aspect-ratio:auto;height:150px}.bar div{padding-right:92px}.bar span{font-size:14px}}
+@media (max-width:640px){.hero h1{font-size:26px}.top img{height:44px}.fields{grid-template-columns:1fr}.grid{grid-template-columns:1fr 1fr;gap:8px}.pic{aspect-ratio:auto;height:92px}.qty label{display:none}.qty{justify-content:space-between}.bar div{padding-right:92px}.bar span{font-size:14px}}
 </style>
 </head>
 <body>
@@ -113,8 +115,12 @@ textarea{min-height:90px;resize:vertical}
     var minus = el('button', { type: 'button', text: '−', 'aria-label': 'Less' }), plus = el('button', { type: 'button', text: '+', 'aria-label': 'More' });
     minus.onclick = function () { set(s.qty - 1); }; plus.onclick = function () { set(s.qty + 1); };
     input.oninput = function () { set(input.value); };
-    box.appendChild(el('div', { cls: 'qty' }, [el('label', { text: group.garments ? 'Employees' : 'How many' }), minus, input, plus]));
-    if (!group.garments) box.appendChild(segs(cat.frequencies, 'how_often'));
+    box.appendChild(el('div', { cls: 'qty' }, [el('label', { text: group.garments ? 'Employees' : 'Qty' }), minus, input, plus]));
+    if (!group.garments) {
+      var how = el('select', { cls: 'how', 'aria-label': 'How often for ' + it.name }, cat.frequencies.map(function (f) { return el('option', { value: f, text: f }); }));
+      how.onchange = function () { s.how_often = how.value; };
+      box.appendChild(how);
+    }
     return box;
   }
 
