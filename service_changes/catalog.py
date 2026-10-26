@@ -169,7 +169,33 @@ def sync_pictures(data_dir: str) -> str:
             f.write(data)
         os.replace(path + ".tmp", path)
         got += 1
-    return f"{got} pictures saved" + (f"; none for {', '.join(missing)}" if missing else "")
+    borrowed = borrow_pictures(data_dir, load(), missing)
+    missing = [m for m in missing if m not in borrowed]
+    return (f"{got} pictures saved" + (f"; {len(borrowed)} borrowed ({', '.join(f'{k} from {v}' for k, v in borrowed.items())})" if borrowed else "")
+            + (f"; none for {', '.join(missing)}" if missing else ""))
+
+
+def borrow_pictures(data_dir: str, cat: dict, missing: list[str]) -> dict[str, str]:
+    """Give SKUs without a photo a close match's: the catalog's picture_stand_ins first, else another size or color on
+    the same card. Returns {sku: the sku it borrowed from}."""
+    stand_ins = {k: v for k, v in cat.get("picture_stand_ins", {}).items() if not k.startswith("_")}
+    borrowed = {}
+    for sku in missing:
+        siblings = [o.get("sku") for site in ("sw", "tlg") for g in cat[site]["groups"] for it in g["items"]
+                    if sku in [o.get("sku") for o in it.get("options", [])] for o in it["options"]]
+        for source in [stand_ins.get(sku)] + siblings:
+            src = pic_path(data_dir, source) if source and source != sku and source not in missing else None
+            if src:
+                with open(src, "rb") as f:
+                    data = f.read()
+                path = os.path.join(pic_dir(data_dir), sku + ".img")
+                if not os.path.exists(path) or open(path, "rb").read() != data:
+                    with open(path + ".tmp", "wb") as f:
+                        f.write(data)
+                    os.replace(path + ".tmp", path)
+                borrowed[sku] = source
+                break
+    return borrowed
 
 
 def main():

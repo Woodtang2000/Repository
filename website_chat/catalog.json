@@ -1505,5 +1505,10 @@
     "all": true
    }
   ]
+ },
+ "picture_stand_ins": {
+  "_about": "SKU with no photo in Salesforce -> SKU whose photo it borrows. Sizes and colors on the same card borrow from each other automatically.",
+  "6-01-55": "6-01-05",
+  "7-00-07": "5-05-03"
  }
 }

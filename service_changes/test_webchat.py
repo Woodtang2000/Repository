@@ -365,3 +365,14 @@ def test_quote_items_become_opportunity_products():
                         "Description": "Website quote: per week", "SortOrder": 1}
     assert lines[1]["Quantity"] == 88 and "8 employees x 11" in lines[1]["Description"]
     assert missed == ["Custom logo mat"]
+
+
+def test_missing_pictures_borrow_a_close_match(tmp_path):
+    from . import catalog
+    d = str(tmp_path)
+    for sku, data in (("1-02-02", b"\xff\xd8\xff white"), ("6-01-05", b"\xff\xd8\xff screen")):
+        (tmp_path / "catalog_pics").mkdir(exist_ok=True)
+        (tmp_path / "catalog_pics" / (sku + ".img")).write_bytes(data)
+    got = catalog.borrow_pictures(d, catalog.load(), ["1-02-06", "6-01-55", "9-99-99"])
+    assert got == {"1-02-06": "1-02-02", "6-01-55": "6-01-05"}
+    assert open(catalog.pic_path(d, "6-01-55"), "rb").read().endswith(b"screen")
