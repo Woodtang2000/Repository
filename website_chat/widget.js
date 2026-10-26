@@ -37,7 +37,7 @@
     '.fine{font-size:10.5px;color:#7a868d;padding:0 12px 8px}' +
     'button:focus-visible,textarea:focus-visible{outline:2px solid var(--gold);outline-offset:2px}' +
     '</style>' +
-    '<div class="panel" hidden role="dialog" aria-label="Chat"><div class="head"><img alt=""><div><b></b><small>AI assistant · a real person follows up</small></div><button class="x" aria-label="Close chat">×</button></div>' +
+    '<div class="panel" hidden role="dialog" aria-label="Chat"><div class="head"><img alt=""><div><b></b><small>Replies in seconds · our office follows up</small></div><button class="x" aria-label="Close chat">×</button></div>' +
     '<div class="log" aria-live="polite"></div><form><textarea aria-label="Your message" placeholder="Ask us anything…"></textarea><button class="send" type="submit">Send</button><button class="new" type="button" aria-label="Start a new chat">New chat</button></form>' +
     '<div class="fine">Please don\'t share payment or medical details here.</div></div>' +
     '<button class="bubble" aria-label="Chat with us"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg></button>';
