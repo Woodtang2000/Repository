@@ -58,6 +58,12 @@ textarea{min-height:90px;resize:vertical}
 .done{background:var(--card);border-radius:16px;padding:28px 20px;margin-top:24px;text-align:center;box-shadow:0 1px 2px rgba(0,0,0,.06)}
 .done h2{margin-top:0}
 .small{font-size:14px;color:var(--sub)}
+.step{margin:26px 0 -18px;font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#a87400}
+.go{display:flex;justify-content:flex-end;margin-top:4px}
+.who{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:var(--card);border-radius:14px;padding:10px 14px;margin-top:18px;box-shadow:0 1px 2px rgba(0,0,0,.06);font-weight:600}
+.who span{margin-right:auto}
+.who button{border:0;border-radius:8px;padding:6px 10px;font:inherit;font-size:14px;font-weight:600;background:var(--tint);color:var(--navy);cursor:pointer}
+[hidden]{display:none!important}
 @media (max-width:640px){.hero h1{font-size:26px}.top img{height:44px}.fields{grid-template-columns:1fr}.grid{grid-template-columns:1fr 1fr;gap:8px}.pic{aspect-ratio:auto;height:92px}.qty label{display:none}.qty{justify-content:space-between}.bar div{padding-right:92px}.bar span{font-size:14px}}
 </style>
 </head>
@@ -65,7 +71,7 @@ textarea{min-height:90px;resize:vertical}
 <header><div class="top"><img id="logo" alt=""><a href="tel:+19072227738">(907) 222-7738</a></div></header>
 <section class="hero"><div><h1>Get a quote</h1><p id="intro"></p></div></section>
 <main id="main"></main>
-<div class="bar" id="bar"><div><span id="count"></span><button class="btn" id="next" type="button">Review and send</button></div></div>
+<div class="bar" id="bar"><div><span id="count"></span><button class="btn" id="next" type="button">Send my request</button></div></div>
 <script>
 (function () {
   var C = __CONFIG__;
@@ -79,7 +85,7 @@ textarea{min-height:90px;resize:vertical}
   }
   $('logo').src = C.logo; $('logo').alt = C.name;
   document.title = 'Get a quote · ' + C.name;
-  $('intro').textContent = 'Pick what you need, tell us about your business, and Bill will put together your quote. No prices to figure out and no obligation.';
+  $('intro').textContent = 'Tell us about your business, pick what you need, and Bill will put together your quote. No prices to figure out and no obligation.';
 
   function count() {
     var n = 0; for (var k in state) if (state[k].qty > 0) n++;
@@ -125,35 +131,20 @@ textarea{min-height:90px;resize:vertical}
   }
 
   var main = $('main');
-  cat.groups.forEach(function (g) {
-    main.appendChild(el('h2', { text: g.name }));
-    if (g.note) main.appendChild(el('p', { cls: 'lead', text: g.note }));
-    var grid = el('div', { cls: 'grid' });
-    g.items.forEach(function (it) { grid.appendChild(card(g, it)); });
-    main.appendChild(grid);
-  });
-  if (cat.interests) {
-    main.appendChild(el('h2', { text: 'Equipment and supplies' }));
-    var checks = el('div', { cls: 'box checks' });
-    cat.interests.forEach(function (i) {
-      var cb = el('input', { type: 'checkbox', 'data-interest': i }); cb.onchange = count;
-      checks.appendChild(el('label', {}, [cb, document.createTextNode(i)]));
-    });
-    main.appendChild(checks);
-  }
-  main.appendChild(el('h2', { text: 'Need something else?' }));
-  main.appendChild(el('p', { cls: 'lead', text: "Don't see it here? Tell us what you need. We can get other items, colors and sizes." }));
-  main.appendChild(el('div', { cls: 'box' }, [el('textarea', { id: 'other', maxlength: '1500', placeholder: 'For example: hi-vis shirts, a 3 x 5 scraper mat, table linens for 20 tables' })]));
+  var step1 = el('section', { id: 'step1' }), step2 = el('section', { id: 'step2', hidden: '' });
+  main.appendChild(step1); main.appendChild(step2);
 
+  // Step 1: about the business
   var f = function (id, label, type, opt, wide) {
     var input = type === 'select' ? el('select', { id: id }, opt.map(function (o) { return el('option', { value: o, text: o || 'Choose one' }); }))
       : type === 'textarea' ? el('textarea', { id: id, maxlength: '1500' }) : el('input', { id: id, type: type, maxlength: '300', autocomplete: opt || 'off' });
     var lab = el('label', { 'for': id }); lab.innerHTML = label;
     return el('div', { cls: wide ? 'wide' : '' }, [lab, input]);
   };
-  main.appendChild(el('h2', { text: 'About your business', id: 'about' }));
-  main.appendChild(el('p', { cls: 'lead', text: 'So Bill can send your quote and plan your route stop.' }));
-  var form = el('div', { cls: 'box fields' }, [
+  step1.appendChild(el('p', { cls: 'step', text: 'Step 1 of 2' }));
+  step1.appendChild(el('h2', { text: 'About your business' }));
+  step1.appendChild(el('p', { cls: 'lead', text: 'So Bill can send your quote and plan your route stop.' }));
+  step1.appendChild(el('div', { cls: 'box fields' }, [
     f('name', 'Your name', 'text', 'name'), f('business', 'Business name', 'text', 'organization'),
     f('phone', 'Phone <i>(phone or email)</i>', 'tel', 'tel'), f('email', 'Email', 'email', 'email'),
     f('street', 'Street address', 'text', 'street-address', true),
@@ -162,26 +153,73 @@ textarea{min-height:90px;resize:vertical}
     f('current_provider', 'Who do you use now? <i>(optional)</i>', 'select', [''].concat(C.vendors)),
     f('contract_end', 'When does that contract end? <i>(optional)</i>', 'month'),
     f('best_time', 'Best time to reach you <i>(optional)</i>', 'text', '', true),
-    f('notes', 'Anything else Bill should know? <i>(optional)</i>', 'textarea', '', true),
     el('input', { id: 'website', cls: 'hp', tabindex: '-1', autocomplete: 'off', 'aria-hidden': 'true' })
-  ]);
-  main.appendChild(form);
+  ]));
+  var err1 = el('p', { cls: 'err', role: 'alert' });
+  step1.appendChild(err1);
+  step1.appendChild(el('div', { cls: 'go' }, [el('button', { cls: 'btn', id: 'toProducts', type: 'button', text: 'Continue to products' })]));
+  step1.appendChild(el('p', { cls: 'small', text: 'We only use your details to prepare your quote. Please don’t enter payment information here.' }));
+
+  // Step 2: the products
+  var who = el('div', { cls: 'who' });
+  step2.appendChild(who);
+  step2.appendChild(el('p', { cls: 'step', text: 'Step 2 of 2' }));
+  step2.appendChild(el('h2', { text: 'Pick what you need', cls: 'first' }));
+  step2.appendChild(el('p', { cls: 'lead', text: 'Choose a size or color, how many, and how often. Skip anything you don’t need.' }));
+  cat.groups.forEach(function (g) {
+    step2.appendChild(el('h2', { text: g.name }));
+    if (g.note) step2.appendChild(el('p', { cls: 'lead', text: g.note }));
+    var grid = el('div', { cls: 'grid' });
+    g.items.forEach(function (it) { grid.appendChild(card(g, it)); });
+    step2.appendChild(grid);
+  });
+  if (cat.interests) {
+    step2.appendChild(el('h2', { text: 'Equipment and supplies' }));
+    var checks = el('div', { cls: 'box checks' });
+    cat.interests.forEach(function (i) {
+      var cb = el('input', { type: 'checkbox', 'data-interest': i }); cb.onchange = count;
+      checks.appendChild(el('label', {}, [cb, document.createTextNode(i)]));
+    });
+    step2.appendChild(checks);
+  }
+  step2.appendChild(el('h2', { text: 'Need something else?' }));
+  step2.appendChild(el('p', { cls: 'lead', text: "Don't see it here? Tell us what you need. We can get other items, colors and sizes." }));
+  step2.appendChild(el('div', { cls: 'box' }, [el('textarea', { id: 'other', maxlength: '1500', placeholder: 'For example: hi-vis shirts, a 3 x 5 scraper mat, table linens for 20 tables' })]));
+  step2.appendChild(el('h2', { text: 'Anything else Bill should know?' }));
+  step2.appendChild(el('div', { cls: 'box' }, [el('textarea', { id: 'notes', maxlength: '1500', 'aria-label': 'Anything else Bill should know', placeholder: 'Optional' })]));
   var err = el('p', { cls: 'err', role: 'alert' });
-  main.appendChild(err);
-  main.appendChild(el('p', { cls: 'small', text: 'We only use your details to prepare your quote. Please don’t enter payment information here.' }));
+  step2.appendChild(err);
   count();
 
   var v = function (id) { var e = $(id); return e ? e.value.trim() : ''; };
+  function details() {
+    if (!v('name') || !v('business')) { err1.textContent = 'Please enter your name and your business name.'; $(v('name') ? 'business' : 'name').focus(); return false; }
+    if (!v('phone') && !v('email')) { err1.textContent = 'Please enter a phone number or email so Bill can send your quote.'; $('phone').focus(); return false; }
+    if (v('email') && !/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(v('email'))) { err1.textContent = 'That email address doesn’t look right.'; $('email').focus(); return false; }
+    err1.textContent = '';
+    return true;
+  }
+  function show(step) {
+    step1.hidden = step !== 1; step2.hidden = step !== 2;
+    $('bar').style.display = step === 2 ? '' : 'none';
+    if (step === 2) {
+      who.innerHTML = '';
+      who.appendChild(el('span', { text: 'Quote for ' + v('business') + ' · ' + v('name') }));
+      var edit = el('button', { type: 'button', text: 'Edit details' }); edit.onclick = function () { show(1); };
+      who.appendChild(edit);
+    }
+    window.scrollTo(0, 0);
+  }
+  $('toProducts').onclick = function () { if (details()) show(2); };
+  show(1);
+
   function submit() {
     if (sent) return;
     var items = [];
     cat.groups.forEach(function (g) { g.items.forEach(function (it) { var s = state[it.id]; if (s.qty > 0) items.push({ id: it.id, qty: s.qty, option: s.option, how_often: s.how_often }); }); });
     var interests = (cat.interests || []).filter(function (i) { return document.querySelector('[data-interest="' + i + '"]').checked; });
-    var about = $('about');
-    if (!items.length && !interests.length && !v('other')) { err.textContent = 'Please pick at least one item, or tell us what you need.'; return; }
-    if (about.getBoundingClientRect().top > window.innerHeight && !v('name')) { about.scrollIntoView({ behavior: 'smooth' }); return; }
-    if (!v('name') || !v('business')) { err.textContent = 'Please enter your name and your business name.'; $(v('name') ? 'business' : 'name').focus(); return; }
-    if (!v('phone') && !v('email')) { err.textContent = 'Please enter a phone number or email so Bill can send your quote.'; $('phone').focus(); return; }
+    if (!items.length && !interests.length && !v('other')) { err.textContent = 'Please pick at least one item, or tell us what you need.'; err.scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
+    if (!details()) { show(1); return; }
     var body = { site: C.site, items: items, interests: interests, other: v('other'), website: v('website') };
     ['name', 'business', 'phone', 'email', 'street', 'town', 'zip', 'business_type', 'size', 'current_provider', 'contract_end', 'best_time', 'notes'].forEach(function (k) { body[k] = v(k); });
     err.textContent = ''; $('next').disabled = true; $('next').textContent = 'Sending…';
@@ -198,14 +236,9 @@ textarea{min-height:90px;resize:vertical}
         $('bar').style.display = 'none';
         window.scrollTo(0, 0);
       })
-      .catch(function (e) { err.textContent = e.message === 'Failed to fetch' ? 'We couldn’t send that. Please check your connection and try again.' : e.message; $('next').disabled = false; $('next').textContent = 'Review and send'; });
+      .catch(function (e) { err.textContent = e.message === 'Failed to fetch' ? 'We couldn’t send that. Please check your connection and try again.' : e.message; err.scrollIntoView({ block: 'center' }); $('next').disabled = false; $('next').textContent = 'Send my request'; });
   }
-  $('next').onclick = function () {
-    var about = $('about');
-    if (about.getBoundingClientRect().top > window.innerHeight * 0.6) { about.scrollIntoView({ behavior: 'smooth' }); $('next').textContent = 'Send my request'; return; }
-    submit();
-  };
-  window.addEventListener('scroll', function () { if (!sent) $('next').textContent = $('about').getBoundingClientRect().top < window.innerHeight * 0.6 ? 'Send my request' : 'Review and send'; }, { passive: true });
+  $('next').onclick = submit;
 
   var w = document.createElement('script'); w.src = C.api + '/widget.js?site=' + C.site; w.async = true; document.body.appendChild(w);
 })();
