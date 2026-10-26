@@ -40,7 +40,7 @@
     'button:focus-visible,textarea:focus-visible{outline:2px solid var(--gold);outline-offset:2px}' +
     '</style>' +
     '<div class="panel" hidden role="dialog" aria-label="Chat"><div class="head"><img alt=""><div><b></b><small>Replies in seconds · our office follows up</small></div><button class="x" aria-label="Close chat">×</button></div>' +
-    '<div class="log" aria-live="polite"></div><form><textarea aria-label="Your message" placeholder="Ask us anything…"></textarea><button class="send" type="submit">Send</button><button class="new" type="button" aria-label="Start a new chat">New chat</button></form>' +
+    '<div class="log" aria-live="polite"></div><form><textarea aria-label="Your message" placeholder="Ask us anything…"></textarea><button class="send" type="submit">Send</button><button class="new" type="button" aria-label="Leave chat">Leave chat</button></form>' +
     '<div class="fine">Please don\'t share payment or medical details here.</div></div>' +
     '<button class="bubble" aria-label="Chat with us"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg></button>';
 
@@ -111,11 +111,11 @@
 
   $(".bubble").addEventListener("click", function () { panel.hidden = !panel.hidden; if (!panel.hidden) { render(); box.focus(); } });
   $(".x").addEventListener("click", function () { panel.hidden = true; });
-  $(".new").addEventListener("click", function () {  // forget this conversation and start fresh on this site's chat
-    if (busy || !window.confirm("Start a new chat? This clears the conversation on this screen.")) return;
+  $(".new").addEventListener("click", function () {  // leave: forget this conversation and close; reopening starts fresh
+    if (busy || !window.confirm("Leave this chat? The conversation will be cleared.")) return;
     session = ""; log = []; site = CFG.site;
     try { localStorage.removeItem(KEY); } catch (e) {}
-    brand(); render(); box.focus();
+    brand(); panel.hidden = true;  // the next time they open it, it starts fresh with the greeting
   });
   $("form").addEventListener("submit", function (e) { e.preventDefault(); var t = box.value; box.value = ""; send(t); });
   box.addEventListener("keydown", function (e) { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("form").dispatchEvent(new Event("submit", { cancelable: true })); } });
