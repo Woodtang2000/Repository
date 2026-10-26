@@ -35,7 +35,7 @@
     '.hand{align-self:stretch;max-width:100%;background:#eaf0f1;color:var(--navy);border-left:3px solid var(--gold);font-size:12.5px;border-radius:6px}' +
     'form{display:flex;gap:6px;padding:10px;align-items:stretch;border-top:1px solid #e3e8ea}' +
     'textarea{flex:1;min-width:0;resize:none;height:48px;font-size:14px;padding:9px 10px;border:1px solid #d5dce0;border-radius:8px;color:#1c2226;background:#f6f8f9}' +
-    '.send,.new{border:0;border-radius:24px;cursor:pointer;white-space:nowrap;align-self:stretch;padding:0;transition:transform .06s,box-shadow .06s;' +
+    '.send,.new{border:0;border-radius:10px;cursor:pointer;white-space:nowrap;align-self:stretch;padding:0;transition:transform .06s,box-shadow .06s;' +
     'box-shadow:0 2px 6px rgba(0,0,0,.18),inset 0 2px 3px rgba(255,255,255,.45),inset 0 -3px 4px rgba(0,0,0,.12)}' +
     '.send:active,.new:active{transform:scale(.96);box-shadow:0 1px 3px rgba(0,0,0,.2),inset 0 2px 4px rgba(0,0,0,.15)}' +
     '.send{flex:0 0 96px;background:radial-gradient(ellipse at 50% 20%,#ffd66b 0%,var(--gold) 60%);color:#1c2226;font-weight:700;font-size:16px}.send:disabled{opacity:.5}' +
