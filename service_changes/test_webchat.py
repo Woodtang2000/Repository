@@ -214,3 +214,32 @@ def test_give_to_jesse_creates_the_salesforce_opportunity(tmp_path, monkeypatch)
     assert "Given to *Jesse James Tingley* by bill" in footer and "Salesforce Opportunity" in footer
     assert "address not found" not in footer
     assert sales.handle_action(Slack(), payload, str(tmp_path), create=lambda l, o: 1 / 0) == "already in Salesforce"
+
+
+def test_a_slack_failure_never_loses_the_lead(tmp_path):
+    def broken(kind, item):
+        raise KeyError("sales-desk")
+    claude = FakeClaude([tool("save_lead", name="Scotty Pilate", business="Scottie's Bodies", town="Wasilla",
+                              phone="555-555-5678", needs="mats, shop towels, uniforms for 12")],
+                        [text("Thanks Scotty! Bill will reach out.")])
+    chat = webchat.Chat(claude, broken, str(tmp_path))
+    r = chat.message("sw", "", "Scotty Pilate", ip="1.1.1.1")
+    assert r["events"] == [{"type": "lead"}] and "Bill will reach out" in r["reply"]
+    [kept] = list((tmp_path / "web_unsent").iterdir())
+    assert json.loads(kept.read_text())["phone"] == "555-555-5678"
+
+
+def test_lead_goes_to_the_office_when_sales_desk_is_missing(tmp_path):
+    posts = []
+
+    class Slack:
+        def conversations_list(self, **kw):
+            return [{"channels": [{"name": "service-desk", "id": "CDESK", "is_member": True},
+                                  {"name": "sales-desk", "id": "CSALES", "is_member": False}]}]
+
+        def chat_postMessage(self, **kw):
+            posts.append(kw)
+            return {"ts": "1.0"}
+    post = webchat.slack_poster(Slack(), str(tmp_path), "sales-desk", "service-desk")
+    post("lead", {"name": "Scotty", "business": "Scottie's Bodies", "phone": "555", "company": "sw"})
+    assert posts[0]["channel"] == "CDESK" and "isn't set up for the Service Desk bot" in posts[0]["text"]

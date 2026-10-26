@@ -173,6 +173,18 @@ class Chat:
         s["turns"].append({"role": "assistant", "content": reply})
         return reply
 
+    def _safe_post(self, kind: str, item: dict) -> None:
+        """Hand a lead or request to Slack. If Slack fails, the visitor still gets a normal answer: the item is kept on
+        disk (<data>/web_unsent/) so nobody's details are lost, and the error is logged for the office to see."""
+        try:
+            self.post(kind, item)
+        except Exception as e:
+            print(time.strftime("%H:%M"), f"chat {kind} not posted to Slack, kept on disk:", e, flush=True)
+            folder = os.path.join(self.data_dir, "web_unsent")
+            os.makedirs(folder, exist_ok=True)
+            with open(os.path.join(folder, f"{kind}-{int(time.time() * 1000)}.json"), "w") as f:
+                json.dump(item, f)
+
     def _tool(self, s: dict, name: str, inp: dict, events: list) -> str:
         pick = lambda k, n=500: str(inp.get(k) or "")[:n]
         transcript = "\n".join(("Visitor: " if t["role"] == "user" else "Chat: ") + str(t["content"]) for t in s["turns"]
@@ -185,7 +197,7 @@ class Chat:
                 return "Error: need a phone number or email first"
             lead.update(company=s["site"], handed_from=s["from"] or "", page=s.get("page", ""), transcript=transcript,
                         created_at=time.time())
-            self.post("lead", lead)
+            self._safe_post("lead", lead)
             s["lead"] = True
             events.append({"type": "lead"})
             return "saved"
@@ -196,7 +208,7 @@ class Chat:
             if not req["phone"] and not req["email"]:
                 return "Error: need a phone number or email so the office can confirm"
             req.update(company=s["site"], urgent=bool(inp.get("urgent")), transcript=transcript)
-            self.post("request", req)
+            self._safe_post("request", req)
             s["request"] = True
             events.append({"type": "request"})
             return "sent"
@@ -210,12 +222,24 @@ class Chat:
 
 
 def slack_poster(slack, data_dir: str, sales_channel: str, desk_channel: str):
-    ids = {c["name"]: c["id"] for p in slack.conversations_list(types="public_channel,private_channel", exclude_archived=True,
-                                                                limit=1000) for c in p["channels"]}
+    ids: dict[str, str] = {}
+
+    def channel(name: str) -> str | None:
+        """Channel ids, looked up again when one is missing (a channel created or joined after the chat started)."""
+        if name not in ids:
+            ids.update({c["name"]: c["id"] for p in slack.conversations_list(
+                types="public_channel,private_channel", exclude_archived=True, limit=1000) for c in p["channels"]
+                if c.get("is_member")})
+        return ids.get(name)
 
     def post(kind: str, item: dict) -> None:
         if kind == "lead":
-            sales.post_lead(slack, ids[sales_channel], data_dir, item)
+            where = channel(sales_channel)
+            if where is None:  # no #sales-desk (or the bot isn't in it): the office channel gets the lead instead
+                where = channel(desk_channel)
+                item = {**item, "notes": ((item.get("notes") or "") + f" (posted here because #{sales_channel} "
+                                          "isn't set up for the Service Desk bot)").strip()}
+            sales.post_lead(slack, where, data_dir, item)
             return
         company = COMPANIES[item["company"]]["name"]
         text = "\n".join(x for x in [
@@ -224,7 +248,7 @@ def slack_poster(slack, data_dir: str, sales_channel: str, desk_channel: str):
             "Contact: " + " · ".join(x for x in (item.get("name"), item.get("phone"), item.get("email")) if x),
             f"Request: {item['request']}", "",
             "_Not verified: confirm with the customer at the number on the account before changing anything. React ✅ when it's handled._"])
-        slack.chat_postMessage(channel=ids[desk_channel], text=text, unfurl_links=False,
+        slack.chat_postMessage(channel=channel(desk_channel), text=text, unfurl_links=False,
                                metadata={"event_type": sales.KIND, "event_payload": {"kind": "web_request"}})
     return post
 
