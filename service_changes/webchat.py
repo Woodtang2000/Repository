@@ -58,7 +58,7 @@ HAND-OFF: hospitals, care facilities, clinics' patient linen, hotels and lodging
     },
     "tlg": {
         "name": "The Laundry Group", "short": "The Laundry Group", "navy": "#003f50", "gold": "#ffb807",
-        "greeting": "Hi there, I'm Donna with The Laundry Group 👋\nWhat can I help you with today?",
+        "greeting": "Hi there, I'm Donna with The Laundry Group.\nWhat can I help you with today?",
         "chips": ["Hospital, clinic or hotel linen", "Laundry equipment or repair", "Soap and chemicals", "I'm a customer and need something"],
         "rules": """You are the website chat for The Laundry Group, Alaska ("Systems · Service · Supplies"). Sister company: Snow White Linen Supply (same owner; Bill Dubinsky handles both).
 
