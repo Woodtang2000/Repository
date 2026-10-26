@@ -53,7 +53,7 @@
     root.host.style.setProperty("--navy", c.navy); root.host.style.setProperty("--gold", c.gold);
     $(".head img").src = c.logo; $(".head b").textContent = c.name;
   }
-  function store() { try { localStorage.setItem(KEY, JSON.stringify({ session: session, site: site, log: log.slice(-60), at: Date.now() })); } catch (e) {} }
+  function store() { try { localStorage.setItem(KEY, JSON.stringify({ session: session, site: site, log: log.slice(-60), at: Date.now(), open: !panel.hidden })); } catch (e) {} }
   function add(cls, text, keep) {
     var d = document.createElement("div"); d.className = "m " + cls; d.textContent = text; logEl.appendChild(d);
     logEl.scrollTop = logEl.scrollHeight;
@@ -109,8 +109,8 @@
       .then(function () { if (wait) wait.remove(); busy = false; sendBtn.disabled = false; box.focus(); });
   }
 
-  $(".bubble").addEventListener("click", function () { panel.hidden = !panel.hidden; if (!panel.hidden) { render(); box.focus(); } });
-  $(".x").addEventListener("click", function () { panel.hidden = true; });
+  $(".bubble").addEventListener("click", function () { panel.hidden = !panel.hidden; if (!panel.hidden) { render(); box.focus(); } if (log.length) store(); });
+  $(".x").addEventListener("click", function () { panel.hidden = true; if (log.length) store(); });
   $(".new").addEventListener("click", function () {  // leave: forget this conversation and close; reopening starts fresh
     if (busy || !window.confirm("Leave this chat? The conversation will be cleared.")) return;
     session = ""; log = []; site = CFG.site;
@@ -120,4 +120,6 @@
   $("form").addEventListener("submit", function (e) { e.preventDefault(); var t = box.value; box.value = ""; send(t); });
   box.addEventListener("keydown", function (e) { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("form").dispatchEvent(new Event("submit", { cancelable: true })); } });
   brand();
+  // Moving to another page of the site: an open conversation reopens where it left off (minimized stays minimized).
+  if (saved.open && log.length) { panel.hidden = false; render(); }
 })();
