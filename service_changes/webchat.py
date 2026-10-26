@@ -534,6 +534,30 @@ def keep_pictures(data_dir: str) -> None:
     threading.Thread(target=run, daemon=True).start()
 
 
+def keep_portal_awake(every: int = 600) -> None:
+    """Visit the customer portal (PORTAL_URL) every 10 minutes. Alliant's portal goes to sleep when nobody uses it for a
+    while (Microsoft's web server does that after about 20 minutes) and the next customer waits while it wakes up.
+    One small page load every 10 minutes keeps it ready. Slow answers and failures are logged."""
+    url = os.environ.get("PORTAL_URL", "").strip()
+    if not url.startswith("https://"):
+        return
+
+    def run():
+        import urllib.request
+        while True:
+            start = time.time()
+            try:
+                with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "SWL-keepalive"}), timeout=60) as r:
+                    r.read(200_000)
+                took = time.time() - start
+                if took > 5:
+                    print(time.strftime("%H:%M"), f"portal was slow to answer: {took:.0f}s", flush=True)
+            except Exception as e:
+                print(time.strftime("%H:%M"), "portal didn't answer:", e, flush=True)
+            time.sleep(every)
+    threading.Thread(target=run, daemon=True).start()
+
+
 def main():
     import anthropic
     from slack_sdk import WebClient
@@ -549,6 +573,7 @@ def main():
     claude = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("SERVICE_DESK_API_KEY"))
     chat = Chat(claude, slack_poster(slack, args.data, args.sales, args.desk), args.data)
     keep_pictures(args.data)
+    keep_portal_awake()
     srv = ThreadingHTTPServer(("127.0.0.1", args.port), make_handler(chat, args.public_url.rstrip("/")))
     print(time.strftime("%H:%M"), f"website chat on 127.0.0.1:{args.port} for {args.public_url}", flush=True)
     srv.serve_forever()
