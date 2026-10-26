@@ -36,6 +36,9 @@ h2{font-size:22px;margin:30px 0 4px;letter-spacing:-.015em;color:var(--navy)}
 .seg button{border:0;border-radius:8px;padding:5px 8px;font:inherit;font-size:13px;font-weight:600;background:var(--tint);color:var(--navy);cursor:pointer}
 .seg button.on{background:var(--navy);color:#fff}
 .qty{display:flex;align-items:center;gap:6px;margin-top:auto}
+.qty.opt{margin-top:0}
+.qty.opt label{font-weight:600;color:var(--navy);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.cap{font-size:12px;color:var(--sub);text-align:center;margin-top:auto}
 .qty label{font-size:13px;color:var(--sub);margin-right:auto;white-space:nowrap}
 .qty button{width:30px;height:30px;flex:none;border:0;border-radius:8px;background:var(--tint);color:var(--navy);font-size:19px;font-weight:600;line-height:1;cursor:pointer}
 .qty input{width:46px;height:30px;flex:none;border:1px solid var(--line);border-radius:8px;text-align:center;font:inherit;font-size:15px;font-weight:600;-moz-appearance:textfield}
@@ -78,7 +81,7 @@ h3{font-size:17px;margin:22px 0 8px;color:var(--navy)}
 .more{display:block;margin:22px auto 0;border:2px solid var(--navy);border-radius:12px;background:#fff;color:var(--navy);font:inherit;font-weight:600;padding:12px 20px;cursor:pointer}
 .note2{color:var(--ink);margin:0 0 6px}
 @media (max-width:640px){.tiles{grid-template-columns:1fr 1fr;gap:8px}.tile{font-size:12.5px;height:70px;padding:6px 8px}}
-@media (max-width:640px){.hero h1{font-size:26px}.top img{height:44px}.fields{grid-template-columns:1fr}.grid{grid-template-columns:1fr 1fr;gap:8px}.pic{aspect-ratio:auto;height:92px}.qty label{display:none}.qty{justify-content:space-between}.bar div{padding-right:92px}.bar span{font-size:14px}}
+@media (max-width:640px){.hero h1{font-size:26px}.top img{height:44px}.fields{grid-template-columns:1fr}.grid{grid-template-columns:1fr 1fr;gap:8px}.pic{aspect-ratio:auto;height:92px}.qty label{display:none}.qty.opt label{display:block;font-size:12.5px}.qty{justify-content:space-between}.bar div{padding-right:92px}.bar span{font-size:14px}}
 </style>
 </head>
 <body>
@@ -107,8 +110,8 @@ h3{font-size:17px;margin:22px 0 8px;color:var(--navy)}
     $('count').innerHTML = n || extras ? '<b>' + (n + extras) + '</b> selected' : 'Nothing selected yet';
   }
 
+  function opts(it) { return it.options || [{ label: '', sku: it.sku }]; }
   function card(group, it) {
-    var s = state[it.id] = state[it.id] || { qty: 0, option: it.options ? it.options[0].label : '', how_often: group.garments ? '' : 'Weekly' };
     var pic = el('div', { cls: 'pic' });
     var showPic = function (sku) {
       pic.innerHTML = '';
@@ -117,26 +120,22 @@ h3{font-size:17px;margin:22px 0 8px;color:var(--navy)}
     };
     showPic(it.picture);
     var box = el('div', { cls: 'item' }, [pic, el('div', {}, [el('div', { cls: 'name', text: it.name }), it.note ? el('div', { cls: 'note', text: it.note }) : null])]);
-    function segs(list, key, onPick) {
-      var seg = el('div', { cls: 'seg' });
-      list.forEach(function (label) {
-        var b = el('button', { type: 'button', text: label });
-        if (s[key] === label) b.className = 'on';
-        b.onclick = function () { s[key] = label; [].forEach.call(seg.children, function (x) { x.className = x === b ? 'on' : ''; }); if (onPick) onPick(label); };
-        seg.appendChild(b);
-      });
-      return seg;
-    }
-    if (it.options) box.appendChild(segs(it.options.map(function (o) { return o.label; }), 'option', function (label) {
-      var o = it.options.filter(function (x) { return x.label === label; })[0]; if (it.picture) showPic(o.sku);
-    }));
-    var input = el('input', { type: 'number', min: '0', max: '5000', inputmode: 'numeric', value: String(s.qty), 'aria-label': (group.garments ? 'Employees for ' : 'Quantity of ') + it.name });
-    var set = function (v) { v = Math.max(0, Math.min(5000, parseInt(v, 10) || 0)); s.qty = v; input.value = v; box.className = 'item' + (v ? ' on' : ''); count(); };
-    var minus = el('button', { type: 'button', text: '−', 'aria-label': 'Less' }), plus = el('button', { type: 'button', text: '+', 'aria-label': 'More' });
-    minus.onclick = function () { set(s.qty - 1); }; plus.onclick = function () { set(s.qty + 1); };
-    input.oninput = function () { set(input.value); };
-    box.appendChild(el('div', { cls: 'qty' }, [el('label', { text: group.garments ? 'Employees' : 'Per week' }), minus, input, plus]));
-    if (s.qty) box.className = 'item on';
+    var many = !!it.options;
+    if (many) box.appendChild(el('div', { cls: 'cap', text: group.garments ? 'Employees for each' : 'How many of each, per week' }));
+    var mark = function () { box.className = 'item' + (opts(it).some(function (o) { return (state[it.id + '|' + o.label] || {}).qty; }) ? ' on' : ''); };
+    opts(it).forEach(function (o) {
+      var key = it.id + '|' + o.label;
+      var s = state[key] = state[key] || { id: it.id, option: o.label, qty: 0 };
+      var input = el('input', { type: 'number', min: '0', max: '5000', inputmode: 'numeric', value: String(s.qty), 'aria-label': (group.garments ? 'Employees for ' : 'Quantity of ') + it.name + (o.label ? ' ' + o.label : '') });
+      var set = function (v) { v = Math.max(0, Math.min(5000, parseInt(v, 10) || 0)); s.qty = v; input.value = v; mark(); count(); };
+      var minus = el('button', { type: 'button', text: '−', 'aria-label': 'Less' }), plus = el('button', { type: 'button', text: '+', 'aria-label': 'More' });
+      minus.onclick = function () { set(s.qty - 1); }; plus.onclick = function () { set(s.qty + 1); if (many && it.picture) showPic(o.sku); };
+      input.oninput = function () { set(input.value); };
+      var row = el('div', { cls: 'qty' + (many ? ' opt' : '') }, [el('label', { text: o.label || (group.garments ? 'Employees' : 'Per week') }), minus, input, plus]);
+      if (many && it.picture) row.onmouseenter = function () { showPic(o.sku); };
+      box.appendChild(row);
+    });
+    mark();
     return box;
   }
 
@@ -246,7 +245,7 @@ h3{font-size:17px;margin:22px 0 8px;color:var(--navy)}
       more.appendChild(el('h2', { text: 'All other products' }));
       section(more, function (it) { return !pick[it.id]; });
       step3.appendChild(more);
-      if (cat.groups.some(function (g) { return g.items.some(function (it) { return !pick[it.id] && state[it.id] && state[it.id].qty; }); })) btn.click();
+      if (cat.groups.some(function (g) { return g.items.some(function (it) { return !pick[it.id] && opts(it).some(function (o) { return (state[it.id + '|' + o.label] || {}).qty; }); }); })) btn.click();
     }
     if (cat.interests) {
       step3.appendChild(el('h2', { text: 'Equipment and supplies' }));
@@ -291,7 +290,7 @@ h3{font-size:17px;margin:22px 0 8px;color:var(--navy)}
   function submit() {
     if (sent) return;
     var items = [];
-    cat.groups.forEach(function (g) { g.items.forEach(function (it) { var s = state[it.id]; if (s.qty > 0) items.push({ id: it.id, qty: s.qty, option: s.option, how_often: s.how_often }); }); });
+    cat.groups.forEach(function (g) { g.items.forEach(function (it) { opts(it).forEach(function (o) { var s = state[it.id + '|' + o.label]; if (s && s.qty > 0) items.push({ id: it.id, qty: s.qty, option: o.label }); }); }); });
     var interests = (cat.interests || []).filter(function (i) { return picked[i]; });
     if (!items.length && !interests.length && !v('other')) { err.textContent = 'Please pick at least one item, or tell us what you need.'; err.scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
     if (!details()) { show(1); return; }
