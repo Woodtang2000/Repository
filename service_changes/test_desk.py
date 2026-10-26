@@ -8,6 +8,14 @@ from .context import Alliant, Customer
 from .schema import Action, Category, Change, ParsedMessage
 
 
+
+def flat(text, attachments):
+    """What a person reads: the text, or a to-do bar's text and status line (todo.py)."""
+    if text or not attachments:
+        return text
+    return "\n".join(b["text"]["text"] if b["type"] == "section" else " ".join(e["text"] for e in b["elements"])
+                     for a in attachments for b in a["blocks"] if b["type"] in ("section", "context"))
+
 class FakeSlack:
     """Just enough of Slack: channels, threads, reactions and message metadata."""
 
@@ -68,12 +76,18 @@ class FakeSlack:
     def chat_getPermalink(self, channel, message_ts):
         return {"permalink": f"https://slack/{channel}/{message_ts}"}
 
-    def chat_postMessage(self, channel, text, thread_ts=None, metadata=None, reply_broadcast=False, **kw):
-        return self.say(channel, "UBOT", text, thread_ts=thread_ts, bot_id="B", metadata=metadata, broadcast=reply_broadcast)
+    def chat_postMessage(self, channel, text, thread_ts=None, metadata=None, reply_broadcast=False, attachments=None, **kw):
+        m = self.say(channel, "UBOT", flat(text, attachments), thread_ts=thread_ts, bot_id="B", metadata=metadata,
+                     broadcast=reply_broadcast)
+        if attachments:
+            m["attachments"] = attachments
+        return m
 
-    def chat_update(self, channel, ts, text, metadata=None, **kw):
+    def chat_update(self, channel, ts, text, metadata=None, attachments=None, **kw):
         m = self.find(channel, ts)
-        m["text"] = text
+        m["text"] = flat(text, attachments)
+        if attachments:
+            m["attachments"] = attachments
         if metadata:
             m["metadata"] = metadata
 
@@ -167,7 +181,8 @@ def test_main_channel_loop(setup):
     assert "thread_ts" not in rb and rb["text"].startswith("<@U1> ") and "from 4 to 6" in rb["text"]
     assert "entered by Sonja Burke" in rb["text"] and "Office note: only had 1 in stock today" in rb["text"]
     t = slack.find("D1", t["ts"])
-    assert desk.meta(t)["kind"] == "done" and "Entered by Sonja Burke" in t["text"]
+    assert desk.meta(t)["kind"] == "done" and ":white_check_mark: Entered · Sonja · " in t["text"]
+    assert t["attachments"][0]["color"] == "#2eb67d" and "readback sent" in t["text"]  # green bar
     assert d.run_once() == NOTHING  # never twice
 
     # 4. "Thanks" after the readback is not a request.
@@ -249,7 +264,8 @@ def test_change_before_office_finishes_replaces_the_open_ticket(setup):
     slack.say("C1", "U1", "no, 3")  # changed their mind before the office got to it
     assert d.run_once()["ticket"] == 1
     old = slack.find("D1", old["ts"])
-    assert desk.meta(old)["kind"] == "replaced" and old["text"].startswith("🚫 *Replaced")
+    assert desk.meta(old)["kind"] == "replaced" and "🚫 *Replaced by a newer ticket" in old["text"]
+    assert old["attachments"][0]["color"] == "#9aa5a8"  # grey bar
     assert desk.meta(slack.bot_posts("D1", "ticket")[-1])["src_ts"] == q["ts"]
     slack.react("D1", old["ts"], "U2", "white_check_mark")  # ✅ on the replaced ticket does nothing
     assert d.run_once()["readback"] == 0

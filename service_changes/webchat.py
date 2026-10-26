@@ -23,7 +23,7 @@ from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
-from . import catalog, sales
+from . import catalog, sales, todo
 from .context import ALASKA
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -383,8 +383,8 @@ def slack_poster(slack, data_dir: str, sales_channel: str, desk_channel: str):
             "Contact: " + " · ".join(x for x in (item.get("name"), item.get("phone"), item.get("email")) if x),
             f"Request: {item['request']}",
             *account_hint(alliant(), item.get("business", ""), item.get("town", ""), item.get("request", "")), "",
-            "_Not verified: confirm with the customer at the number on the account before changing anything. React ✅ when it's handled._"])
-        slack.chat_postMessage(channel=channel(desk_channel), text=text, unfurl_links=False,
+            "_Not verified: confirm with the customer at the number on the account before changing anything. Tap ✓ Done when it's handled._"])
+        slack.chat_postMessage(channel=channel(desk_channel), text="", attachments=todo.attachment(text), unfurl_links=False,
                                metadata={"event_type": sales.KIND, "event_payload": {"kind": "web_request"}})
     return post
 

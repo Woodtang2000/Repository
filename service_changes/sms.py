@@ -28,6 +28,7 @@ import urllib.request
 from datetime import datetime, timedelta, timezone
 
 from .checks import check, readback, ticket
+from .todo import GREEN, attachment, restyle, stamp
 from .verify import expectations
 from .context import ALASKA, Alliant, frequency_label
 from .schema import Category
@@ -175,6 +176,15 @@ def _write_phones(path: str, rows: list[dict]) -> None:
     os.replace(tmp, path)
 
 
+def person(slack, user: str) -> str:
+    """A Slack user's name for a status line, or "someone"."""
+    try:
+        u = slack.users_info(user=user)["user"]
+        return u.get("real_name") or u.get("name") or "someone"
+    except Exception:
+        return "someone"
+
+
 def signup_card(slack, desk_id: str, alliant: Alliant, phone: str, who: str, said: str, accounts: list[str],
                 by: str = "") -> None:
     """Ask the office to approve a number for an account: ✅ approves the best match."""
@@ -189,7 +199,8 @@ def signup_card(slack, desk_id: str, alliant: Alliant, phone: str, who: str, sai
         lines.append(f"React ✅ to approve the best match, or type `add {phone_key(phone)} to <account number>`.")
     else:
         lines.append(f"I couldn't tell which customer. Type `add {phone_key(phone)} to <account number>` to approve.")
-    slack.chat_postMessage(channel=desk_id, text="\n".join(lines), unfurl_links=False, metadata={
+    slack.chat_postMessage(channel=desk_id, text="", attachments=attachment("\n".join(lines), button=False),
+                           unfurl_links=False, metadata={
         "event_type": KIND, "event_payload": {"kind": "sms_signup", "phone": "+1" + phone_key(phone),
                                               "accounts": accounts[:1], "name": who}})
 
@@ -295,8 +306,10 @@ class TextDesk:
             json.dump(self.state, f)
         os.replace(tmp, self.state_path)
 
-    def office(self, text: str, payload: dict) -> None:
-        self.slack.chat_postMessage(channel=self.desk_id, text=text, unfurl_links=False,
+    def office(self, text: str, payload: dict, todo: str | None = None) -> None:
+        """A message in the office channel. todo: "own" (a ✅ ticket) or "button" puts it in a gold to-do bar (todo.py)."""
+        bar = {"text": "", "attachments": attachment(text, button=todo == "button")} if todo else {"text": text}
+        self.slack.chat_postMessage(channel=self.desk_id, unfurl_links=False, **bar,
                                     metadata={"event_type": KIND, "event_payload": payload})
 
     def run_once(self, first: bool = False) -> int:
@@ -359,7 +372,8 @@ class TextDesk:
             self.state["convos"].pop(self.key(phone), None)
             if not ans.found:
                 self.office(f"{self.icon} *{acct}* {self.name(mine, acct)}: customer question I couldn't answer {masked}\n"
-                            f"_{body[:300]}_\nPlease follow up with them.", {"kind": "sms_question", "account": acct})
+                            f"_{body[:300]}_\nPlease follow up with them.", {"kind": "sms_question", "account": acct},
+                            todo="button")
             return
         if parsed.category in ACTIONABLE:
             fill_item_matches(self.claude, parsed, mine)
@@ -384,7 +398,8 @@ class TextDesk:
                                                  f"{masked} · React ✅ or type done when it's in Alliant"]),
                     {"kind": "ticket", "src_channel": self.word, "src_ts": sid, "readback": rb, "driver": who["name"],
                      "driver_id": "", "account": acct, "msgs": [], self.to_key: phone, **self.ticket_extra(phone),
-                     "expect": expectations(result) if parsed.category in ACTIONABLE and not result.questions else []})
+                     "expect": expectations(result) if parsed.category in ACTIONABLE and not result.questions else []},
+                    todo="own")
         self.send(phone, f"Got it, thanks. We'll {'text' if self.word == 'text' else 'email'} you when it's done.")
         self.state["convos"].pop(self.key(phone), None)
 
@@ -424,7 +439,8 @@ class TextDesk:
                             for u in x.get("users", []) if not m.get("user") or u != m.get("user")), None)
                 if who:
                     self.approve(pl["phone"], pl["accounts"], pl.get("name", ""))
-                    self.slack.chat_update(channel=self.desk_id, ts=m["ts"], text=m["text"] + "\n✅ *Approved*",
+                    self.slack.chat_update(channel=self.desk_id, ts=m["ts"], text="",
+                                           attachments=restyle(m, GREEN, status=stamp(person(self.slack, who), "Approved")),
                                            metadata={"event_type": KIND, "event_payload": {**pl, "kind": "sms_approved"}})
                     done.add(m["ts"])
                     changed += 1

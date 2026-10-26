@@ -1,6 +1,7 @@
 import pytest
 
 from . import sms
+from .test_desk import flat
 from .context import Alliant, Customer, Wearer
 from .parser import Answer
 from .schema import Action, Category, Change, ParsedMessage
@@ -23,9 +24,10 @@ class FakeSlack:
     def conversations_list(self, **kw):
         return [{"channels": [{"id": "D1", "name": "service-desk-test"}]}]
 
-    def chat_postMessage(self, channel, text, metadata=None, **kw):
-        m = {"channel": channel, "ts": f"{len(self.posts) + 1}.0", "text": text, "user": "UBOT", "bot_id": "B1",
-             "metadata": metadata, "meta": (metadata or {}).get("event_payload", {})}
+    def chat_postMessage(self, channel, text, metadata=None, attachments=None, **kw):
+        m = {"channel": channel, "ts": f"{len(self.posts) + 1}.0", "text": flat(text, attachments), "user": "UBOT",
+             "bot_id": "B1", "metadata": metadata, "meta": (metadata or {}).get("event_payload", {}),
+             "attachments": attachments}
         self.posts.append(m)
         return {"ts": m["ts"]}
 
@@ -39,9 +41,12 @@ class FakeSlack:
     def conversations_history(self, channel, **kw):
         return {"messages": list(reversed([p for p in self.posts if p["channel"] == channel]))}
 
-    def chat_update(self, channel, ts, text, metadata=None):
+    def chat_update(self, channel, ts, text, metadata=None, attachments=None):
         m = next(p for p in self.posts if p["ts"] == ts)
-        m.update(text=text, metadata=metadata, meta=metadata["event_payload"])
+        m.update(text=flat(text, attachments), metadata=metadata, meta=metadata["event_payload"], attachments=attachments)
+
+    def users_info(self, user):
+        return {"user": {"real_name": "Sonja Burke"}}
 
 
 @pytest.fixture

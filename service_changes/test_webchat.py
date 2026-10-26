@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from . import sales, salesforce, webchat
+from . import sales, salesforce, todo, webchat
 
 
 class Block(SimpleNamespace):
@@ -201,7 +201,8 @@ def test_give_to_jesse_creates_the_salesforce_opportunity(tmp_path, monkeypatch)
     lead = {"name": "Ana Lee", "business": "Moose Pizza", "phone": "907-555-0101", "company": "sw"}
     sales.post_lead(Slack(), "CSALES", str(tmp_path), lead)
     post = calls[0][1]
-    buttons = post["blocks"][1]["elements"]
+    assert post["attachments"][0]["color"] == "#f9af10" and post["text"] == ""  # gold to-do bar
+    buttons = post["attachments"][0]["blocks"][1]["elements"]
     assert [b["text"]["text"] for b in buttons] == ["Give to Bill", "Give to Jesse", "Give to Scott"]
     jesse = next(b for b in buttons if b["action_id"] == "sales_give_jesse")
     payload = {"actions": [jesse], "channel": {"id": "CSALES"}, "message": {"ts": "1.0"}, "user": {"id": "U1", "name": "bill"}}
@@ -210,8 +211,9 @@ def test_give_to_jesse_creates_the_salesforce_opportunity(tmp_path, monkeypatch)
                               create=lambda l, o: (made.append((o, l["found"])), ("006A", "https://sf/006A", ""))[1])
     assert made == [("0051W000005qDzpQAE", {"street": "1 Main St"})] and "Jesse James Tingley" in out
     upd = calls[-1][1]
-    footer = upd["blocks"][-1]["elements"][0]["text"]
-    assert "Given to *Jesse James Tingley* by bill" in footer and "Salesforce Opportunity" in footer
+    assert upd["attachments"][0]["color"] == "#2eb67d"  # green once given
+    footer = upd["attachments"][0]["blocks"][-1]["elements"][0]["text"]
+    assert ":white_check_mark: Given to Jesse James Tingley · bill · " in footer and "Salesforce Opportunity" in footer
     assert "address not found" not in footer
     assert sales.handle_action(Slack(), payload, str(tmp_path), create=lambda l, o: 1 / 0) == "already in Salesforce"
 
@@ -242,7 +244,7 @@ def test_lead_goes_to_the_office_when_sales_desk_is_missing(tmp_path):
             return {"ts": "1.0"}
     post = webchat.slack_poster(Slack(), str(tmp_path), "sales-desk", "service-desk")
     post("lead", {"name": "Scotty", "business": "Scottie's Bodies", "phone": "555", "company": "sw"})
-    assert posts[0]["channel"] == "CDESK" and "isn't set up for the Service Desk bot" in posts[0]["text"]
+    assert posts[0]["channel"] == "CDESK" and "isn't set up for the Service Desk bot" in todo.body(posts[0])
 
 
 def test_existing_customers_are_pointed_to_the_text_line(monkeypatch):

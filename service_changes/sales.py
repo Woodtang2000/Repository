@@ -7,7 +7,7 @@ import os
 import re
 import time
 
-from . import salesforce
+from . import salesforce, todo
 
 KIND = "service_desk"
 LOOKUP_MODEL = os.environ.get("SALES_LOOKUP_MODEL", "claude-sonnet-5-5")
@@ -106,7 +106,8 @@ def blocks(lead: dict, footer: str = "") -> list:
 
 def post_lead(slack, channel_id: str, data_dir: str, lead: dict) -> None:
     save(data_dir, lead)
-    slack.chat_postMessage(channel=channel_id, text=card_text(lead), blocks=blocks(lead), unfurl_links=False,
+    slack.chat_postMessage(channel=channel_id, text="", unfurl_links=False,
+                           attachments=[{"color": todo.GOLD, "fallback": todo.plain(card_text(lead))[:150], "blocks": blocks(lead)}],
                            metadata={"event_type": KIND, "event_payload": {"kind": "sales_lead", "lead": lead["id"]}})
 
 
@@ -138,8 +139,8 @@ def handle_action(slack, payload: dict, data_dir: str, create=salesforce.create_
         return f"salesforce error: {e}"
     lead.update(sf_id=sf_id, sf_owner=owner[0], given_by=clicker, given_at=time.time())
     save(data_dir, lead)
-    slack.chat_update(channel=channel, ts=ts, text=card_text(lead),
-                      blocks=blocks(lead, footer=f"✅ Given to *{owner[0]}* by {clicker} · <{link}|Salesforce Opportunity>"
+    slack.chat_update(channel=channel, ts=ts, text="", attachments=[{"color": todo.GREEN, "fallback": todo.plain(card_text(lead))[:150],
+                      "blocks": blocks(lead, footer=todo.stamp(clicker, f"Given to {owner[0]}") + f" · <{link}|Salesforce Opportunity>"
                                                     + ("" if lead["found"].get("street") or lead.get("street") else " · address not found online, add it in Salesforce")
-                                                    + (f" · ⚠️ {note}" if note else "")))
+                                                    + (f" · ⚠️ {note}" if note else ""))}])
     return f"lead {lead['id']} -> {owner[0]} ({sf_id})"

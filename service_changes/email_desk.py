@@ -27,6 +27,7 @@ from datetime import datetime, timedelta, timezone
 from . import bird
 from .context import Alliant
 from .sms import KIND, MAX_TEXTS_PER_DAY, TextDesk, plain
+from .todo import attachment
 
 EMAIL = r"([A-Za-z0-9._%+'-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})"
 ADD_EMAIL = re.compile(rf"^\s*(?:add|approve)\s+<?(?:mailto:)?{EMAIL}(?:\|[^>]*)?>?\s+(?:to|for)\s+(.+?)\s*$", re.I | re.S)
@@ -187,7 +188,8 @@ class EmailDesk(TextDesk):
             lines.append(f"React ✅ to approve the best match, or type `add {email_key(addr)} to <account number(s)>`.")
         else:
             lines.append(f"I couldn't tell which customer. Type `add {email_key(addr)} to <account number>` to approve.")
-        self.slack.chat_postMessage(channel=self.desk_id, text="\n".join(lines), unfurl_links=False, metadata={
+        self.slack.chat_postMessage(channel=self.desk_id, text="", attachments=attachment("\n".join(lines), button=False),
+                                    unfurl_links=False, metadata={
             "event_type": KIND, "event_payload": {"kind": self.signup_kind, "phone": email_key(addr),
                                                   "accounts": accounts[:1], "name": who}})
 
@@ -271,7 +273,7 @@ class EmailDesk(TextDesk):
         self.office("\n".join(out + ["", quote, f"📧 Emailed in by {name} · React ✅ or type done when it's in Alliant"]),
                     {"kind": "ticket", "src_channel": "email", "src_ts": sid, "readback": rb, "driver": name,
                      "driver_id": "", "account": parsed.account_number or "", "msgs": [], "email_to": email_key(addr),
-                     **self.ticket_extra(addr)})
+                     **self.ticket_extra(addr)}, todo="own")
 
 
 def main():

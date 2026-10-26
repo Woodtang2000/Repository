@@ -35,6 +35,8 @@ from datetime import datetime
 
 from .bot import _messages, _name, _office_staff
 from .checks import check, readback, split_by_account, ticket
+from . import todo as todo_bar  # (listen() has its own `todo` queue)
+from .todo import GOLD, GREEN, GREY, attachment, restyle, stamp
 from .context import ALASKA, Alliant, route_from_channel, service_day
 from .schema import Category
 
@@ -61,7 +63,11 @@ def meta(m: dict) -> dict | None:
     return md.get("event_payload") if md.get("event_type") == KIND else None
 
 
-def _post(slack, channel: str, text: str, payload: dict, thread_ts: str | None = None, **kw) -> dict:
+def _post(slack, channel: str, text: str, payload: dict, thread_ts: str | None = None, todo: str | None = None, **kw) -> dict:
+    """todo: "button" for a gold to-do bar with ✓ Done, "own" for a gold bar on a message with its own ✅ flow (todo.py)."""
+    if todo:
+        kw["attachments"] = attachment(text, button=todo == "button")
+        text = ""
     return slack.chat_postMessage(channel=channel, text=text, thread_ts=thread_ts, unfurl_links=False,
                                   metadata={"event_type": KIND, "event_payload": payload}, **kw)
 
@@ -140,6 +146,8 @@ class Desk:
         r = _post(self.slack, channel, text, payload, **kw)
         m = {"ts": r["ts"], "user": self.me, "bot_id": "self", "text": text,
              "metadata": {"event_type": KIND, "event_payload": payload}}
+        if kw.get("todo"):
+            m.update(text="", attachments=attachment(text, button=kw["todo"] == "button"))
         if posted is not None:
             posted.append(m)
         if channel == self.desk_id and hasattr(self, "desk_msgs"):
@@ -386,12 +394,13 @@ class Desk:
         expect = expectations(result) if parsed.category in ACTIONABLE and not result.questions else []
         new = self.post(self.desk_id, text, {"kind": "ticket", "src_channel": channel, "src_ts": src["ts"],
                                              "readback": rb, "driver": author, "driver_id": src.get("user"),
-                                             "account": parsed.account_number or "", "msgs": replies, "expect": expect})
+                                             "account": parsed.account_number or "", "msgs": replies, "expect": expect},
+                        todo="own")
         for old_ts in replaces:
             old = self.desk_msgs.get(old_ts)
             if old:
-                self.slack.chat_update(channel=self.desk_id, ts=old_ts,
-                                       text="🚫 *Replaced by a newer ticket below. Don't enter this one.*\n" + old["text"],
+                self.slack.chat_update(channel=self.desk_id, ts=old_ts, text="", attachments=restyle(
+                                           old, GREY, status="🚫 *Replaced by a newer ticket below. Don't enter this one.*"),
                                        metadata={"event_type": KIND, "event_payload": {**meta(old), "kind": "replaced"}})
         return new["ts"]
 
@@ -457,7 +466,7 @@ class Desk:
                 self.post(cid, f"<@{m.get('user')}> Only the office can remove a texting number. I've let them know.",
                           {"kind": "answer", "src_ts": m["ts"], "driver_id": m.get("user")})
                 self.post(self.desk_id, f"📱 *{self.name(m.get('user'))}* in #{route_name} asks: _{text[:120]}_",
-                          {"kind": "sms_admin"})
+                          {"kind": "sms_admin"}, todo="button")
                 self.mark_seen(cid, [m])
                 return True
             return False
@@ -658,7 +667,8 @@ class Desk:
         else:
             self.post(p["src_channel"], msg, {"kind": "readback", "src_ts": p["src_ts"], "driver_id": p.get("driver_id"),
                                               "msgs": p.get("msgs", [])})
-        self.slack.chat_update(channel=self.desk_id, ts=t["ts"], text=t["text"] + f"\n✅ *Entered by {who}* · readback sent",
+        self.slack.chat_update(channel=self.desk_id, ts=t["ts"], text="",
+                               attachments=restyle(t, GREEN, status=stamp(who, "Entered") + " · readback sent"),
                                metadata={"event_type": KIND, "event_payload": {**p, "kind": "done", "done_at": time.time(),
                                                                                "entered_by": who}})
 
@@ -677,8 +687,11 @@ class Desk:
                     or not p.get("done_at") or p["done_at"] > exported.timestamp():
                 continue
             found = problems(self.alliant, p["account"], p["expect"])
-            text = t["text"] + ("\n⚠️ *Doesn't match Alliant*: " + "; ".join(found) if found else "")
-            self.slack.chat_update(channel=self.desk_id, ts=t["ts"], text=text, metadata={
+            looks = {"text": t["text"]} if t.get("text") else {"text": "", "attachments": t.get("attachments")}
+            if found:  # back to gold: the entry needs fixing
+                looks = {"text": "", "attachments": restyle(t, GOLD, status=f":warning: *Doesn't match Alliant*: "
+                                                                             f"{'; '.join(found)}")}
+            self.slack.chat_update(channel=self.desk_id, ts=t["ts"], **looks, metadata={
                 "event_type": KIND, "event_payload": {**p, "verified": "flagged" if found else "ok"}})
             if found:
                 flagged.append((t, p, found))
@@ -690,7 +703,7 @@ class Desk:
                 cust = next((c.name for c in self.alliant.customers if c.account == p["account"]), "")
                 by = f" · entered by {p['entered_by']}" if p.get("entered_by") else ""
                 lines.append(f"• <{link}|{p['account']} {cust}>{by}\n    " + "\n    ".join(found))
-            self.post(self.desk_id, "\n".join(lines), {"kind": "entry_check"})
+            self.post(self.desk_id, "\n".join(lines), {"kind": "entry_check"}, todo="button")
         self.verified_feed = exported.timestamp()
 
     def stockroom_pass(self, now: float) -> None:
@@ -728,7 +741,7 @@ class Desk:
                               f"at *{len(groups)} account{'s' if len(groups) != 1 else ''}* where the inventory doesn't match "
                               "the auto count (not equal or double), with nothing on order. Biggest differences first, "
                               "in the thread 👇",
-                         {"kind": "stockroom_check", "count": len(rows)})
+                         {"kind": "stockroom_check", "count": len(rows)}, todo="button")
         msgs, cur = [], []
         for acct, cust, rs in groups:
             block = [f"*{acct}* {cust}"] + [
@@ -816,6 +829,15 @@ class Desk:
 
         def on_event(client, req):
             client.send_socket_mode_response(SocketModeResponse(envelope_id=req.envelope_id))
+            if req.type == "interactive" and req.payload.get("type") == "block_actions" and any(
+                    x.get("action_id") in (todo_bar.DONE, todo_bar.UNDO) for x in req.payload.get("actions", [])):
+                # ✓ Done / Undo on a to-do message (todo.py): green with who and when, or back to gold
+                if req.payload.get("user", {}).get("id") != self.me:
+                    try:
+                        print(time.strftime("%H:%M"), "todo:", todo_bar.handle_action(quick, req.payload, self.name), flush=True)
+                    except Exception as e:
+                        print(time.strftime("%H:%M"), "todo error:", e, flush=True)
+                return
             if req.type == "interactive" and req.payload.get("type") == "block_actions":
                 # "Give to Bill/Jesse" on a website lead in #sales-desk: create the Salesforce Account and Opportunity (sales.py)
                 from . import sales
