@@ -28,6 +28,8 @@
     '.log{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px}' +
     '.m{max-width:86%;padding:8px 12px;border-radius:12px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px;line-height:1.45}' +
     '.bot{background:#eef2f3;align-self:flex-start;border-bottom-left-radius:3px}.me{background:var(--navy);color:#fff;align-self:flex-end;border-bottom-right-radius:3px}' +
+    '.typing{display:flex;gap:4px;align-items:center;padding:12px 14px}.typing i{width:7px;height:7px;border-radius:50%;background:#8a979e;animation:swlb 1.2s infinite}' +
+    '.typing i:nth-child(2){animation-delay:.2s}.typing i:nth-child(3){animation-delay:.4s}@keyframes swlb{0%,60%,100%{opacity:.3;transform:translateY(0)}30%{opacity:1;transform:translateY(-3px)}}' +
     '.note{align-self:center;color:#1f7a4d;font-size:12.5px;font-weight:600;background:none;padding:2px}' +
     '.hand{align-self:stretch;max-width:100%;background:#eaf0f1;color:var(--navy);border-left:3px solid var(--gold);font-size:12.5px;border-radius:6px}' +
     'form{display:flex;gap:8px;padding:10px;border-top:1px solid #e3e8ea}' +
@@ -64,30 +66,47 @@
     else log.forEach(function (x) { add(x[0], x[1], false); });
   }
 
+  // Replies show after a short "typing" pause, like a fast typist: about 1 second plus a little per character,
+  // never more than 6 seconds, counting the time the server already took.
+  function typingTime(text) { return Math.min(6000, 900 + 18 * (text || "").length); }
+  function pause(ms) { return new Promise(function (ok) { setTimeout(ok, Math.max(0, ms)); }); }
+  function typing() { var d = add("bot typing", "", false); d.innerHTML = "<i></i><i></i><i></i>"; return d; }
+
   function send(text) {
     text = (text || "").trim();
     if (!text || busy) return;
     busy = true; sendBtn.disabled = true;
     add("me", text);
-    var wait = add("bot", "…", false);
+    var started = Date.now(), wait;
+    pause(400).then(function () { if (busy) wait = typing(); });  // the dots appear a moment after sending
     fetch(CFG.api + "/api/chat", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ site: site, session: session, message: text, page: location.href }) })
       .then(function (r) { return r.json(); })
       .then(function (r) {
-        wait.remove();
         if (r.session) session = r.session;
-        if (r.reply) add("bot", r.reply);
-        (r.events || []).forEach(function (e) {
-          if (e.type === "lead") add("note", "✓ Sent to our sales team");
-          if (e.type === "request") add("note", "✓ Sent to our office");
-          if (e.type === "handoff") { site = e.to; brand(); add("hand", "Connected to " + CFG.companies[site].name); }
-          if (e.type === "continued" && e.reply) add("bot", e.reply);
+        return pause(typingTime(r.reply) - (Date.now() - started)).then(function () {
+          if (wait) wait.remove();
+          if (r.reply) add("bot", r.reply);
+          var chain = Promise.resolve();
+          (r.events || []).forEach(function (e) {
+            chain = chain.then(function () {
+              if (e.type === "lead") add("note", "✓ Sent to our sales team");
+              if (e.type === "request") add("note", "✓ Sent to our office");
+              if (e.type === "handoff") { site = e.to; brand(); add("hand", "Connected to " + CFG.companies[site].name); }
+              if (e.type === "continued" && e.reply) {
+                var t = typing();
+                return pause(typingTime(e.reply)).then(function () { t.remove(); add("bot", e.reply); });
+              }
+            });
+          });
+          return chain.then(function () {
+            if (r.site && CFG.companies[r.site] && r.site !== site) { site = r.site; brand(); }
+            store();
+          });
         });
-        if (r.site && CFG.companies[r.site] && r.site !== site) { site = r.site; brand(); }
-        store();
       })
-      .catch(function () { wait.remove(); add("bot", "Sorry, we couldn't connect. Please call us at (907) 222-7738.", false); })
-      .then(function () { busy = false; sendBtn.disabled = false; box.focus(); });
+      .catch(function () { if (wait) wait.remove(); add("bot", "Sorry, we couldn't connect. Please call us at (907) 222-7738.", false); })
+      .then(function () { if (wait) wait.remove(); busy = false; sendBtn.disabled = false; box.focus(); });
   }
 
   $(".bubble").addEventListener("click", function () { panel.hidden = !panel.hidden; if (!panel.hidden) { render(); box.focus(); } });
