@@ -353,3 +353,15 @@ def test_quote_page_served_for_each_company():
         assert "Patient gowns" in tlg and '"site": "tlg"' in tlg and "https://chat.thelaundrygroup.com/logo/tlg.png" in tlg
     finally:
         srv.shutdown()
+
+
+def test_quote_items_become_opportunity_products():
+    items = [{"sku": "5-01-01", "name": "Bar mops", "option": "", "qty": 150, "how_often": "Weekly"},
+             {"sku": "2-5020WH", "name": "Cook shirts, white", "option": "", "wearers": 8},
+             {"sku": "", "name": "Custom logo mat", "option": "", "qty": 2, "how_often": "Weekly"}]
+    entries = {"5-01-01": {"Id": "01uA", "UnitPrice": 0.33}, "2-5020WH": {"Id": "01uB", "UnitPrice": 0.35}}
+    lines, missed = salesforce.item_lines(items, entries)
+    assert lines[0] == {"PricebookEntryId": "01uA", "Quantity": 150, "UnitPrice": 0.33,
+                        "Description": "Website quote: per week", "SortOrder": 1}
+    assert lines[1]["Quantity"] == 88 and "8 employees x 11" in lines[1]["Description"]
+    assert missed == ["Custom logo mat"]

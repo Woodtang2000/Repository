@@ -199,4 +199,49 @@ def create_opportunity(lead: dict, owner_id: str) -> tuple[str, str, str]:
             {"q": f"SELECT Id FROM Contact WHERE AccountId = {_q(account_id)} AND ({match}) LIMIT 1"}), token)
         contact_id = (same.get("records") or [{}])[0].get("Id") or _call("POST", f"{base}/sobjects/Contact", token, contact)["id"]
     opp = _call("POST", f"{base}/sobjects/Opportunity", token, opportunity_body(lead, account_id, owner_id, contact_id))
+    if lead.get("items"):
+        missed = add_items(base, token, opp["id"], lead["items"])
+        if missed:
+            note = "; ".join(x for x in (note, "not added as products (in the description): " + ", ".join(missed)) if x)
     return opp["id"], f"{instance}/lightning/r/Opportunity/{opp['id']}/view", note
+
+
+SETS_PER_EMPLOYEE = 11  # the office's standard for a new wearer (checks.STANDARD_SETS)
+
+
+def item_lines(items: list[dict], entries: dict[str, dict]) -> tuple[list[dict], list[str]]:
+    """Opportunity products (Customer Items) for a quote's picks, priced from the Standard Price Book's list price so
+    Bill starts from it. Garments: employees x 11 sets. Returns (bodies without OpportunityId, items not found)."""
+    out, missed = [], []
+    for i, x in enumerate(items):
+        e = entries.get(x.get("sku") or "")
+        if not e:
+            missed.append(x.get("name", "") + (f" ({x['option']})" if x.get("option") else ""))
+            continue
+        if "wearers" in x:
+            qty, desc = x["wearers"] * SETS_PER_EMPLOYEE, f"Website quote: {x['wearers']} employees x {SETS_PER_EMPLOYEE} sets"
+        else:
+            qty, desc = x["qty"], "Website quote: per week"
+        out.append({"PricebookEntryId": e["Id"], "Quantity": qty, "UnitPrice": e["UnitPrice"],
+                    "Description": (desc + (f", {x['option']}" if x.get("option") else ""))[:255], "SortOrder": i + 1})
+    return out, missed
+
+
+def add_items(base: str, token: str, opp_id: str, items: list[dict]) -> list[str]:
+    """Put a website quote's items on the Opportunity as products. Returns the ones that couldn't be added."""
+    codes = sorted({x["sku"] for x in items if x.get("sku")})
+    entries: dict[str, dict] = {}
+    if codes:
+        q = ("SELECT Id, UnitPrice, Product2.ProductCode FROM PricebookEntry WHERE Pricebook2.IsStandard = true "
+             "AND IsActive = true AND Product2.IsActive = true AND Product2.ProductCode IN (" + ",".join(_q(c) for c in codes)
+             + ") ORDER BY Product2.LastModifiedDate")
+        for r in _call("GET", f"{base}/query?" + urllib.parse.urlencode({"q": q}), token).get("records") or []:
+            entries[r["Product2"]["ProductCode"]] = r  # the most recently changed product wins
+    lines, missed = item_lines(items, entries)
+    for body in lines:
+        try:
+            _call("POST", f"{base}/sobjects/OpportunityLineItem", token, {"OpportunityId": opp_id, **body})
+        except SalesforceError as e:
+            print("opportunity product not added:", e, flush=True)
+            missed.append(body["Description"])
+    return missed
