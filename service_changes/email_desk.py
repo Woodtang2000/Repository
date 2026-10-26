@@ -92,6 +92,32 @@ def _rows(path: str) -> list[dict]:
         return list(csv.DictReader(f))
 
 
+def _addresses(v) -> list[str]:
+    """Email addresses from a Bird field that may be a dict, a list of dicts, or a header string."""
+    if isinstance(v, dict):
+        v = [v]
+    if isinstance(v, list):
+        return [x.get("email", "") if isinstance(x, dict) else str(x) for x in v]
+    return re.findall(r"[\w.+'-]+@[\w.-]+\.\w+", v or "")
+
+
+def real_sender(m: dict) -> str:
+    """Who really wrote it. service@ is a Google Group: when the customer's own domain is strict about DMARC (gmail,
+    yahoo…) the group rewrites From to the group address ("Jo via service") and puts the customer in Reply-To."""
+    frm = (_addresses(m.get("from")) or [""])[0]
+    group = email_key(os.environ.get("EMAIL_REPLY_TO", "service@snowwhitelinen.com"))
+    if email_key(frm) != group:
+        return frm
+    headers = m.get("headers") or {}
+    if isinstance(headers, list):
+        headers = {h.get("name", ""): h.get("value", "") for h in headers if isinstance(h, dict)}
+    for v in (m.get("reply_to"), headers.get("Reply-To"), headers.get("X-Original-From"), headers.get("X-Original-Sender")):
+        found = [a for a in _addresses(v) if email_key(a) != group]
+        if found:
+            return found[0]
+    return frm
+
+
 class EmailDesk(TextDesk):
     word, icon, to_key, signup_kind, list_file = "email", "📧", "email_to", "email_signup", "customer_emails.csv"
     add_cmd, remove_cmd = ADD_EMAIL, REMOVE_EMAIL
@@ -168,7 +194,7 @@ class EmailDesk(TextDesk):
     def inbound(self, since: datetime) -> list[dict]:
         out = []
         for m in self.fetch(since.strftime("%Y-%m-%dT%H:%M:%SZ")):
-            sender = email_key((m.get("from") or {}).get("email", ""))
+            sender = email_key(real_sender(m))
             subject = m.get("subject") or ""
             if AUTO.match(sender) or AUTO_SUBJECT.match(subject):
                 continue  # out-of-office, bounces, no-reply senders: never answered (no mail loops)

@@ -101,3 +101,15 @@ def test_staff_forward_reads_every_account(desk):
     [t] = [p for p in slack.posts if p["meta"].get("kind") == "ticket"]
     assert t["meta"]["account"] == "C1" and t["meta"]["email_to"] == "ana@snowwhitelinen.com"
     assert sent == []  # staff aren't sent "got it"
+
+
+def test_google_group_rewritten_sender(monkeypatch):
+    from .email_desk import real_sender
+    monkeypatch.setenv("EMAIL_REPLY_TO", "service@snowwhitelinen.com")
+    assert real_sender({"from": {"email": "jo@kobuk.com"}}) == "jo@kobuk.com"
+    via = {"from": {"email": "service@snowwhitelinen.com", "name": "Jo via service"},
+           "reply_to": [{"email": "jo.k@gmail.com"}]}
+    assert real_sender(via) == "jo.k@gmail.com"
+    via_header = {"from": {"email": "Service@SnowWhiteLinen.com"},
+                  "headers": [{"name": "Reply-To", "value": "Jo <jo.k@gmail.com>"}]}
+    assert real_sender(via_header) == "jo.k@gmail.com"
