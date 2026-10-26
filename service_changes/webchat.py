@@ -41,7 +41,9 @@ Your job: understand the business (type, town, size, what they use now and from 
 
 When you have at least a name, the business, and a phone or email, call save_lead once with everything you learned, then tell them Bill Dubinsky will reach out and thank them. Don't call save_lead twice.
 
-EXISTING CUSTOMERS: if the visitor is already a customer and needs service (add or remove items, new or departing employees, a hold or skipped week, a missed or short delivery, a billing or account question), help them here: get their name, business and location, phone or email, and exactly what they need, then call service_request once and tell them the office will take care of it and confirm. You cannot see accounts, so never state what they currently get, their balance or delivery day, and never claim a change is made. {next_time} Existing customers are not sales leads: don't call save_lead for them."""
+EXISTING CUSTOMERS: if the visitor is already a customer and needs service (add or remove items, new or departing employees, a hold or skipped week, a missed or short delivery, a billing or account question), help them here: get their name, business and location, phone or email, and exactly what they need, then call service_request once and tell them the office will take care of it and confirm. You cannot see accounts, so never state what they currently get, their balance or delivery day, and never claim a change is made. {next_time} Existing customers are not sales leads: don't call save_lead for them.
+
+{portal}"""
 
 COMPANIES = {
     "sw": {
@@ -106,7 +108,11 @@ class Chat:
                      "phone number, can answer questions about their own account, and texts back when a change is entered. "
                      "They can also email service@snowwhitelinen.com." if line else
                      "Mention that next time they can also email service@snowwhitelinen.com.")
-        return (c["rules"] + "\n\n" + SAFE.replace("{next_time}", next_time) + "\n\nFACTS (approved by the owner; product names and anonymous averages from our "
+        url = os.environ.get("PORTAL_URL", "").strip()  # the customer portal's sign-in page (Alliant Online)
+        portal = (PORTAL_HELP.replace("{url}", url) if url else
+                  "CUSTOMER PORTAL: if someone needs help logging in to the online customer portal, get their name, "
+                  "business, phone or email and what's going wrong, and call service_request so the office can help.")
+        return (c["rules"] + "\n\n" + SAFE.replace("{next_time}", next_time).replace("{portal}", portal) + "\n\nFACTS (approved by the owner; product names and anonymous averages from our "
                 "own customers; use averages only as a starting point, never as a quote):\n" + self.facts[site]
                 + f"\n\nThe chat opened with: {c['greeting']}")
 
@@ -274,6 +280,22 @@ def account_hint(alliant, business: str, town: str, request: str) -> list[str]:
     elif any(w in asked for w in ("uniform", "shirt", "pant", "coat", "garment", "employee", "wearer")):
         out.append(f"    {len(alliant.wearers.get(c.account, []))} wearers on the account")
     return out
+
+
+PORTAL_HELP = """CUSTOMER PORTAL (online account: invoices, paying bills, statements, and requests for their own account).
+Walk customers through logging in, one step at a time, waiting for them after each step:
+- Sign-in page: {url}
+- First time: they need a login set up by our office. If they've never had one, they can click "New User" on the sign-in
+  page and register; the office approves it and they get an email with a link to set their password. Or the office can
+  set it up for them (call service_request: "portal login for <name>, <email>").
+- Forgot password: click the "Forgot password" link on the sign-in page, enter their email, and use the link in the email
+  to set a new one (check spam/junk; the link expires, so use it soon).
+- "Locked out" after too many tries, or the reset email never comes, or their email changed: the office has to fix it.
+  Call service_request with their name, business, the email they use, and what's happening.
+- Once in: invoices, statements and payments are in the portal's menu; requests for their account (new employee, stop
+  an item, size change) are under "Maintenance". If they can't find something, don't guess at menu names: offer to
+  have the office walk them through it (service_request).
+Never ask for or accept their password, card numbers or bank details in this chat. You can't see their portal account."""
 
 
 def slack_poster(slack, data_dir: str, sales_channel: str, desk_channel: str):

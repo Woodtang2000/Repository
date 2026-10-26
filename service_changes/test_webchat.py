@@ -269,3 +269,13 @@ def test_website_request_gets_an_office_only_account_hint():
     assert webchat.account_hint(a, "Kobuk Coffee", "", "mats")[0].startswith("🔎 _Possible accounts:_")
     assert "No account matched" in webchat.account_hint(a, "Moose Pizza", "Wasilla", "mats")[0]
     assert webchat.account_hint(None, "Kobuk", "", "") == []
+
+
+def test_portal_login_help(monkeypatch):
+    chat = webchat.Chat(FakeClaude(), lambda k, i: None, "/tmp")
+    monkeypatch.delenv("PORTAL_URL", raising=False)
+    assert "so the office can help" in chat.system("sw") and "{portal}" not in chat.system("sw")
+    monkeypatch.setenv("PORTAL_URL", "https://portal.example/login")
+    sys_ = chat.system("tlg")
+    assert "Sign-in page: https://portal.example/login" in sys_ and '"Forgot password"' in sys_
+    assert "Never ask for or accept their password" in sys_
