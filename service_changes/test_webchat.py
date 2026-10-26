@@ -243,3 +243,12 @@ def test_lead_goes_to_the_office_when_sales_desk_is_missing(tmp_path):
     post = webchat.slack_poster(Slack(), str(tmp_path), "sales-desk", "service-desk")
     post("lead", {"name": "Scotty", "business": "Scottie's Bodies", "phone": "555", "company": "sw"})
     assert posts[0]["channel"] == "CDESK" and "isn't set up for the Service Desk bot" in posts[0]["text"]
+
+
+def test_existing_customers_are_pointed_to_the_text_line(monkeypatch):
+    chat = webchat.Chat(FakeClaude(), lambda k, i: None, "/tmp")
+    monkeypatch.delenv("TEXT_LINE", raising=False)
+    assert "text (866)" not in chat.system("sw") and "email service@snowwhitelinen.com" in chat.system("sw")
+    monkeypatch.setenv("TEXT_LINE", "(866) TAP-TEXT, (866) 827-8398")
+    assert "text (866) TAP-TEXT, (866) 827-8398: it recognizes them by their phone number" in chat.system("tlg")
+    assert "{next_time}" not in chat.system("sw") and "519-7604" not in chat.system("sw")

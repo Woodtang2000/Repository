@@ -22,6 +22,7 @@ fi
 
 grep -q "^WEBCHAT_PUBLIC_URL=" "$ENV_FILE" || echo "WEBCHAT_PUBLIC_URL=https://$HOST" >> "$ENV_FILE"
 grep -q "^SALES_CHANNEL=" "$ENV_FILE" || echo "SALES_CHANNEL=sales-desk" >> "$ENV_FILE"
+grep -q "^TEXT_LINE=" "$ENV_FILE" || echo "TEXT_LINE=" >> "$ENV_FILE"   # fill in once the customer text line is approved
 for v in SF_DOMAIN SF_CLIENT_ID SF_CLIENT_SECRET; do grep -q "^$v=" "$ENV_FILE" || echo "$v=" >> "$ENV_FILE"; done
 
 cat > /etc/systemd/system/service-desk-webchat.service <<EOF2

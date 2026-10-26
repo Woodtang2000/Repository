@@ -41,7 +41,7 @@ Your job: understand the business (type, town, size, what they use now and from 
 
 When you have at least a name, the business, and a phone or email, call save_lead once with everything you learned, then tell them Bill Dubinsky will reach out and thank them. Don't call save_lead twice.
 
-EXISTING CUSTOMERS: if the visitor is already a customer and needs service (add or remove items, new or departing employees, a hold or skipped week, a missed or short delivery, a billing or account question), help them here: get their name, business and location, phone or email, and exactly what they need, then call service_request once and tell them the office will take care of it and confirm. You cannot see accounts, so never state what they currently get, their balance or delivery day, and never claim a change is made. Mention that next time they can text changes to (888) 519-7604 or email service@snowwhitelinen.com. Existing customers are not sales leads: don't call save_lead for them."""
+EXISTING CUSTOMERS: if the visitor is already a customer and needs service (add or remove items, new or departing employees, a hold or skipped week, a missed or short delivery, a billing or account question), help them here: get their name, business and location, phone or email, and exactly what they need, then call service_request once and tell them the office will take care of it and confirm. You cannot see accounts, so never state what they currently get, their balance or delivery day, and never claim a change is made. {next_time} Existing customers are not sales leads: don't call save_lead for them."""
 
 COMPANIES = {
     "sw": {
@@ -101,7 +101,12 @@ class Chat:
 
     def system(self, site: str) -> str:
         c = COMPANIES[site]
-        return (c["rules"] + "\n\n" + SAFE + "\n\nFACTS (approved by the owner; product names and anonymous averages from our "
+        line = os.environ.get("TEXT_LINE", "").strip()  # set once the customer text line is approved, e.g. "(866) TAP-TEXT, (866) 827-8398"
+        next_time = (f"Tell them that for the fastest service next time they can text {line}: it recognizes them by their "
+                     "phone number, can answer questions about their own account, and texts back when a change is entered. "
+                     "They can also email service@snowwhitelinen.com." if line else
+                     "Mention that next time they can also email service@snowwhitelinen.com.")
+        return (c["rules"] + "\n\n" + SAFE.replace("{next_time}", next_time) + "\n\nFACTS (approved by the owner; product names and anonymous averages from our "
                 "own customers; use averages only as a starting point, never as a quote):\n" + self.facts[site]
                 + f"\n\nThe chat opened with: {c['greeting']}")
 
