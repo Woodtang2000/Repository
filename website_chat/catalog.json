@@ -17,24 +17,12 @@
       "name": "Microfiber towels",
       "options": [
        {
-        "label": "White",
-        "sku": "5-07-02"
+        "label": "Blue",
+        "sku": "5-07-07"
        },
        {
         "label": "Yellow",
         "sku": "5-07-06"
-       },
-       {
-        "label": "Black",
-        "sku": "5-07-01"
-       },
-       {
-        "label": "White ribbed",
-        "sku": "5-07-05"
-       },
-       {
-        "label": "Blue",
-        "sku": "5-07-07"
        }
       ]
      },
