@@ -464,7 +464,8 @@ def make_handler(chat: Chat, public_url: str):
                 site = (q.get("site") or [default])[0] if (q.get("site") or [default])[0] in COMPANIES else default
                 c = COMPANIES[site]
                 cfg = {"api": base, "site": site, "name": c["name"], "logo": f"{base}/logo/{site}.png",
-                       "catalog": catalog.public(catalog.load()[site], lambda sku: catalog.pic_path(chat.data_dir, sku))}
+                       "catalog": catalog.public(catalog.load()[site], lambda sku: catalog.pic_path(chat.data_dir, sku)),
+                       "picv": catalog.picture_versions(chat.data_dir, catalog.load()[site])}
                 with open(QUOTE_PAGE) as f:
                     page = f.read().replace("__CONFIG__", json.dumps(cfg).replace("</", "<\\/")).replace("__TITLE__", c["name"])
                 return self._send(200, page.encode(), "text/html; charset=utf-8")

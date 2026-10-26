@@ -115,7 +115,7 @@ h3{font-size:17px;margin:22px 0 8px;color:var(--navy)}
     var pic = el('div', { cls: 'pic' });
     var showPic = function (sku) {
       pic.innerHTML = '';
-      if (sku && it.picture) pic.appendChild(el('img', { src: C.api + '/catalog/' + sku + '.img', alt: it.name, loading: 'lazy' }));
+      if (sku && C.picv[sku]) pic.appendChild(el('img', { src: C.api + '/catalog/' + sku + '.img?v=' + C.picv[sku], alt: it.name, loading: 'lazy' }));
       else pic.appendChild(el('span', { text: it.name.charAt(0) }));
     };
     showPic(it.picture);
@@ -129,10 +129,10 @@ h3{font-size:17px;margin:22px 0 8px;color:var(--navy)}
       var input = el('input', { type: 'number', min: '0', max: '5000', inputmode: 'numeric', value: String(s.qty), 'aria-label': (group.garments ? 'Employees for ' : 'Quantity of ') + it.name + (o.label ? ' ' + o.label : '') });
       var set = function (v) { v = Math.max(0, Math.min(5000, parseInt(v, 10) || 0)); s.qty = v; input.value = v; mark(); count(); };
       var minus = el('button', { type: 'button', text: '−', 'aria-label': 'Less' }), plus = el('button', { type: 'button', text: '+', 'aria-label': 'More' });
-      minus.onclick = function () { set(s.qty - 1); }; plus.onclick = function () { set(s.qty + 1); if (many && it.picture) showPic(o.sku); };
+      minus.onclick = function () { set(s.qty - 1); }; plus.onclick = function () { set(s.qty + 1); if (many && C.picv[o.sku]) showPic(o.sku); };
       input.oninput = function () { set(input.value); };
       var row = el('div', { cls: 'qty' + (many ? ' opt' : '') }, [el('label', { text: o.label || (group.garments ? 'Employees' : 'Per week') }), minus, input, plus]);
-      if (many && it.picture) row.onmouseenter = function () { showPic(o.sku); };
+      if (many && C.picv[o.sku]) row.onmouseenter = function () { showPic(o.sku); };
       box.appendChild(row);
     });
     mark();

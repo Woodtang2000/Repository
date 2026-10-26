@@ -97,6 +97,17 @@ def pic_path(data_dir: str, sku: str) -> str | None:
     return path if os.path.exists(path) else None
 
 
+def picture_versions(data_dir: str, site_catalog: dict) -> dict[str, int]:
+    """{sku: when its picture last changed} for the SKUs that have one. The page adds it to each picture's address, so a
+    photo changed in Salesforce shows on the next sync instead of waiting out browsers' one-day cache."""
+    out = {}
+    for sku in skus(site_catalog):
+        path = pic_path(data_dir, sku)
+        if path:
+            out[sku] = int(os.path.getmtime(path))
+    return out
+
+
 def image_type(data: bytes) -> str | None:
     if data[:3] == b"\xff\xd8\xff":
         return "image/jpeg"
@@ -149,6 +160,11 @@ def sync_pictures(data_dir: str) -> str:
             missing.append(sku)
             continue
         path = os.path.join(pic_dir(data_dir), sku + ".img")
+        if os.path.exists(path):
+            with open(path, "rb") as f:
+                if f.read() == data:  # unchanged: keep the file (and its version) as it is
+                    got += 1
+                    continue
         with open(path + ".tmp", "wb") as f:
             f.write(data)
         os.replace(path + ".tmp", path)
