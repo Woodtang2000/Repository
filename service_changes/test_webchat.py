@@ -304,6 +304,9 @@ def test_catalog_is_ours_and_checked():
         skus = catalog.skus(cat[site])
         assert len(skus) == len(set(skus)) and all(catalog.SKU.fullmatch(s) for s in skus)
         assert "price" not in json.dumps(cat[site]).lower()
+        ids = {it["id"] for g in cat[site]["groups"] for it in g["items"]}
+        assert cat[site]["industries"][-1].get("all")
+        assert all(x in ids for i in cat[site]["industries"] for x in i.get("suggest", []))
     lines, err = catalog.lines(cat["sw"], [{"id": "mat-confetti-grey", "qty": 2, "option": "4x6", "how_often": "Weekly"},
                                            {"id": "cook-shirt-white", "qty": 8}])
     assert err is None and lines[0]["sku"] == "10-10-04" and lines[1]["wearers"] == 8

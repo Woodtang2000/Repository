@@ -64,6 +64,16 @@ textarea{min-height:90px;resize:vertical}
 .who span{margin-right:auto}
 .who button{border:0;border-radius:8px;padding:6px 10px;font:inherit;font-size:14px;font-weight:600;background:var(--tint);color:var(--navy);cursor:pointer}
 [hidden]{display:none!important}
+h3{font-size:17px;margin:22px 0 8px;color:var(--navy)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
+.tile{border:2px solid transparent;border-radius:14px;background:var(--card);box-shadow:0 1px 2px rgba(0,0,0,.06);padding:18px 16px;font:inherit;font-size:17px;font-weight:600;color:var(--navy);text-align:left;cursor:pointer;min-height:72px}
+.tile:hover,.tile.on{border-color:var(--gold)}
+.typeline{display:flex;align-items:center;gap:10px;margin-top:26px}
+.typeline span{font-weight:700;color:var(--navy)}
+.typeline button{border:0;border-radius:8px;padding:5px 9px;font:inherit;font-size:13px;font-weight:600;background:var(--tint);color:var(--navy);cursor:pointer}
+.more{display:block;margin:22px auto 0;border:2px solid var(--navy);border-radius:12px;background:#fff;color:var(--navy);font:inherit;font-weight:600;padding:12px 20px;cursor:pointer}
+.note2{color:var(--ink);margin:0 0 6px}
+@media (max-width:640px){.tiles{grid-template-columns:1fr 1fr}.tile{font-size:15px;padding:14px 12px}}
 @media (max-width:640px){.hero h1{font-size:26px}.top img{height:44px}.fields{grid-template-columns:1fr}.grid{grid-template-columns:1fr 1fr;gap:8px}.pic{aspect-ratio:auto;height:92px}.qty label{display:none}.qty{justify-content:space-between}.bar div{padding-right:92px}.bar span{font-size:14px}}
 </style>
 </head>
@@ -89,12 +99,12 @@ textarea{min-height:90px;resize:vertical}
 
   function count() {
     var n = 0; for (var k in state) if (state[k].qty > 0) n++;
-    var extras = (cat.interests || []).filter(function (i) { var b = document.querySelector('[data-interest="' + i + '"]'); return b && b.checked; }).length;
+    var extras = (cat.interests || []).filter(function (i) { return picked[i]; }).length;
     $('count').innerHTML = n || extras ? '<b>' + (n + extras) + '</b> selected' : 'Nothing selected yet';
   }
 
   function card(group, it) {
-    var s = state[it.id] = { qty: 0, option: it.options ? it.options[0].label : '', how_often: group.garments ? '' : cat.frequencies[0] };
+    var s = state[it.id] = state[it.id] || { qty: 0, option: it.options ? it.options[0].label : '', how_often: group.garments ? '' : cat.frequencies[0] };
     var pic = el('div', { cls: 'pic' });
     var showPic = function (sku) {
       pic.innerHTML = '';
@@ -116,23 +126,26 @@ textarea{min-height:90px;resize:vertical}
     if (it.options) box.appendChild(segs(it.options.map(function (o) { return o.label; }), 'option', function (label) {
       var o = it.options.filter(function (x) { return x.label === label; })[0]; if (it.picture) showPic(o.sku);
     }));
-    var input = el('input', { type: 'number', min: '0', max: '5000', inputmode: 'numeric', value: '0', 'aria-label': (group.garments ? 'Employees for ' : 'Quantity of ') + it.name });
+    var input = el('input', { type: 'number', min: '0', max: '5000', inputmode: 'numeric', value: String(s.qty), 'aria-label': (group.garments ? 'Employees for ' : 'Quantity of ') + it.name });
     var set = function (v) { v = Math.max(0, Math.min(5000, parseInt(v, 10) || 0)); s.qty = v; input.value = v; box.className = 'item' + (v ? ' on' : ''); count(); };
     var minus = el('button', { type: 'button', text: '−', 'aria-label': 'Less' }), plus = el('button', { type: 'button', text: '+', 'aria-label': 'More' });
     minus.onclick = function () { set(s.qty - 1); }; plus.onclick = function () { set(s.qty + 1); };
     input.oninput = function () { set(input.value); };
     box.appendChild(el('div', { cls: 'qty' }, [el('label', { text: group.garments ? 'Employees' : 'Qty' }), minus, input, plus]));
+    if (s.qty) box.className = 'item on';
     if (!group.garments) {
       var how = el('select', { cls: 'how', 'aria-label': 'How often for ' + it.name }, cat.frequencies.map(function (f) { return el('option', { value: f, text: f }); }));
       how.onchange = function () { s.how_often = how.value; };
+      how.value = s.how_often;
       box.appendChild(how);
     }
     return box;
   }
 
   var main = $('main');
-  var step1 = el('section', { id: 'step1' }), step2 = el('section', { id: 'step2', hidden: '' });
-  main.appendChild(step1); main.appendChild(step2);
+  var step1 = el('section', { id: 'step1' }), step2 = el('section', { id: 'step2', hidden: '' }), step3 = el('section', { id: 'step3', hidden: '' });
+  main.appendChild(step1); main.appendChild(step2); main.appendChild(step3);
+  var industry = null;
 
   // Step 1: about the business
   var f = function (id, label, type, opt, wide) {
@@ -141,7 +154,7 @@ textarea{min-height:90px;resize:vertical}
     var lab = el('label', { 'for': id }); lab.innerHTML = label;
     return el('div', { cls: wide ? 'wide' : '' }, [lab, input]);
   };
-  step1.appendChild(el('p', { cls: 'step', text: 'Step 1 of 2' }));
+  step1.appendChild(el('p', { cls: 'step', text: 'Step 1 of 3' }));
   step1.appendChild(el('h2', { text: 'About your business' }));
   step1.appendChild(el('p', { cls: 'lead', text: 'So Bill can send your quote and plan your route stop.' }));
   step1.appendChild(el('div', { cls: 'box fields' }, [
@@ -149,48 +162,99 @@ textarea{min-height:90px;resize:vertical}
     f('phone', 'Phone <i>(phone or email)</i>', 'tel', 'tel'), f('email', 'Email', 'email', 'email'),
     f('street', 'Street address', 'text', 'street-address', true),
     f('town', 'City', 'text', 'address-level2'), f('zip', 'ZIP', 'text', 'postal-code'),
-    f('business_type', 'Type of business <i>(optional)</i>', 'text'), f('size', cat.size_label + ' <i>(optional)</i>', 'text'),
+    f('size', cat.size_label + ' <i>(optional)</i>', 'text'),
     f('current_provider', 'Who do you use now? <i>(optional)</i>', 'select', [''].concat(C.vendors)),
     f('contract_end', 'When does that contract end? <i>(optional)</i>', 'month'),
-    f('best_time', 'Best time to reach you <i>(optional)</i>', 'text', '', true),
+    f('best_time', 'Best time to reach you <i>(optional)</i>', 'text'),
     el('input', { id: 'website', cls: 'hp', tabindex: '-1', autocomplete: 'off', 'aria-hidden': 'true' })
   ]));
   var err1 = el('p', { cls: 'err', role: 'alert' });
   step1.appendChild(err1);
-  step1.appendChild(el('div', { cls: 'go' }, [el('button', { cls: 'btn', id: 'toProducts', type: 'button', text: 'Continue to products' })]));
+  step1.appendChild(el('div', { cls: 'go' }, [el('button', { cls: 'btn', id: 'toType', type: 'button', text: 'Continue' })]));
   step1.appendChild(el('p', { cls: 'small', text: 'We only use your details to prepare your quote. Please don’t enter payment information here.' }));
 
-  // Step 2: the products
-  var who = el('div', { cls: 'who' });
-  step2.appendChild(who);
-  step2.appendChild(el('p', { cls: 'step', text: 'Step 2 of 2' }));
-  step2.appendChild(el('h2', { text: 'Pick what you need', cls: 'first' }));
-  step2.appendChild(el('p', { cls: 'lead', text: 'Choose a size or color, how many, and how often. Skip anything you don’t need.' }));
-  cat.groups.forEach(function (g) {
-    step2.appendChild(el('h2', { text: g.name }));
-    if (g.note) step2.appendChild(el('p', { cls: 'lead', text: g.note }));
-    var grid = el('div', { cls: 'grid' });
-    g.items.forEach(function (it) { grid.appendChild(card(g, it)); });
-    step2.appendChild(grid);
-  });
-  if (cat.interests) {
-    step2.appendChild(el('h2', { text: 'Equipment and supplies' }));
-    var checks = el('div', { cls: 'box checks' });
-    cat.interests.forEach(function (i) {
-      var cb = el('input', { type: 'checkbox', 'data-interest': i }); cb.onchange = count;
-      checks.appendChild(el('label', {}, [cb, document.createTextNode(i)]));
+  // Step 2: what kind of business
+  var who = function () {
+    var box = el('div', { cls: 'who' }, [el('span', { text: 'Quote for ' + v('business') + ' · ' + v('name') })]);
+    var edit = el('button', { type: 'button', text: 'Edit details' }); edit.onclick = function () { show(1); };
+    box.appendChild(edit);
+    return box;
+  };
+  function buildStep2() {
+    step2.innerHTML = '';
+    step2.appendChild(who());
+    step2.appendChild(el('p', { cls: 'step', text: 'Step 2 of 3' }));
+    step2.appendChild(el('h2', { text: 'What kind of business is it?' }));
+    step2.appendChild(el('p', { cls: 'lead', text: 'We’ll show what businesses like yours use most. You can still see everything.' }));
+    var tiles = el('div', { cls: 'tiles' });
+    cat.industries.forEach(function (ind) {
+      var t = el('button', { type: 'button', cls: 'tile' + (industry === ind ? ' on' : ''), text: ind.name });
+      t.onclick = function () { industry = ind; buildStep3(); show(3); };
+      tiles.appendChild(t);
     });
-    step2.appendChild(checks);
+    step2.appendChild(tiles);
   }
-  step2.appendChild(el('h2', { text: 'Need something else?' }));
-  step2.appendChild(el('p', { cls: 'lead', text: "Don't see it here? Tell us what you need. We can get other items, colors and sizes." }));
-  step2.appendChild(el('div', { cls: 'box' }, [el('textarea', { id: 'other', maxlength: '1500', placeholder: 'For example: hi-vis shirts, a 3 x 5 scraper mat, table linens for 20 tables' })]));
-  step2.appendChild(el('h2', { text: 'Anything else Bill should know?' }));
-  step2.appendChild(el('div', { cls: 'box' }, [el('textarea', { id: 'notes', maxlength: '1500', 'aria-label': 'Anything else Bill should know', placeholder: 'Optional' })]));
-  var err = el('p', { cls: 'err', role: 'alert' });
-  step2.appendChild(err);
-  count();
 
+  // Step 3: products, suggested first
+  function buildStep3() {
+    step3.innerHTML = '';
+    step3.appendChild(who());
+    step3.appendChild(el('p', { cls: 'step', text: 'Step 3 of 3' }));
+    var all = industry.all, pick = {};
+    (industry.suggest || []).forEach(function (id) { pick[id] = true; });
+    var top = el('div', { cls: 'typeline' }, [el('span', { text: industry.name })]);
+    var change = el('button', { type: 'button', text: 'Change' }); change.onclick = function () { show(2); };
+    top.appendChild(change);
+    step3.appendChild(top);
+    step3.appendChild(el('h2', { text: all ? 'Pick what you need' : 'Popular with businesses like yours', cls: 'first' }));
+    step3.appendChild(el('p', { cls: 'lead', text: 'Choose a size or color, how many, and how often. Skip anything you don’t need.' }));
+    if (industry.note) step3.appendChild(el('p', { cls: 'box note2', text: industry.note }));
+    function section(into, keep) {
+      cat.groups.forEach(function (g) {
+        var items = g.items.filter(function (it) { return keep(it); });
+        if (!items.length) return;
+        into.appendChild(el('h3', { text: g.name }));
+        if (g.note) into.appendChild(el('p', { cls: 'lead', text: g.note }));
+        var grid = el('div', { cls: 'grid' });
+        items.forEach(function (it) { grid.appendChild(card(g, it)); });
+        into.appendChild(grid);
+      });
+    }
+    section(step3, function (it) { return all || pick[it.id]; });
+    if (!all) {
+      var more = el('div', { hidden: '' });
+      var rest = 0; cat.groups.forEach(function (g) { g.items.forEach(function (it) { if (!pick[it.id]) rest++; }); });
+      var btn = el('button', { type: 'button', cls: 'more', text: 'Show all products (' + rest + ' more)' });
+      btn.onclick = function () { more.hidden = false; btn.remove(); };
+      step3.appendChild(btn);
+      more.appendChild(el('h2', { text: 'All other products' }));
+      section(more, function (it) { return !pick[it.id]; });
+      step3.appendChild(more);
+      if (cat.groups.some(function (g) { return g.items.some(function (it) { return !pick[it.id] && state[it.id] && state[it.id].qty; }); })) btn.click();
+    }
+    if (cat.interests) {
+      step3.appendChild(el('h2', { text: 'Equipment and supplies' }));
+      var checks = el('div', { cls: 'box checks' });
+      cat.interests.forEach(function (i) {
+        var cb = el('input', { type: 'checkbox', 'data-interest': i }); cb.checked = !!picked[i]; cb.onchange = function () { picked[i] = cb.checked; count(); };
+        checks.appendChild(el('label', {}, [cb, document.createTextNode(i)]));
+      });
+      step3.appendChild(checks);
+    }
+    step3.appendChild(el('h2', { text: 'Need something else?' }));
+    step3.appendChild(el('p', { cls: 'lead', text: "Don't see it here? Tell us what you need. We can get other items, colors and sizes." }));
+    var other = el('textarea', { id: 'other', maxlength: '1500', placeholder: 'For example: hi-vis shirts, a 3 x 5 scraper mat, table linens for 20 tables' });
+    other.value = texts.other || ''; other.oninput = function () { texts.other = other.value; };
+    step3.appendChild(el('div', { cls: 'box' }, [other]));
+    step3.appendChild(el('h2', { text: 'Anything else Bill should know?' }));
+    var notes = el('textarea', { id: 'notes', maxlength: '1500', 'aria-label': 'Anything else Bill should know', placeholder: 'Optional' });
+    notes.value = texts.notes || ''; notes.oninput = function () { texts.notes = notes.value; };
+    step3.appendChild(el('div', { cls: 'box' }, [notes]));
+    err = el('p', { cls: 'err', role: 'alert' });
+    step3.appendChild(err);
+    count();
+  }
+  var picked = {}, texts = {}, err = el('p');
   var v = function (id) { var e = $(id); return e ? e.value.trim() : ''; };
   function details() {
     if (!v('name') || !v('business')) { err1.textContent = 'Please enter your name and your business name.'; $(v('name') ? 'business' : 'name').focus(); return false; }
@@ -200,28 +264,23 @@ textarea{min-height:90px;resize:vertical}
     return true;
   }
   function show(step) {
-    step1.hidden = step !== 1; step2.hidden = step !== 2;
-    $('bar').style.display = step === 2 ? '' : 'none';
-    if (step === 2) {
-      who.innerHTML = '';
-      who.appendChild(el('span', { text: 'Quote for ' + v('business') + ' · ' + v('name') }));
-      var edit = el('button', { type: 'button', text: 'Edit details' }); edit.onclick = function () { show(1); };
-      who.appendChild(edit);
-    }
+    if (step === 2) buildStep2();
+    step1.hidden = step !== 1; step2.hidden = step !== 2; step3.hidden = step !== 3;
+    $('bar').style.display = step === 3 ? '' : 'none';
     window.scrollTo(0, 0);
   }
-  $('toProducts').onclick = function () { if (details()) show(2); };
+  $('toType').onclick = function () { if (details()) show(2); };
   show(1);
 
   function submit() {
     if (sent) return;
     var items = [];
     cat.groups.forEach(function (g) { g.items.forEach(function (it) { var s = state[it.id]; if (s.qty > 0) items.push({ id: it.id, qty: s.qty, option: s.option, how_often: s.how_often }); }); });
-    var interests = (cat.interests || []).filter(function (i) { return document.querySelector('[data-interest="' + i + '"]').checked; });
+    var interests = (cat.interests || []).filter(function (i) { return picked[i]; });
     if (!items.length && !interests.length && !v('other')) { err.textContent = 'Please pick at least one item, or tell us what you need.'; err.scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
     if (!details()) { show(1); return; }
-    var body = { site: C.site, items: items, interests: interests, other: v('other'), website: v('website') };
-    ['name', 'business', 'phone', 'email', 'street', 'town', 'zip', 'business_type', 'size', 'current_provider', 'contract_end', 'best_time', 'notes'].forEach(function (k) { body[k] = v(k); });
+    var body = { site: C.site, items: items, interests: interests, other: v('other'), website: v('website'), business_type: industry && !industry.all ? industry.name : '' };
+    ['name', 'business', 'phone', 'email', 'street', 'town', 'zip', 'size', 'current_provider', 'contract_end', 'best_time', 'notes'].forEach(function (k) { body[k] = v(k); });
     err.textContent = ''; $('next').disabled = true; $('next').textContent = 'Sending…';
     fetch(C.api + '/api/quote', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       .then(function (r) { return r.json(); })

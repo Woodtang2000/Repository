@@ -629,6 +629,188 @@
      }
     ]
    }
+  ],
+  "industries": [
+   {
+    "id": "restaurant",
+    "name": "Restaurant, bar or caf\u00e9",
+    "suggest": [
+     "bar-mop",
+     "utility-towel",
+     "microfiber",
+     "apron-black",
+     "apron-white",
+     "apron-red",
+     "napkin-black",
+     "napkin-white",
+     "tablecloth-black",
+     "tablecloth-white",
+     "oven-mitt",
+     "mat-confetti-grey",
+     "mat-charcoal-heather",
+     "mat-black-comfort-flow",
+     "mat-logo",
+     "wet-mop",
+     "wet-mop-handle",
+     "cook-shirt-white",
+     "cook-shirt-black",
+     "chef-coat",
+     "chef-pant",
+     "air-freshener",
+     "hands-free-soap",
+     "paper-towel"
+    ]
+   },
+   {
+    "id": "grocery",
+    "name": "Grocery, deli, meat or bakery",
+    "suggest": [
+     "apron-white",
+     "apron-black",
+     "bar-mop",
+     "utility-towel",
+     "butcher-coat",
+     "cook-shirt-white",
+     "chef-pant",
+     "wet-mop",
+     "wet-mop-handle",
+     "dust-mop",
+     "dust-mop-frame",
+     "dust-mop-handle",
+     "mat-confetti-grey",
+     "mat-charcoal-heather",
+     "mat-black-comfort-flow",
+     "gloves"
+    ]
+   },
+   {
+    "id": "auto",
+    "name": "Auto, tire or fleet",
+    "suggest": [
+     "shop-towel",
+     "fender-cover",
+     "utility-towel",
+     "microfiber",
+     "gloves",
+     "work-shirt-ls",
+     "work-shirt-ss",
+     "two-tone-shirt",
+     "industrial-shirt",
+     "work-pant",
+     "shop-pant",
+     "coverall-navy",
+     "coverall-charcoal",
+     "crew-jacket",
+     "team-jacket",
+     "hip-jacket",
+     "mat-charcoal-heather",
+     "mat-black",
+     "mat-confetti-grey",
+     "wet-mop",
+     "dust-mop"
+    ]
+   },
+   {
+    "id": "industrial",
+    "name": "Industrial, construction or oilfield",
+    "suggest": [
+     "coverall-navy",
+     "coverall-charcoal",
+     "coverall-black",
+     "coverall-navy-hi-vis",
+     "work-shirt-ls",
+     "work-shirt-ss",
+     "industrial-shirt",
+     "work-pant",
+     "shop-pant",
+     "crew-jacket",
+     "hip-jacket",
+     "shop-towel",
+     "gloves",
+     "mat-charcoal-waterhog",
+     "mat-scraper",
+     "mat-confetti-grey",
+     "mat-charcoal-heather",
+     "mat-black"
+    ]
+   },
+   {
+    "id": "office",
+    "name": "Office, bank, store or services",
+    "suggest": [
+     "mat-confetti-grey",
+     "mat-charcoal-heather",
+     "mat-black",
+     "mat-black-galaxy-brush",
+     "mat-charcoal-waterhog",
+     "mat-scraper",
+     "mat-logo",
+     "dust-mop",
+     "dust-mop-frame",
+     "dust-mop-handle",
+     "microfiber",
+     "air-freshener",
+     "hands-free-soap",
+     "paper-towel",
+     "toilet-tissue",
+     "seat-cover",
+     "bowl-clip",
+     "urinal-screen",
+     "first-aid"
+    ]
+   },
+   {
+    "id": "healthcare",
+    "name": "Clinic or medical office",
+    "note": "Patient linen (gowns, sheets, towels) comes from our sister company, The Laundry Group. Tell us in the last box and Bill will include it.",
+    "suggest": [
+     "mat-confetti-grey",
+     "mat-charcoal-heather",
+     "mat-black",
+     "mat-logo",
+     "microfiber",
+     "dust-mop",
+     "wet-mop",
+     "air-freshener",
+     "hands-free-soap",
+     "paper-towel",
+     "toilet-tissue",
+     "seat-cover",
+     "bowl-clip",
+     "urinal-screen",
+     "first-aid"
+    ]
+   },
+   {
+    "id": "government",
+    "name": "Government, school or church",
+    "suggest": [
+     "mat-charcoal-heather",
+     "mat-confetti-grey",
+     "mat-black",
+     "mat-scraper",
+     "mat-charcoal-waterhog",
+     "dust-mop",
+     "dust-mop-frame",
+     "dust-mop-handle",
+     "wet-mop",
+     "wet-mop-handle",
+     "microfiber",
+     "air-freshener",
+     "hands-free-soap",
+     "paper-towel",
+     "toilet-tissue",
+     "seat-cover",
+     "bowl-clip",
+     "urinal-screen",
+     "first-aid"
+    ]
+   },
+   {
+    "id": "other",
+    "name": "Something else",
+    "all": true
+   }
   ]
  },
  "tlg": {
@@ -956,6 +1138,90 @@
       "sku": "7-6623BQW"
      }
     ]
+   }
+  ],
+  "industries": [
+   {
+    "id": "hospital",
+    "name": "Hospital or clinic",
+    "suggest": [
+     "flat-sheet",
+     "fitted-sheet",
+     "draw-sheet",
+     "pillow-case",
+     "bath-blanket",
+     "thermal-blanket",
+     "plush-blanket",
+     "spread",
+     "underpad",
+     "stretcher-sheet",
+     "gown",
+     "gown-sized",
+     "gown-teen",
+     "gown-maternity",
+     "mammo-cape",
+     "robe",
+     "med-bath-towel",
+     "med-hand-towel",
+     "med-wash-cloth",
+     "med-bath-mat",
+     "microfiber-cloth",
+     "microfiber-mop",
+     "or-sheet",
+     "surgical-towel",
+     "baby-blanket",
+     "baby-shirt",
+     "scrub-top",
+     "scrub-pant",
+     "scrub-jacket",
+     "lab-coat"
+    ]
+   },
+   {
+    "id": "care",
+    "name": "Nursing home or assisted living",
+    "suggest": [
+     "flat-sheet",
+     "fitted-sheet",
+     "draw-sheet",
+     "pillow-case",
+     "bath-blanket",
+     "thermal-blanket",
+     "plush-blanket",
+     "spread",
+     "underpad",
+     "gown",
+     "gown-sized",
+     "robe",
+     "med-bath-towel",
+     "med-hand-towel",
+     "med-wash-cloth",
+     "med-bath-mat",
+     "microfiber-cloth",
+     "microfiber-mop",
+     "scrub-top",
+     "scrub-pant"
+    ]
+   },
+   {
+    "id": "hotel",
+    "name": "Hotel or lodging",
+    "suggest": [
+     "hotel-sheet",
+     "hotel-pillow-case",
+     "duvet",
+     "hotel-bath-towel",
+     "hotel-hand-towel",
+     "hotel-wash-cloth",
+     "hotel-bath-mat",
+     "microfiber-cloth",
+     "microfiber-mop"
+    ]
+   },
+   {
+    "id": "other",
+    "name": "Something else",
+    "all": true
    }
   ]
  }
