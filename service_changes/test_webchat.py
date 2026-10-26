@@ -295,3 +295,56 @@ def test_each_company_loads_from_its_own_address():
         assert '"api": "https://chat.snowwhitelinen.com"' in get("/widget.js?site=sw", "evil.example")
     finally:
         srv.shutdown()
+
+
+def test_catalog_is_ours_and_checked():
+    from . import catalog
+    cat = catalog.load()
+    for site in ("sw", "tlg"):
+        skus = catalog.skus(cat[site])
+        assert len(skus) == len(set(skus)) and all(catalog.SKU.fullmatch(s) for s in skus)
+        assert "price" not in json.dumps(cat[site]).lower()
+    lines, err = catalog.lines(cat["sw"], [{"id": "mat-grey", "qty": 2, "option": "4 x 6 ft", "how_often": "Weekly"},
+                                           {"id": "cook-shirt", "qty": 8}])
+    assert err is None and lines[0]["sku"] == "10-10-04" and lines[1]["wearers"] == 8
+    assert catalog.line_text(lines[0]) == "Grey entrance mat (4 x 6 ft) [10-10-04]: 2 weekly"
+    assert catalog.lines(cat["sw"], [{"id": "made-up", "qty": 1}])[1]
+    assert catalog.lines(cat["sw"], [{"id": "mat-grey", "qty": 2, "option": "9 x 9", "how_often": "Weekly"}])[1]
+    assert catalog.lines(cat["sw"], [{"id": "bar-mop", "qty": 0, "how_often": "Weekly"}])[1]
+    assert catalog.pic_path("/tmp", "../etc/passwd") is None
+    assert catalog.picture_api_path("https://x/servlet/servlet.ImageServer?id=01540000000S1Qb&oid=1") == "sobjects/Document/01540000000S1Qb/Body"
+    assert catalog.picture_api_path("https://x/renditionDownload?versionId=0683r00000CoVIZ&x=1") == "sobjects/ContentVersion/0683r00000CoVIZ/VersionData"
+
+
+def test_quote_request_goes_to_sales_with_items():
+    posted = []
+    chat = webchat.Chat(FakeClaude(), lambda kind, item: posted.append((kind, item)), "/tmp")
+    base = {"name": "Pat Jones", "business": "Pat's Diner", "phone": "907-555-0101", "street": "123 Main St",
+            "items": [{"id": "bar-mop", "qty": 40, "how_often": "Weekly"}], "other": "table linens"}
+    assert chat.quote("sw", {**base, "phone": ""})["error"].startswith("Please enter a phone")
+    assert "catalog" in chat.quote("sw", {**base, "items": [{"id": "x", "qty": 1}]})["error"]
+    assert chat.quote("sw", {**base, "website": "spam"}) == {"ok": True} and posted == []
+    assert chat.quote("sw", base) == {"ok": True}
+    [(kind, lead)] = posted
+    assert kind == "lead" and lead["source"] == "quote" and lead["items"][0]["sku"] == "5-01-01"
+    card = sales.card_text({**lead, "id": "1"})
+    assert "quote request" in card and "Bar mop towels [5-01-01]: 40 weekly" in card and "table linens" in card
+    desc = salesforce.description(lead)
+    assert "- Bar mop towels [5-01-01]: 40 weekly" in desc and "Chat:" not in desc
+    assert salesforce.account_body(lead, "005")["BillingStreet"] == "123 Main St"
+    assert chat.quote("tlg", {**base, "items": [], "other": "", "interests": ["Laundry soap and chemicals"]}) == {"ok": True}
+    assert "Interested in: Laundry soap and chemicals" in sales.card_text({**posted[-1][1], "id": "2"})
+
+
+def test_quote_page_served_for_each_company():
+    srv = webchat.ThreadingHTTPServer(("127.0.0.1", 0), webchat.make_handler(
+        webchat.Chat(FakeClaude(), lambda *a: None, "/tmp"), "https://chat.snowwhitelinen.com"))
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    get = lambda path, host: urllib.request.urlopen(urllib.request.Request(
+        f"http://127.0.0.1:{srv.server_port}{path}", headers={"Host": host})).read().decode()
+    try:
+        sw, tlg = get("/quote", "chat.snowwhitelinen.com"), get("/quote", "chat.thelaundrygroup.com")
+        assert "Grey entrance mat" in sw and "Patient gowns" not in sw
+        assert "Patient gowns" in tlg and '"site": "tlg"' in tlg and "https://chat.thelaundrygroup.com/logo/tlg.png" in tlg
+    finally:
+        srv.shutdown()

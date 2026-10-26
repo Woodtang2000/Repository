@@ -1,0 +1,579 @@
+{
+ "_about": "The quote page's catalog (/quote): each branch's most-used Alliant items only (Snow White from branch 1, The Laundry Group from branch 2), kept small on purpose (economies of scale). Names are written for customers; sku is the Alliant SKU, which is also the Salesforce Product Code (pictures come from there). Anything else goes in the page's 'something else' box. Never put prices here.",
+ "sw": {
+  "frequencies": [
+   "Weekly",
+   "Every other week"
+  ],
+  "size_label": "Number of employees",
+  "groups": [
+   {
+    "name": "Kitchen and bar",
+    "items": [
+     {
+      "id": "bar-mop",
+      "name": "Bar mop towels",
+      "note": "Gold-stripe kitchen towels",
+      "sku": "5-01-01"
+     },
+     {
+      "id": "apron",
+      "name": "Bib aprons",
+      "options": [
+       {
+        "label": "Black",
+        "sku": "5-22-02"
+       },
+       {
+        "label": "White",
+        "sku": "5-22-01"
+       }
+      ]
+     },
+     {
+      "id": "microfiber",
+      "name": "Microfiber towels",
+      "sku": "5-07-02"
+     },
+     {
+      "id": "utility-towel",
+      "name": "Utility towels",
+      "note": "Yellow",
+      "sku": "5-03-02"
+     }
+    ]
+   },
+   {
+    "name": "Shop",
+    "items": [
+     {
+      "id": "shop-towel",
+      "name": "Shop towels",
+      "sku": "5-02-01"
+     }
+    ]
+   },
+   {
+    "name": "Floor mats",
+    "items": [
+     {
+      "id": "mat-charcoal",
+      "name": "Charcoal entrance mat",
+      "options": [
+       {
+        "label": "3 x 5 ft",
+        "sku": "10-07-03"
+       },
+       {
+        "label": "3 x 10 ft",
+        "sku": "10-07-02"
+       },
+       {
+        "label": "4 x 6 ft",
+        "sku": "10-07-04"
+       },
+       {
+        "label": "4 x 8 ft",
+        "sku": "10-07-05"
+       }
+      ]
+     },
+     {
+      "id": "mat-grey",
+      "name": "Grey entrance mat",
+      "options": [
+       {
+        "label": "3 x 5 ft",
+        "sku": "10-10-03"
+       },
+       {
+        "label": "3 x 10 ft",
+        "sku": "10-10-02"
+       },
+       {
+        "label": "4 x 6 ft",
+        "sku": "10-10-04"
+       },
+       {
+        "label": "4 x 8 ft",
+        "sku": "10-10-05"
+       }
+      ]
+     },
+     {
+      "id": "mat-logo",
+      "name": "Custom logo mat",
+      "note": "Your logo, made to order. Bill will go over the design with you.",
+      "custom": true
+     }
+    ]
+   },
+   {
+    "name": "Mops",
+    "items": [
+     {
+      "id": "wet-mop",
+      "name": "Wet mop heads",
+      "options": [
+       {
+        "label": "16 oz",
+        "sku": "11-03-01"
+       },
+       {
+        "label": "24 oz",
+        "sku": "11-03-02"
+       }
+      ]
+     },
+     {
+      "id": "wet-mop-handle",
+      "name": "Wet mop handle",
+      "sku": "11-03-10"
+     },
+     {
+      "id": "dust-mop",
+      "name": "Dust mop heads",
+      "options": [
+       {
+        "label": "24 in",
+        "sku": "11-01-01"
+       },
+       {
+        "label": "36 in",
+        "sku": "11-01-02"
+       },
+       {
+        "label": "48 in",
+        "sku": "11-01-03"
+       }
+      ]
+     },
+     {
+      "id": "dust-mop-frame",
+      "name": "Dust mop frame",
+      "sku": "11-01-10"
+     },
+     {
+      "id": "dust-mop-handle",
+      "name": "Dust mop handle",
+      "sku": "11-01-11"
+     }
+    ]
+   },
+   {
+    "name": "Restroom",
+    "items": [
+     {
+      "id": "air-freshener",
+      "name": "Air freshener service",
+      "sku": "6-02-03"
+     },
+     {
+      "id": "bowl-clip",
+      "name": "Toilet bowl clips",
+      "sku": "6-01-04"
+     },
+     {
+      "id": "urinal-screen",
+      "name": "Urinal screens",
+      "sku": "6-01-05"
+     }
+    ]
+   },
+   {
+    "name": "Employee uniforms",
+    "garments": true,
+    "note": "Pick the garments and how many employees wear each. Each employee gets enough sets for a clean one every day; we'll get sizes and names after you sign up.",
+    "items": [
+     {
+      "id": "cook-shirt",
+      "name": "Cook shirt, white",
+      "sku": "2-5020WH"
+     },
+     {
+      "id": "chef-pant",
+      "name": "Chef pants, white",
+      "sku": "2-2020WH"
+     },
+     {
+      "id": "butcher-coat",
+      "name": "Butcher coat, white",
+      "sku": "2-4004WH"
+     },
+     {
+      "id": "work-shirt-ls",
+      "name": "Work shirt, black, long sleeve",
+      "sku": "2-SP14BK"
+     },
+     {
+      "id": "work-shirt-ss",
+      "name": "Work shirt, black and charcoal, short sleeve",
+      "sku": "2-SY42BK"
+     },
+     {
+      "id": "industrial-shirt",
+      "name": "Industrial shirt, charcoal, oil-blocking",
+      "sku": "2-SY32CH"
+     },
+     {
+      "id": "work-pant",
+      "name": "Work pants, black",
+      "sku": "2-LP700BK"
+     },
+     {
+      "id": "shop-pant",
+      "name": "Industrial shop pants",
+      "sku": "2-PT2ABK"
+     },
+     {
+      "id": "coverall",
+      "name": "Coveralls",
+      "options": [
+       {
+        "label": "Navy",
+        "sku": "2-CT10NV"
+       },
+       {
+        "label": "Charcoal",
+        "sku": "2-CT10CH"
+       }
+      ]
+     },
+     {
+      "id": "crew-jacket",
+      "name": "Crew jacket, black",
+      "sku": "2-JY20BK"
+     }
+    ]
+   }
+  ]
+ },
+ "tlg": {
+  "frequencies": [
+   "Daily",
+   "Three times a week",
+   "Twice a week",
+   "Weekly"
+  ],
+  "size_label": "Beds or rooms",
+  "interests": [
+   "On-premise laundry equipment",
+   "Equipment service or repair",
+   "Laundry soap and chemicals"
+  ],
+  "groups": [
+   {
+    "name": "Patient bedding",
+    "items": [
+     {
+      "id": "flat-sheet",
+      "name": "Flat sheets",
+      "sku": "7-01-00"
+     },
+     {
+      "id": "fitted-sheet",
+      "name": "Fitted sheets",
+      "sku": "7-01-02"
+     },
+     {
+      "id": "draw-sheet",
+      "name": "Draw sheets",
+      "sku": "7-01-01"
+     },
+     {
+      "id": "pillow-case",
+      "name": "Pillow cases",
+      "sku": "7-01-04"
+     },
+     {
+      "id": "bath-blanket",
+      "name": "Bath blankets",
+      "sku": "7-00-02"
+     },
+     {
+      "id": "thermal-blanket",
+      "name": "Thermal blankets",
+      "sku": "5-34-01"
+     },
+     {
+      "id": "plush-blanket",
+      "name": "Plush blankets, tan",
+      "sku": "7-01-21"
+     },
+     {
+      "id": "spread",
+      "name": "Bedspreads",
+      "sku": "7-00-01"
+     },
+     {
+      "id": "underpad",
+      "name": "Underpads",
+      "sku": "7-00-06"
+     },
+     {
+      "id": "stretcher-sheet",
+      "name": "Stretcher sheets",
+      "sku": "7-01-03"
+     }
+    ]
+   },
+   {
+    "name": "Patient gowns and robes",
+    "items": [
+     {
+      "id": "gown",
+      "name": "Patient gowns",
+      "options": [
+       {
+        "label": "Blue, one size",
+        "sku": "7-PG5PTSS"
+       },
+       {
+        "label": "Sage, one size",
+        "sku": "7-PG5PTSR"
+       },
+       {
+        "label": "Sage, 3X",
+        "sku": "7-03-01"
+       },
+       {
+        "label": "5XL",
+        "sku": "7-OG5ITSR"
+       }
+      ]
+     },
+     {
+      "id": "gown-sized",
+      "name": "Patient gowns, sized",
+      "options": [
+       {
+        "label": "S",
+        "sku": "7-MT11489"
+       },
+       {
+        "label": "M",
+        "sku": "7-MT11490"
+       },
+       {
+        "label": "L",
+        "sku": "7-MT11491"
+       },
+       {
+        "label": "XL",
+        "sku": "7-MT11492"
+       }
+      ]
+     },
+     {
+      "id": "gown-teen",
+      "name": "Teen gowns",
+      "sku": "7-03-03"
+     },
+     {
+      "id": "gown-maternity",
+      "name": "Maternity gowns",
+      "sku": "7-03-09"
+     },
+     {
+      "id": "mammo-cape",
+      "name": "Mammography capes",
+      "sku": "7-SC5ROHB"
+     },
+     {
+      "id": "robe",
+      "name": "Robes",
+      "sku": "7-HR5R07G"
+     }
+    ]
+   },
+   {
+    "name": "Towels and cleaning",
+    "items": [
+     {
+      "id": "med-bath-towel",
+      "name": "Bath towels",
+      "sku": "7-02-00"
+     },
+     {
+      "id": "med-hand-towel",
+      "name": "Hand towels",
+      "sku": "7-02-01"
+     },
+     {
+      "id": "med-wash-cloth",
+      "name": "Washcloths",
+      "sku": "7-02-02"
+     },
+     {
+      "id": "med-bath-mat",
+      "name": "Bath mats",
+      "sku": "7-00-07"
+     },
+     {
+      "id": "microfiber-cloth",
+      "name": "Microfiber cloths",
+      "sku": "7-02-06"
+     },
+     {
+      "id": "microfiber-mop",
+      "name": "Microfiber mops",
+      "sku": "7-04-01"
+     }
+    ]
+   },
+   {
+    "name": "Surgical and newborn",
+    "items": [
+     {
+      "id": "or-sheet",
+      "name": "OR sheets, jade",
+      "sku": "7-01-11"
+     },
+     {
+      "id": "surgical-towel",
+      "name": "Surgical towels, jade",
+      "sku": "7-02-07"
+     },
+     {
+      "id": "baby-blanket",
+      "name": "Baby blankets",
+      "sku": "7-00-03"
+     },
+     {
+      "id": "baby-shirt",
+      "name": "Baby shirts",
+      "sku": "7-03-10"
+     }
+    ]
+   },
+   {
+    "name": "Hotel and lodging",
+    "items": [
+     {
+      "id": "hotel-sheet",
+      "name": "Sheets",
+      "options": [
+       {
+        "label": "Queen flat",
+        "sku": "5-32-05"
+       },
+       {
+        "label": "King flat",
+        "sku": "5-33-04"
+       },
+       {
+        "label": "King fitted",
+        "sku": "5-32-08"
+       }
+      ]
+     },
+     {
+      "id": "hotel-pillow-case",
+      "name": "Pillow cases",
+      "sku": "5-32-09"
+     },
+     {
+      "id": "duvet",
+      "name": "Duvet inserts",
+      "options": [
+       {
+        "label": "Queen",
+        "sku": "5-12-04"
+       },
+       {
+        "label": "King",
+        "sku": "5-12-03"
+       }
+      ]
+     },
+     {
+      "id": "hotel-bath-towel",
+      "name": "Bath towels",
+      "sku": "5-05-02"
+     },
+     {
+      "id": "hotel-hand-towel",
+      "name": "Hand towels",
+      "sku": "5-08-01"
+     },
+     {
+      "id": "hotel-wash-cloth",
+      "name": "Washcloths",
+      "sku": "5-06-01"
+     },
+     {
+      "id": "hotel-bath-mat",
+      "name": "Bath mats",
+      "sku": "5-05-03"
+     }
+    ]
+   },
+   {
+    "name": "Staff scrubs and lab coats",
+    "garments": true,
+    "note": "Pick the garments and how many staff wear each. We'll get sizes after you sign up.",
+    "items": [
+     {
+      "id": "scrub-top",
+      "name": "Scrub tops",
+      "options": [
+       {
+        "label": "Jade",
+        "sku": "7-610NTJ"
+       },
+       {
+        "label": "Misty",
+        "sku": "7-610NTZM"
+       },
+       {
+        "label": "Ceil blue",
+        "sku": "7-610NTH"
+       }
+      ]
+     },
+     {
+      "id": "scrub-pant",
+      "name": "Scrub pants",
+      "options": [
+       {
+        "label": "Jade",
+        "sku": "7-600NTJ"
+       },
+       {
+        "label": "Misty",
+        "sku": "7-600NTZN"
+       },
+       {
+        "label": "Ceil blue",
+        "sku": "7-600NTH"
+       }
+      ]
+     },
+     {
+      "id": "scrub-jacket",
+      "name": "Scrub jackets",
+      "options": [
+       {
+        "label": "Jade",
+        "sku": "7-849NTJ"
+       },
+       {
+        "label": "Misty",
+        "sku": "7-849NTZ"
+       },
+       {
+        "label": "Ceil blue",
+        "sku": "7-849NTH"
+       }
+      ]
+     },
+     {
+      "id": "lab-coat",
+      "name": "Lab coats, white",
+      "sku": "7-6623BQW"
+     }
+    ]
+   }
+  ]
+ }
+}

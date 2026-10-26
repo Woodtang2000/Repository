@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>Get a quote · __TITLE__</title>
+<style>
+:root{--navy:#003746;--gold:#f9af10;--ink:#1c2226;--sub:#5f6b72;--line:#e3e7ea;--bg:#f5f6f7;--card:#fff;--tint:rgba(0,55,70,.08)}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Arial,sans-serif;letter-spacing:-.01em}
+header{background:#fff;border-bottom:4px solid var(--gold)}
+.top{max-width:1040px;margin:0 auto;padding:18px 16px;display:flex;align-items:center;gap:16px}
+.top img{height:56px;width:auto}
+.top a{margin-left:auto;color:var(--navy);font-weight:600;text-decoration:none;white-space:nowrap}
+.hero{background:var(--navy);color:#fff}
+.hero div{max-width:1040px;margin:0 auto;padding:28px 16px 30px}
+.hero h1{margin:0 0 6px;font-size:32px;line-height:1.15;letter-spacing:-.02em}
+.hero p{margin:0;color:#d5e1e5;max-width:640px}
+main{max-width:1040px;margin:0 auto;padding:8px 16px 140px}
+h2{font-size:22px;margin:30px 0 4px;letter-spacing:-.015em;color:var(--navy)}
+.lead{margin:0 0 14px;color:var(--sub)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
+.item{background:var(--card);border:2px solid transparent;border-radius:16px;padding:12px;box-shadow:0 1px 2px rgba(0,0,0,.06);display:flex;flex-direction:column;gap:10px;transition:border-color .15s}
+.item.on{border-color:var(--gold)}
+.pic{aspect-ratio:4/3;border-radius:12px;background:var(--tint);display:flex;align-items:center;justify-content:center;overflow:hidden}
+.pic img{width:100%;height:100%;object-fit:contain;background:#fff}
+.pic span{font-size:40px;font-weight:700;color:rgba(0,55,70,.35)}
+.name{font-weight:600;line-height:1.25}
+.note{font-size:14px;color:var(--sub);margin-top:2px}
+.seg{display:flex;flex-wrap:wrap;gap:6px}
+.seg button{border:0;border-radius:9px;padding:7px 11px;font:inherit;font-size:14px;font-weight:600;background:var(--tint);color:var(--navy);cursor:pointer}
+.seg button.on{background:var(--navy);color:#fff}
+.qty{display:flex;align-items:center;gap:8px}
+.qty label{font-size:14px;color:var(--sub);margin-right:auto;white-space:nowrap}
+.qty button{width:36px;height:36px;border:0;border-radius:10px;background:var(--tint);color:var(--navy);font-size:22px;font-weight:600;line-height:1;cursor:pointer}
+.qty input{width:64px;height:36px;border:1px solid var(--line);border-radius:10px;text-align:center;font:inherit;font-weight:600}
+.box{background:var(--card);border-radius:16px;padding:16px;box-shadow:0 1px 2px rgba(0,0,0,.06)}
+textarea,input[type=text],input[type=email],input[type=tel],input[type=month],select{width:100%;border:1px solid var(--line);border-radius:10px;padding:11px 12px;font:inherit;background:#fff;color:var(--ink)}
+textarea{min-height:90px;resize:vertical}
+.fields{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.fields .wide{grid-column:1/-1}
+.fields label{display:block;font-size:14px;font-weight:600;margin-bottom:5px}
+.fields label i{font-style:normal;font-weight:400;color:var(--sub)}
+.checks label{display:flex;gap:10px;align-items:center;padding:8px 0;font-weight:500}
+.checks input{width:20px;height:20px;accent-color:var(--navy)}
+.hp{position:absolute;left:-5000px}
+.bar{position:fixed;left:0;right:0;bottom:0;background:rgba(255,255,255,.94);backdrop-filter:saturate(180%) blur(12px);-webkit-backdrop-filter:saturate(180%) blur(12px);border-top:1px solid var(--line);z-index:5}
+.bar div{max-width:1040px;margin:0 auto;padding:12px 96px 12px 16px;display:flex;align-items:center;gap:12px}
+.bar span{color:var(--sub);font-size:15px;margin-right:auto}
+.bar b{color:var(--ink)}
+.btn{border:0;border-radius:12px;padding:13px 22px;font:inherit;font-size:17px;font-weight:600;background:var(--gold);color:#1c2226;cursor:pointer;white-space:nowrap}
+.btn:active{opacity:.7}.btn:disabled{opacity:.45}
+.err{color:#b3261e;font-weight:600;margin:12px 0 0;min-height:1em}
+.done{background:var(--card);border-radius:16px;padding:28px 20px;margin-top:24px;text-align:center;box-shadow:0 1px 2px rgba(0,0,0,.06)}
+.done h2{margin-top:0}
+.small{font-size:14px;color:var(--sub)}
+@media (max-width:640px){.hero h1{font-size:26px}.top img{height:44px}.fields{grid-template-columns:1fr}.grid{grid-template-columns:1fr;gap:10px}.pic{aspect-ratio:auto;height:150px}.bar div{padding-right:92px}.bar span{font-size:14px}}
+</style>
+</head>
+<body>
+<header><div class="top"><img id="logo" alt=""><a href="tel:+19072227738">(907) 222-7738</a></div></header>
+<section class="hero"><div><h1>Get a quote</h1><p id="intro"></p></div></section>
+<main id="main"></main>
+<div class="bar" id="bar"><div><span id="count"></span><button class="btn" id="next" type="button">Review and send</button></div></div>
+<script>
+(function () {
+  var C = __CONFIG__;
+  var cat = C.catalog, state = {}, sent = false;
+  var $ = function (id) { return document.getElementById(id); };
+  function el(tag, attrs, kids) {
+    var e = document.createElement(tag);
+    for (var k in attrs || {}) { if (k === 'text') e.textContent = attrs[k]; else if (k === 'cls') e.className = attrs[k]; else e.setAttribute(k, attrs[k]); }
+    (kids || []).forEach(function (c) { if (c) e.appendChild(c); });
+    return e;
+  }
+  $('logo').src = C.logo; $('logo').alt = C.name;
+  document.title = 'Get a quote · ' + C.name;
+  $('intro').textContent = 'Pick what you need, tell us about your business, and Bill will put together your quote. No prices to figure out and no obligation.';
+
+  function count() {
+    var n = 0; for (var k in state) if (state[k].qty > 0) n++;
+    var extras = (cat.interests || []).filter(function (i) { var b = document.querySelector('[data-interest="' + i + '"]'); return b && b.checked; }).length;
+    $('count').innerHTML = n || extras ? '<b>' + (n + extras) + '</b> selected' : 'Nothing selected yet';
+  }
+
+  function card(group, it) {
+    var s = state[it.id] = { qty: 0, option: it.options ? it.options[0].label : '', how_often: group.garments ? '' : cat.frequencies[0] };
+    var pic = el('div', { cls: 'pic' });
+    var showPic = function (sku) {
+      pic.innerHTML = '';
+      if (sku && it.picture) pic.appendChild(el('img', { src: C.api + '/catalog/' + sku + '.img', alt: it.name, loading: 'lazy' }));
+      else pic.appendChild(el('span', { text: it.name.charAt(0) }));
+    };
+    showPic(it.picture);
+    var box = el('div', { cls: 'item' }, [pic, el('div', {}, [el('div', { cls: 'name', text: it.name }), it.note ? el('div', { cls: 'note', text: it.note }) : null])]);
+    function segs(list, key, onPick) {
+      var seg = el('div', { cls: 'seg' });
+      list.forEach(function (label) {
+        var b = el('button', { type: 'button', text: label });
+        if (s[key] === label) b.className = 'on';
+        b.onclick = function () { s[key] = label; [].forEach.call(seg.children, function (x) { x.className = x === b ? 'on' : ''; }); if (onPick) onPick(label); };
+        seg.appendChild(b);
+      });
+      return seg;
+    }
+    if (it.options) box.appendChild(segs(it.options.map(function (o) { return o.label; }), 'option', function (label) {
+      var o = it.options.filter(function (x) { return x.label === label; })[0]; if (it.picture) showPic(o.sku);
+    }));
+    var input = el('input', { type: 'number', min: '0', max: '5000', inputmode: 'numeric', value: '0', 'aria-label': (group.garments ? 'Employees for ' : 'Quantity of ') + it.name });
+    var set = function (v) { v = Math.max(0, Math.min(5000, parseInt(v, 10) || 0)); s.qty = v; input.value = v; box.className = 'item' + (v ? ' on' : ''); count(); };
+    var minus = el('button', { type: 'button', text: '−', 'aria-label': 'Less' }), plus = el('button', { type: 'button', text: '+', 'aria-label': 'More' });
+    minus.onclick = function () { set(s.qty - 1); }; plus.onclick = function () { set(s.qty + 1); };
+    input.oninput = function () { set(input.value); };
+    box.appendChild(el('div', { cls: 'qty' }, [el('label', { text: group.garments ? 'Employees' : 'How many' }), minus, input, plus]));
+    if (!group.garments) box.appendChild(segs(cat.frequencies, 'how_often'));
+    return box;
+  }
+
+  var main = $('main');
+  cat.groups.forEach(function (g) {
+    main.appendChild(el('h2', { text: g.name }));
+    if (g.note) main.appendChild(el('p', { cls: 'lead', text: g.note }));
+    var grid = el('div', { cls: 'grid' });
+    g.items.forEach(function (it) { grid.appendChild(card(g, it)); });
+    main.appendChild(grid);
+  });
+  if (cat.interests) {
+    main.appendChild(el('h2', { text: 'Equipment and supplies' }));
+    var checks = el('div', { cls: 'box checks' });
+    cat.interests.forEach(function (i) {
+      var cb = el('input', { type: 'checkbox', 'data-interest': i }); cb.onchange = count;
+      checks.appendChild(el('label', {}, [cb, document.createTextNode(i)]));
+    });
+    main.appendChild(checks);
+  }
+  main.appendChild(el('h2', { text: 'Need something else?' }));
+  main.appendChild(el('p', { cls: 'lead', text: "Don't see it here? Tell us what you need. We can get other items, colors and sizes." }));
+  main.appendChild(el('div', { cls: 'box' }, [el('textarea', { id: 'other', maxlength: '1500', placeholder: 'For example: hi-vis shirts, a 3 x 5 scraper mat, table linens for 20 tables' })]));
+
+  var f = function (id, label, type, opt, wide) {
+    var input = type === 'select' ? el('select', { id: id }, opt.map(function (o) { return el('option', { value: o, text: o || 'Choose one' }); }))
+      : type === 'textarea' ? el('textarea', { id: id, maxlength: '1500' }) : el('input', { id: id, type: type, maxlength: '300', autocomplete: opt || 'off' });
+    var lab = el('label', { 'for': id }); lab.innerHTML = label;
+    return el('div', { cls: wide ? 'wide' : '' }, [lab, input]);
+  };
+  main.appendChild(el('h2', { text: 'About your business', id: 'about' }));
+  main.appendChild(el('p', { cls: 'lead', text: 'So Bill can send your quote and plan your route stop.' }));
+  var form = el('div', { cls: 'box fields' }, [
+    f('name', 'Your name', 'text', 'name'), f('business', 'Business name', 'text', 'organization'),
+    f('phone', 'Phone <i>(phone or email)</i>', 'tel', 'tel'), f('email', 'Email', 'email', 'email'),
+    f('street', 'Street address', 'text', 'street-address', true),
+    f('town', 'City', 'text', 'address-level2'), f('zip', 'ZIP', 'text', 'postal-code'),
+    f('business_type', 'Type of business <i>(optional)</i>', 'text'), f('size', cat.size_label + ' <i>(optional)</i>', 'text'),
+    f('current_provider', 'Who do you use now? <i>(optional)</i>', 'select', [''].concat(C.vendors)),
+    f('contract_end', 'When does that contract end? <i>(optional)</i>', 'month'),
+    f('best_time', 'Best time to reach you <i>(optional)</i>', 'text', '', true),
+    f('notes', 'Anything else Bill should know? <i>(optional)</i>', 'textarea', '', true),
+    el('input', { id: 'website', cls: 'hp', tabindex: '-1', autocomplete: 'off', 'aria-hidden': 'true' })
+  ]);
+  main.appendChild(form);
+  var err = el('p', { cls: 'err', role: 'alert' });
+  main.appendChild(err);
+  main.appendChild(el('p', { cls: 'small', text: 'We only use your details to prepare your quote. Please don’t enter payment information here.' }));
+  count();
+
+  var v = function (id) { var e = $(id); return e ? e.value.trim() : ''; };
+  function submit() {
+    if (sent) return;
+    var items = [];
+    cat.groups.forEach(function (g) { g.items.forEach(function (it) { var s = state[it.id]; if (s.qty > 0) items.push({ id: it.id, qty: s.qty, option: s.option, how_often: s.how_often }); }); });
+    var interests = (cat.interests || []).filter(function (i) { return document.querySelector('[data-interest="' + i + '"]').checked; });
+    var about = $('about');
+    if (!items.length && !interests.length && !v('other')) { err.textContent = 'Please pick at least one item, or tell us what you need.'; return; }
+    if (about.getBoundingClientRect().top > window.innerHeight && !v('name')) { about.scrollIntoView({ behavior: 'smooth' }); return; }
+    if (!v('name') || !v('business')) { err.textContent = 'Please enter your name and your business name.'; $(v('name') ? 'business' : 'name').focus(); return; }
+    if (!v('phone') && !v('email')) { err.textContent = 'Please enter a phone number or email so Bill can send your quote.'; $('phone').focus(); return; }
+    var body = { site: C.site, items: items, interests: interests, other: v('other'), website: v('website') };
+    ['name', 'business', 'phone', 'email', 'street', 'town', 'zip', 'business_type', 'size', 'current_provider', 'contract_end', 'best_time', 'notes'].forEach(function (k) { body[k] = v(k); });
+    err.textContent = ''; $('next').disabled = true; $('next').textContent = 'Sending…';
+    fetch(C.api + '/api/quote', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      .then(function (r) { return r.json(); })
+      .then(function (out) {
+        if (!out.ok) throw new Error(out.error || 'Something went wrong.');
+        var first = v('name').split(' ')[0];
+        sent = true;
+        main.innerHTML = '';
+        main.appendChild(el('div', { cls: 'done' }, [el('h2', { text: 'Thanks, ' + first + '!' }),
+          el('p', { text: 'Your request is on its way to Bill Dubinsky. He’ll be in touch soon with your quote.' }),
+          el('p', { cls: 'small', text: 'Questions in the meantime? Call (907) 222-7738.' })]));
+        $('bar').style.display = 'none';
+        window.scrollTo(0, 0);
+      })
+      .catch(function (e) { err.textContent = e.message === 'Failed to fetch' ? 'We couldn’t send that. Please check your connection and try again.' : e.message; $('next').disabled = false; $('next').textContent = 'Review and send'; });
+  }
+  $('next').onclick = function () {
+    var about = $('about');
+    if (about.getBoundingClientRect().top > window.innerHeight * 0.6) { about.scrollIntoView({ behavior: 'smooth' }); $('next').textContent = 'Send my request'; return; }
+    submit();
+  };
+  window.addEventListener('scroll', function () { if (!sent) $('next').textContent = $('about').getBoundingClientRect().top < window.innerHeight * 0.6 ? 'Send my request' : 'Review and send'; }, { passive: true });
+
+  var w = document.createElement('script'); w.src = C.api + '/widget.js?site=' + C.site; w.async = true; document.body.appendChild(w);
+})();
+</script>
+</body>
+</html>

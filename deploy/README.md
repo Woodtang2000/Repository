@@ -128,6 +128,16 @@ Salesforce Account and Opportunity for that person) and existing customers' serv
 6. Salesforce (for the buttons): an external client app with the client credentials flow (Run As: a user who can
    create Accounts and Opportunities); put `SF_DOMAIN`, `SF_CLIENT_ID`,
    `SF_CLIENT_SECRET` in `/etc/service-desk.env` and restart `service-desk`.
+7. TLG's own address: an A record `chat.thelaundrygroup.com` (TLG's DNS is at GoDaddy) → the same IP, then run
+   `webchat_setup.sh` again.
+
+**Quote page** (`/quote`, `website_chat/quote.html`): visitors pick items and quantities from a small catalog
+(`website_chat/catalog.json`: each branch's most-used Alliant items, Snow White from branch 1, TLG from branch 2) and
+give their business details. It goes to #sales-desk like a chat lead, itemized with the Alliant SKUs, and "Give to" puts
+the items in the Salesforce Opportunity's description. No prices anywhere. Point each site's "Get a Quote" button at
+`https://chat.snowwhitelinen.com/quote` or `https://chat.thelaundrygroup.com/quote`. Pictures come from the
+Salesforce Products (Product Code = Alliant SKU): once Salesforce is connected the chat service downloads them at start
+and nightly (`python -m service_changes.catalog --pictures` does it now). To change the catalog, edit `catalog.json`.
 
 ## 5. Start it
 

@@ -23,7 +23,7 @@ from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
-from . import sales
+from . import catalog, sales
 from .context import ALASKA
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -68,6 +68,8 @@ HAND-OFF: restaurants, bars, grocery, auto shops, contractors, offices, schools 
     },
 }
 
+QUOTE_URLS = {"sw": f"https://{os.environ.get('WEBCHAT_HOST', 'chat.snowwhitelinen.com')}/quote",
+              "tlg": f"https://{os.environ.get('WEBCHAT_TLG_HOST', 'chat.thelaundrygroup.com')}/quote"}
 LEAD_FIELDS = ["name", "business", "business_type", "town", "size", "phone", "email", "best_time", "current_provider",
                "needs", "notes"]
 TOOLS = [
@@ -114,6 +116,10 @@ class Chat:
         portal = (PORTAL_HELP.replace("{url}", url) if url else
                   "CUSTOMER PORTAL: if someone needs help logging in to the online customer portal, get their name, "
                   "business, phone or email and what's going wrong, and call service_request so the office can help.")
+        quote = QUOTE_URLS[site]
+        portal += (f"\n\nQUOTE PAGE: a new business that wants a detailed quote can pick items and quantities at {quote} "
+                   "(no prices shown; it goes straight to Bill). Offer it when they want a quote on specific items, and "
+                   "still help here if they'd rather chat.")
         return (c["rules"] + "\n\n" + SAFE.replace("{next_time}", next_time).replace("{portal}", portal) + "\n\nFACTS (approved by the owner; product names and anonymous averages from our "
                 "own customers; use averages only as a starting point, never as a quote):\n" + self.facts[site]
                 + f"\n\nThe chat opened with: {c['greeting']}")
@@ -197,6 +203,40 @@ class Chat:
             os.makedirs(folder, exist_ok=True)
             with open(os.path.join(folder, f"{kind}-{int(time.time() * 1000)}.json"), "w") as f:
                 json.dump(item, f)
+
+    def quote(self, site: str, form: dict, ip: str = "") -> dict:
+        """A request from the quote page (/quote): the visitor's picks from the catalog and their details, sent to
+        #sales-desk as a lead like a chat lead, so "Give to" puts it in Salesforce. Returns {ok} or {error}."""
+        if site not in COMPANIES:
+            return {"error": "Unknown site."}
+        if form.get("website"):  # a field people never see: only bots fill it in
+            return {"ok": True}
+        blocked = self._allowed(ip)
+        if blocked:
+            return {"error": blocked}
+        pick = lambda k, n=300: re.sub(r"\s+", " ", str(form.get(k) or "")).strip()[:n]
+        cat = catalog.load()[site]
+        lines, problem = catalog.lines(cat, form.get("items"))
+        if problem:
+            return {"error": problem}
+        interests = [i for i in cat.get("interests", []) if i in (form.get("interests") or [])]
+        other = pick("other", 1500)
+        if not lines and not interests and not other:
+            return {"error": "Please pick at least one item, or tell us what you need in the box at the bottom."}
+        if not pick("name") or not pick("business"):
+            return {"error": "Please enter your name and your business name."}
+        if not pick("phone") and not pick("email"):
+            return {"error": "Please enter a phone number or email so Bill can send your quote."}
+        if pick("email") and not re.fullmatch(r"[^@\s]+@[^@\s]+\.[a-z]{2,}", pick("email"), re.I):
+            return {"error": "That email address doesn't look right."}
+        needs = [catalog.line_text(x) for x in lines] + [f"Interested in: {i}" for i in interests]
+        lead = {k: pick(k) for k in ("name", "business", "business_type", "street", "town", "zip", "phone", "email",
+                                     "best_time", "current_provider", "contract_end", "size")}
+        lead.update(company=site, source="quote", items=lines, interests=interests, other=other,
+                    needs="; ".join(needs + ([f"Something else: {other}"] if other else []))[:3000],
+                    notes=pick("notes", 1500), handed_from="", page="quote page", transcript="", created_at=time.time())
+        self._safe_post("lead", lead)
+        return {"ok": True}
 
     def _tool(self, s: dict, name: str, inp: dict, events: list) -> str:
         pick = lambda k, n=500: str(inp.get(k) or "")[:n]
@@ -347,6 +387,7 @@ def slack_poster(slack, data_dir: str, sales_channel: str, desk_channel: str):
 
 
 WIDGET = os.path.join(REPO, "website_chat", "widget.js")
+QUOTE_PAGE = os.path.join(REPO, "website_chat", "quote.html")
 LOGOS = {"sw": os.path.join(REPO, "brand", "logo_sw.png"), "tlg": os.path.join(REPO, "brand", "logo_tlg.png")}
 
 
@@ -407,6 +448,24 @@ def make_handler(chat: Chat, public_url: str):
             if m:
                 with open(LOGOS[m.group(1)], "rb") as f:
                     return self._send(200, f.read(), "image/png", cache=86400)
+            m = re.fullmatch(r"/catalog/([0-9A-Z-]+)\.img", u.path)
+            if m:
+                path = catalog.pic_path(chat.data_dir, m.group(1))
+                if not path:
+                    return self._send(404, b"not found", "text/plain")
+                with open(path, "rb") as f:
+                    data = f.read()
+                return self._send(200, data, catalog.image_type(data) or "application/octet-stream", cache=86400)
+            if u.path == "/quote":  # the quote builder; the sites' "Get a Quote" buttons link here
+                default = "tlg" if base.endswith(TLG_HOST) else "sw"
+                site = (q.get("site") or [default])[0] if (q.get("site") or [default])[0] in COMPANIES else default
+                c = COMPANIES[site]
+                cfg = {"api": base, "site": site, "name": c["name"], "logo": f"{base}/logo/{site}.png",
+                       "catalog": catalog.public(catalog.load()[site], lambda sku: catalog.pic_path(chat.data_dir, sku)),
+                       "vendors": ["Alsco", "Cintas", "UniFirst", "Other", "No one yet"]}
+                with open(QUOTE_PAGE) as f:
+                    page = f.read().replace("__CONFIG__", json.dumps(cfg).replace("</", "<\\/")).replace("__TITLE__", c["name"])
+                return self._send(200, page.encode(), "text/html; charset=utf-8")
             if u.path == "/try":  # a bare test page with the widget, before it's on the real sites
                 default = "tlg" if base.endswith(TLG_HOST) else "sw"
                 site = (q.get("site") or [default])[0] if (q.get("site") or [default])[0] in COMPANIES else default
@@ -419,7 +478,10 @@ def make_handler(chat: Chat, public_url: str):
             self._send(404, b"not found", "text/plain")
 
         def do_POST(self):
-            if urlparse(self.path).path != "/api/chat":
+            path = urlparse(self.path).path
+            if path == "/api/quote":
+                return self._quote()
+            if path != "/api/chat":
                 return self._send(404, b"not found", "text/plain")
             try:
                 n = int(self.headers.get("Content-Length") or 0)
@@ -438,7 +500,35 @@ def make_handler(chat: Chat, public_url: str):
                 print(time.strftime("%H:%M"), "error:", e, flush=True)
                 self._send(200, json.dumps({"reply": "Sorry, something went wrong on our end. Please call us at "
                                                      "(907) 222-7738.", "events": []}).encode(), "application/json")
+        def _quote(self):
+            try:
+                n = int(self.headers.get("Content-Length") or 0)
+                if n > 40000:
+                    return self._send(413, b'{"error":"That request is too large."}', "application/json")
+                body = json.loads(self.rfile.read(n) or b"{}")
+                ip = (self.headers.get("X-Forwarded-For") or self.client_address[0]).split(",")[0].strip()
+                out = chat.quote(str(body.get("site") or "sw"), body if isinstance(body, dict) else {}, ip=ip)
+                print(time.strftime("%H:%M"), "quote", body.get("site"), ip, "->", "ok" if out.get("ok") else out.get("error"), flush=True)
+                self._send(200, json.dumps(out).encode(), "application/json")
+            except ValueError:
+                self._send(400, b'{"error":"bad request"}', "application/json")
+            except Exception as e:
+                print(time.strftime("%H:%M"), "quote error:", e, flush=True)
+                self._send(200, json.dumps({"error": "Sorry, something went wrong on our end. Please call us at "
+                                                     "(907) 222-7738."}).encode(), "application/json")
     return H
+
+
+def keep_pictures(data_dir: str) -> None:
+    """Download the catalog pictures from Salesforce at start and then every night (they change rarely)."""
+    def run():
+        while True:
+            try:
+                print(time.strftime("%H:%M"), "catalog:", catalog.sync_pictures(data_dir), flush=True)
+            except Exception as e:
+                print(time.strftime("%H:%M"), "catalog pictures failed:", e, flush=True)
+            time.sleep(86400)
+    threading.Thread(target=run, daemon=True).start()
 
 
 def main():
@@ -455,6 +545,7 @@ def main():
     slack = WebClient(token=os.environ["SLACK_BOT_TOKEN"])
     claude = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("SERVICE_DESK_API_KEY"))
     chat = Chat(claude, slack_poster(slack, args.data, args.sales, args.desk), args.data)
+    keep_pictures(args.data)
     srv = ThreadingHTTPServer(("127.0.0.1", args.port), make_handler(chat, args.public_url.rstrip("/")))
     print(time.strftime("%H:%M"), f"website chat on 127.0.0.1:{args.port} for {args.public_url}", flush=True)
     srv.serve_forever()

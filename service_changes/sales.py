@@ -70,15 +70,24 @@ def load(data_dir: str, lead_id: str) -> dict | None:
 
 def card_text(lead: dict) -> str:
     company = salesforce.COMPANY.get(lead.get("company"), "")
-    lines = [f"🧲 *New website lead · {company}*",
+    quote = lead.get("source") == "quote"
+    lines = [f"{'🧾' if quote else '🧲'} *New website {'quote request' if quote else 'lead'} · {company}*",
              f"*{lead.get('business') or 'Business'}*" + "".join(f" · {lead[k]}" for k in ("business_type", "town") if lead.get(k)),
              "Contact: " + " · ".join(x for x in (lead.get("name"), lead.get("phone"), lead.get("email")) if x)]
     if lead.get("handed_from"):
         lines.append(f"_Came in on the {salesforce.COMPANY.get(lead['handed_from'], '')} site, handed over_")
-    for label, key in (("Best time", "best_time"), ("Size", "size"), ("Uses now", "current_provider"), ("Needs", "needs"),
-                       ("Notes", "notes")):
-        if lead.get(key):
+    if lead.get("street"):
+        lines.append("Address: " + ", ".join(x for x in (lead["street"], lead.get("town"), lead.get("zip")) if x))
+    for label, key in (("Best time", "best_time"), ("Size", "size"), ("Uses now", "current_provider"),
+                       ("Contract ends", "contract_end"), ("Needs", "needs" if not quote else ""), ("Notes", "notes")):
+        if key and lead.get(key):
             lines.append(f"{label}: {lead[key]}")
+    if quote:
+        from .catalog import line_text
+        lines += ["*Items:*"] + [f"• {line_text(x)}" for x in lead.get("items") or []]
+        lines += [f"• Interested in: {i}" for i in lead.get("interests") or []]
+        if lead.get("other"):
+            lines.append(f"• Something else: {lead['other']}")
     return "\n".join(lines)
 
 

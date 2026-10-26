@@ -75,17 +75,26 @@ def _q(value: str) -> str:
 
 def description(lead: dict) -> str:
     text = " ".join(str(lead.get(k) or "") for k in ("needs", "notes", "transcript"))
-    desc = [f"[{COMPANY.get(lead.get('company'), '')}] Website chat lead"]
+    quote = lead.get("source") == "quote"
+    desc = [f"[{COMPANY.get(lead.get('company'), '')}] Website {'quote request' if quote else 'chat lead'}"]
     if lead.get("handed_from"):
         desc.append(f"Came in on the {COMPANY.get(lead['handed_from'], '')} site and was handed over")
     products = [p for p, rx in PRODUCTS if re.search(rx, text, re.I)]
     if products:
         desc.append("Products: " + ", ".join(products))
-    for label, key in (("Contact", "name"), ("Type", "business_type"), ("Size", "size"), ("Needs", "needs"),
-                       ("Uses now", "current_provider"), ("Best time", "best_time"), ("Notes", "notes")):
-        if lead.get(key):
+    for label, key in (("Contact", "name"), ("Type", "business_type"), ("Size", "size"), ("Needs", "needs" if not quote else ""),
+                       ("Uses now", "current_provider"), ("Contract ends", "contract_end"), ("Best time", "best_time"),
+                       ("Notes", "notes")):
+        if key and lead.get(key):
             desc.append(f"{label}: {lead[key]}")
-    desc += ["", "Chat:", lead.get("transcript") or ""]
+    if quote:
+        from .catalog import line_text
+        desc += ["", "Items requested (no prices given; Alliant SKU in brackets):"] + \
+            [f"- {line_text(x)}" for x in lead.get("items") or []] + [f"- Interested in: {i}" for i in lead.get("interests") or []]
+        if lead.get("other"):
+            desc.append(f"- Something else: {lead['other']}")
+    else:
+        desc += ["", "Chat:", lead.get("transcript") or ""]
     return "\n".join(desc)[:31000]
 
 
@@ -97,11 +106,11 @@ def account_body(lead: dict, owner_id: str) -> dict:
     industry = next((i for i, rx in INDUSTRIES if re.search(rx, kind, re.I)), None)
     body = {"Name": lead.get("business") or lead.get("name") or "(unknown)", "Type": "Potential Customer",
             "OwnerId": owner_id, "Phone": found.get("phone") or lead.get("phone"), "Website": found.get("website"),
-            "BillingStreet": found.get("street"), "BillingCity": found.get("city") or lead.get("town"),
+            "BillingStreet": lead.get("street") or found.get("street"), "BillingCity": found.get("city") or lead.get("town"),
             "BillingState": found.get("state") or ("AK" if lead.get("town") else None),
-            "BillingPostalCode": found.get("zip"), "ShippingStreet": found.get("street"),
+            "BillingPostalCode": lead.get("zip") or found.get("zip"), "ShippingStreet": lead.get("street") or found.get("street"),
             "ShippingCity": found.get("city") or lead.get("town"), "ShippingState": found.get("state") or ("AK" if lead.get("town") else None),
-            "ShippingPostalCode": found.get("zip"), "Industry": industry,
+            "ShippingPostalCode": lead.get("zip") or found.get("zip"), "Industry": industry,
             "Current_Vendor__c": vendor or ("Other competitor" if lead.get("current_provider") else None),
             "Description": description(lead)}
     return {k: v for k, v in body.items() if v}
@@ -122,9 +131,9 @@ def opportunity_body(lead: dict, account_id: str, owner_id: str, contact_id: str
     body = {"Name": lead.get("business") or lead.get("name") or "Website lead", "AccountId": account_id,
             "StageName": STAGE, "CloseDate": (today + timedelta(days=30)).isoformat(), "Type": "New Business",
             "LeadSource": "Website", "OwnerId": owner_id, "Description": description(lead),
-            "opportunityContact__c": contact_id, "Address_1__c": found.get("street"),
+            "opportunityContact__c": contact_id, "Address_1__c": lead.get("street") or found.get("street"),
             "City__c": found.get("city") or lead.get("town"), "State__c": found.get("state") or ("AK" if lead.get("town") else None),
-            "Zip__c": found.get("zip"), "Phone__c": found.get("phone") or lead.get("phone")}
+            "Zip__c": lead.get("zip") or found.get("zip"), "Phone__c": found.get("phone") or lead.get("phone")}
     return {k: v for k, v in body.items() if v}
 
 
@@ -171,7 +180,7 @@ def create_opportunity(lead: dict, owner_id: str) -> tuple[str, str, str]:
     same_name = _call("GET", f"{base}/query?" + urllib.parse.urlencode(
         {"q": f"SELECT Id, Name, Phone, BillingStreet, ShippingStreet FROM Account WHERE Name = {_q(new['Name'])} "
               "ORDER BY CreatedDate LIMIT 20"}), token).get("records") or []
-    account_id, note = pick_account(same_name, [found.get("phone"), lead.get("phone")], found.get("street"))
+    account_id, note = pick_account(same_name, [found.get("phone"), lead.get("phone")], lead.get("street") or found.get("street"))
     created = False
     if not account_id:
         try:
