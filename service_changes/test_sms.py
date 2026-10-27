@@ -113,12 +113,12 @@ def test_a_change_for_another_account_lands_on_their_own(desk):
 def test_unclear_then_answer_then_ticket(desk):
     td, slack, texts, seen = desk
     td.handle("+19075551234", "need more towels", "S1")
-    assert texts[-1][1] == "Quick question: How many more shop towels?" and not slack.posts
+    assert texts[-1][1] == "Happy to! Just one quick question: How many more shop towels?" and not slack.posts
     td.handle("+19075551234", "200", "S2")
     assert "Customer: need more towels" in seen["text"] and "Customer: 200" in seen["text"]
     [t] = slack.posts
     assert t["meta"]["kind"] == "ticket" and "📱 Customer text from Jane at Midas (…1234)" in t["text"]
-    assert texts[-1][1].startswith("Got it")
+    assert texts[-1][1].startswith("You got it")
 
 
 def test_two_locations_asks_which(desk):
@@ -144,7 +144,9 @@ def test_new_number_signs_up_and_the_office_approves(desk, monkeypatch):
     monkeypatch.setattr(parser, "identify_customer", lambda c, text, customers: Identified(
         person_name="Bob", accounts=["M8", "M4"] if "palmer" in text.lower() else []))
     td.handle("+15551110000", "add 200 more towels", "S1")  # held: nothing about any account goes out
-    assert texts == [("+15551110000", sms.WHO_ARE_YOU)] and "alliant" not in seen
+    assert texts == [("+15551110000", sms.who_are_you("add 200 more towels"))] and "alliant" not in seen
+    assert texts[0][1].startswith("Absolutely! This is Donna. Who do I have the pleasure of working with today?")
+    assert sms.who_are_you("hello").startswith("Hi there! ") and "Reply STOP to opt out" in texts[0][1]
     td.handle("+15551110000", "Bob, Midas in Palmer", "S2")
     [card] = [p for p in slack.posts if p["meta"].get("kind") == "sms_signup"]
     assert "Best match: *M8* MIDAS #8 (PALMER)" in card["text"] and "Could also be: M4" in card["text"]
@@ -156,7 +158,7 @@ def test_new_number_signs_up_and_the_office_approves(desk, monkeypatch):
     assert td.office_pass() == 1
     assert "+15551110000,M8,Bob" in open(td.data_dir + "/customer_phones.csv").read()
     assert texts[2][0] == "+15551110000" and texts[2][1].startswith(sms.SET_UP.format(names="MIDAS #8 (PALMER)"))
-    assert len(texts) == 3 and texts[2][1].count("Got it") == 1  # welcome and answer in one text
+    assert len(texts) == 3 and texts[2][1].count("You got it") == 1  # welcome and answer in one text
     assert [c.account for c in seen["alliant"].customers] == ["M8"]  # the held request ran, for M8 only
     assert card["meta"]["kind"] == "sms_approved" and td.office_pass() == 0
 

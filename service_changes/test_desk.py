@@ -443,7 +443,11 @@ def test_checkmark_on_a_customer_text_ticket_texts_the_readback(setup, monkeypat
         "driver": "Jane", "driver_id": "", "account": "W1", "msgs": [], "sms_to": "+19075551234"})
     slack.react("D1", t["ts"], "U2", "white_check_mark")
     assert d.run_once()["readback"] == 1
-    assert sent == [("+19075551234", "Snow White Linen: ✅ W1 WENDY'S #4412 – 200 shop towels added – entered by Sonja Burke")]
+    assert sent == [("+19075551234", "Snow White Linen: All done! W1 WENDY'S #4412 – 200 shop towels added. "
+                                      "Sonja entered it for you.\nThanks so much!")]
+    assert desk.customer_readback("✅ 5045-1-00000 HOMER GOLF COURSE – 50 bar mops added – from 100 to 150", "Ana Faamita",
+                                  []) == ("All done! 50 bar mops added – from 100 to 150 (Homer Golf Course). "
+                                          "Ana entered it for you.\nThanks so much!")
     assert "sms" not in slack.msgs  # nothing posted to Slack for it
 
 

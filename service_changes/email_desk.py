@@ -122,7 +122,8 @@ def real_sender(m: dict) -> str:
 class EmailDesk(TextDesk):
     word, icon, to_key, signup_kind, list_file = "email", "📧", "email_to", "email_signup", "customer_emails.csv"
     add_cmd, remove_cmd = ADD_EMAIL, REMOVE_EMAIL
-    set_up = "You're all set. Email us here any time with changes for {names}, and we'll confirm each one when it's entered."
+    set_up = ("You're all set! Email me here any time you need anything for {names}, and I'll confirm each change as soon "
+              "as it's entered.")
 
     def __init__(self, slack, claude, alliant: Alliant, desk: str, data_dir: str, send=None, fetch=None):
         super().__init__(slack, claude, alliant, desk, data_dir, send=send or self._send)
@@ -240,8 +241,8 @@ class EmailDesk(TextDesk):
         self.state["pending"][key] = {"phone": key, "stage": "waiting", "held": [[body, sid]], "at": time.time(),
                                       "name": found.person_name or who}
         self.card(key, found.person_name or who, body, found.accounts)
-        self.send(key, "Thanks for your email. Our office will confirm your account shortly, then we'll take care of "
-                       "your request.")
+        self.send(key, "Thanks so much for your email! This is Donna. I'm getting your account confirmed with our "
+                       "office, and then I'll take care of your request.")
 
     # ---- staff forwarding a customer's email ----------------------------------------------------------------
 

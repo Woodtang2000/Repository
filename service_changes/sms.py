@@ -42,10 +42,24 @@ MAX_TEXTS_PER_DAY = 30  # per number; past this the office is told and the bot s
 # The first reply to a number we don't know names neither company: the same line serves Snow White and The Laundry
 # Group customers, and it reads more like a person (Scott, 2026-10-27). Replies after set-up sign with the customer's
 # own company (context.company_for). HELP and STOP are answered by Twilio (Advanced Opt-Out), whose HELP reply names both.
-WHO_ARE_YOU = ("Hi! Thanks for texting. So we can get you set up, what's your name and which business are you with? "
-               "Msg & data rates may apply. Reply STOP to opt out, HELP for help.")
-WAITING = "Thanks! The office will confirm your account shortly, then we'll take care of your request."
-SET_UP = "You're all set. Text this number any time with changes for {names}."
+COMPLIANCE = " Msg & data rates may apply. Reply STOP to opt out, HELP for help."
+ASKS = re.compile(r"\?|\b(can|could|would|will|need|needs|please|add|more|less|stop|change|want|wants)\b", re.I)
+
+
+def who_are_you(body: str = "") -> str:
+    """The first reply to a number we don't know, in Donna's voice: "Absolutely!" when they asked for something."""
+    opener = "Absolutely! " if ASKS.search(body or "") else "Hi there! "
+    return (opener + "This is Donna. Who do I have the pleasure of working with today? Can I get your name and the "
+            "company you're with?" + COMPLIANCE)
+
+
+WHO_ARE_YOU = who_are_you()  # the greeting without a request
+
+# Donna's voice in every customer text and email (Scott: "I want people to really like Donna"): warm, short, plain.
+# She never claims to be a person; if asked, she's the company's automated assistant and the office follows up.
+WAITING = "Thank you! I'm getting your account confirmed with our office, and then I'll take care of your request."
+SET_UP = "You're all set! Text me here any time you need anything for {names}."
+GOT_IT = "You got it! I've passed that to our office, and I'll {how} you as soon as it's done."
 DONE_REACTIONS = {"white_check_mark", "heavy_check_mark", "ballot_box_with_check"}
 PHONE = r"(\+?1?[\s.-]*\(?\d{3}\)?[\s.-]*\d{3}[\s.-]*\d{4})"
 # "add 907-555-1234 to Midas Fairbanks", "add (907) 555-1234 for 1205-1-00004", "remove 907 555 1234"
@@ -405,7 +419,7 @@ class TextDesk:
                      "driver_id": "", "account": acct, "msgs": [], self.to_key: phone, **self.ticket_extra(phone),
                      "expect": expectations(result) if parsed.category in ACTIONABLE and not result.questions else []},
                     todo="own")
-        self.send(phone, f"Got it, thanks. We'll {'text' if self.word == 'text' else 'email'} you when it's done.")
+        self.send(phone, GOT_IT.format(how="text" if self.word == "text" else "email"))
         self.state["convos"].pop(self.key(phone), None)
 
     # ---- sign-up: an unknown number tells us who they are, the office approves --------------------------------
@@ -417,7 +431,7 @@ class TextDesk:
             return
         if p is None:  # first text: hold it and ask who they are
             self.state["pending"][key] = {"phone": phone, "stage": "asked", "held": [[body, sid]], "at": time.time()}
-            self.send(phone, WHO_ARE_YOU)
+            self.send(phone, who_are_you(body))
             return
         if p["stage"] == "asked":  # their answer: suggest an account to the office
             from .parser import identify_customer
@@ -496,8 +510,8 @@ class TextDesk:
         self.send(to, "\n\n".join(dict.fromkeys(said)))  # the same acknowledgement twice reads as once
 
     def ask(self, phone: str, lines: list[str], questions: list[str], convo: dict | None) -> None:
-        msg = "Quick question: " + questions[0] if len(questions) == 1 else \
-            "A few quick questions:\n" + "\n".join(f"- {q}" for q in questions)
+        msg = "Happy to! Just one quick question: " + questions[0] if len(questions) == 1 else \
+            "Happy to! Just a few quick questions:\n" + "\n".join(f"- {q}" for q in questions)
         self.send(phone, msg)
         self.state["convos"][self.key(phone)] = {"lines": lines + [f"Snow White asked: {plain(msg)}"],
                                                   "asks": (convo["asks"] if convo else 0) + 1, "at": time.time()}

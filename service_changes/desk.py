@@ -72,6 +72,19 @@ def _post(slack, channel: str, text: str, payload: dict, thread_ts: str | None =
                                   metadata={"event_type": KIND, "event_payload": payload}, **kw)
 
 
+def customer_readback(rb: str, who: str, notes: list[str]) -> str:
+    """The readback as a customer reads it, in Donna's voice: no ticket marks or account number, who entered it, and
+    a thank-you. "✅ 5045-1-00000 HOMER GOLF COURSE – 50 bar mops added – new on the account" ->
+    "All done! 50 bar mops added – new on the account (HOMER GOLF COURSE). Ana entered it for you. Thanks so much!" """
+    rb = re.sub(r"^✅\s*", "", rb or "").strip()
+    m = re.match(r"^(\d{4}-\d-\d{5})\s+(.+?)\s+–\s+(.+)$", rb)
+    what = f"{m.group(3)} ({m.group(2).title()})" if m else rb
+    first = (who or "").split()[0] if who else "our office"
+    out = f"All done! {what}. {first} entered it for you." if what else f"All done! {first} took care of it."
+    out += "".join(f"\nA note from our office: {n}" for n in notes)
+    return out + "\nThanks so much!"
+
+
 def _is_bot(m: dict, me: str) -> bool:
     return bool(m.get("bot_id")) or m.get("user") == me
 
@@ -658,10 +671,11 @@ class Desk:
         who = self.name(user)
         msg = (f"<@{p['driver_id']}> " if p.get("driver_id") else "") + (p.get("readback") or "✅ Done") + f" – entered by {who}"
         msg += "".join(f"\nOffice note: {n}" for n in notes)
+        customer = customer_readback(p.get("readback") or "", who, notes)  # what a customer reads (Donna's voice)
         if p.get("sms_to"):  # a customer's text (sms.py): the readback goes back by text, not to Slack
             from .sms import send_sms
             from .context import company_for
-            send_sms(p["sms_to"], f"{company_for(p.get('account'))}: " + msg)
+            send_sms(p["sms_to"], f"{company_for(p.get('account'))}: " + customer)
         elif p.get("email_to"):  # a customer's email (email_desk.py): the readback is a reply in their thread
             from . import bird
             from .sms import plain
@@ -669,7 +683,7 @@ class Desk:
             company = company_for(p.get("account"))
             subject = p.get("email_subject") or f"Your {company} request"
             bird.send(p["email_to"], subject if subject.lower().startswith("re:") else "Re: " + subject,
-                      plain(msg) + f"\n\n{company}\n(907) 222-7738", in_reply_to=p.get("email_msgid", ""),
+                      plain(customer) + f"\n\nDonna\n{company}\n(907) 222-7738", in_reply_to=p.get("email_msgid", ""),
                       key=f"readback/{t['ts']}")
         else:
             self.post(p["src_channel"], msg, {"kind": "readback", "src_ts": p["src_ts"], "driver_id": p.get("driver_id"),

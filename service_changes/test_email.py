@@ -1,6 +1,6 @@
 import pytest
 
-from . import email_desk
+from . import email_desk, sms
 from .parser import Answer, Identified
 from .schema import Action, Category, Change, ParsedMessage
 from .test_sms import ALLIANT, FakeSlack
@@ -49,7 +49,7 @@ def test_known_sender_gets_a_ticket_and_only_their_accounts(desk):
     [t] = [p for p in slack.posts if p["meta"].get("kind") == "ticket"]
     assert t["meta"]["email_to"] == "jane@acme.com" and t["meta"]["email_msgid"] == "<m1@acme.com>"
     assert "📧 Customer email from Jane at Midas" in t["text"] and "couldn't be verified" not in t["text"]
-    assert sent == [("jane@acme.com", "Got it, thanks. We'll email you when it's done.")]
+    assert sent == [("jane@acme.com", sms.GOT_IT.format(how="email"))]
     ed.run_once()  # nothing new: nothing more
     assert len(sent) == 1
 
@@ -70,10 +70,10 @@ def test_unknown_sender_gets_a_card_and_is_answered_after_approval(desk):
     [card] = [p for p in slack.posts if p["meta"].get("kind") == "email_signup"]
     assert "bob@midas.com" in card["text"] and "M8" in card["text"]
     assert not [p for p in slack.posts if p["meta"].get("kind") == "ticket"]
-    assert "office will confirm" in sent[-1][1]
+    assert "getting your account confirmed" in sent[-1][1]
     slack.react(card["ts"])
     ed.run_once()
-    assert "You're all set" in sent[-1][1] and "Got it" in sent[-1][1]  # one email, not two
+    assert "You're all set" in sent[-1][1] and "You got it" in sent[-1][1]  # one email, not two
     [t] = [p for p in slack.posts if p["meta"].get("kind") == "ticket"]  # the held email, now handled
     assert t["meta"]["email_to"] == "bob@midas.com"
 
