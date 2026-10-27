@@ -233,3 +233,24 @@ def test_donna_voice_needs_scotts_key(monkeypatch):
     assert call("Bearer " + "k" * 32) == (200, b"Hi Harvey.")
     monkeypatch.setenv("OWNER_VOICE_TOKEN", "short")
     assert call("Bearer short")[0] == 404  # a weak key never works
+
+
+def test_donna_simple_address(monkeypatch):
+    import io, json
+    import urllib.request
+    from .webchat import make_handler
+    monkeypatch.setenv("OWNER_VOICE_TOKEN", "k" * 32)
+    monkeypatch.setattr("time.sleep", lambda s: None)
+    got, sent = [], []
+    monkeypatch.setattr(urllib.request, "urlopen", lambda req, timeout: got.append(json.loads(req.data)) or io.BytesIO(b"Hi Harvey."))
+    H = make_handler(None, "https://x")
+
+    def get(path):
+        h = H.__new__(H)
+        h.path, h.headers = path, {}
+        h._send = lambda code, body, ctype, cache=0: sent.append((code, body))
+        h.do_GET()
+        return sent[-1]
+    assert get("/api/donna?key=" + "k" * 32 + "&text=How%20are%20things%20going%3F") == (200, b"Hi Harvey.")
+    assert got[-1] == {"text": "How are things going?", "convo": "phone"}
+    assert get("/api/donna?key=nope&text=hi")[0] == 404 and len(got) == 1

@@ -438,6 +438,8 @@ def make_handler(chat: Chat, public_url: str):
             base = self._base()
             if u.path == "/health":
                 return self._send(200, b"ok", "text/plain")
+            if u.path == "/api/donna":  # the simple shortcut: .../api/donna?key=...&text=what he said
+                return self._donna(q)
             if u.path == "/widget.js":
                 site = (q.get("site") or ["sw"])[0]
                 if site not in COMPANIES:
@@ -506,18 +508,26 @@ def make_handler(chat: Chat, public_url: str):
                 print(time.strftime("%H:%M"), "error:", e, flush=True)
                 self._send(200, json.dumps({"reply": "Sorry, something went wrong on our end. Please call us at "
                                                      "(907) 222-7738.", "events": []}).encode(), "application/json")
-        def _donna(self):
-            """Scott's "Hey Donna" iPhone Shortcut: his private key, then on to the desk (desk.voice) on this server."""
+        def _donna(self, q: dict | None = None):
+            """Scott's "Hey Donna" iPhone Shortcut: his private key, then on to the desk (desk.voice) on this server.
+            Either a GET with ?key=...&text=... in the address (nothing to set up in the shortcut but the address), or a
+            POST with "Authorization: Bearer <key>" and {"text", "convo"}."""
             import hmac
             key = os.environ.get("OWNER_VOICE_TOKEN", "")
-            given = (self.headers.get("Authorization") or "").removeprefix("Bearer ").strip()
+            if q is not None:
+                given = (q.get("key") or [""])[0].strip()
+            else:
+                given = (self.headers.get("Authorization") or "").removeprefix("Bearer ").strip()
             if len(key) < 24 or not hmac.compare_digest(given.encode(), key.encode()):
                 time.sleep(1)  # slows down guessing
                 return self._send(404, b"not found", "text/plain")
             try:
-                n = min(int(self.headers.get("Content-Length") or 0), 8000)
-                body = self.rfile.read(n) or b"{}"
-                json.loads(body)
+                if q is not None:
+                    body = json.dumps({"text": (q.get("text") or [""])[0], "convo": (q.get("convo") or ["phone"])[0]}).encode()
+                else:
+                    n = min(int(self.headers.get("Content-Length") or 0), 8000)
+                    body = self.rfile.read(n) or b"{}"
+                    json.loads(body)
                 req = urllib.request.Request(f"http://127.0.0.1:{os.environ.get('DESK_VOICE_PORT', '8091')}/voice", data=body,
                                              headers={"Content-Type": "application/json"})
                 with urllib.request.urlopen(req, timeout=110) as r:
