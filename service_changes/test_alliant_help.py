@@ -385,3 +385,37 @@ def test_elevenlabs_tool_asks_the_desk(monkeypatch):
     assert post("Bearer no")[0] == 401 and not got
     assert post("Bearer " + "k" * 32) == (200, b'{"answer": "Twelve mats."}')
     assert got[-1]["text"] == "how many mats does safeway 1807 get"
+
+
+def test_talk_page_gets_a_link_into_the_private_agent(monkeypatch):
+    import io, json
+    import urllib.error
+    import urllib.request
+    from .webchat import make_handler
+    monkeypatch.setenv("OWNER_VOICE_TOKEN", "k" * 32)
+    monkeypatch.setenv("ELEVENLABS_API_KEY", "el-test")
+    monkeypatch.setenv("ELEVENLABS_AGENT_ID", "agent_x")
+    monkeypatch.setattr("time.sleep", lambda s: None)
+    asked = []
+
+    def urlopen(req, timeout):
+        asked.append((req.full_url, req.headers.get("Xi-api-key")))
+        if "get-signed-url" in req.full_url:  # the other spelling works
+            raise urllib.error.HTTPError(req.full_url, 404, "nf", {}, io.BytesIO(b"{}"))
+        return io.BytesIO(b'{"signed_url": "wss://api.elevenlabs.io/x?token=1"}')
+    monkeypatch.setattr(urllib.request, "urlopen", urlopen)
+    H = make_handler(None, "https://x")
+    sent = []
+
+    def post(auth):
+        h = H.__new__(H)
+        h.path, h.rfile, h.headers = "/api/donna/agent", io.BytesIO(b""), {"Authorization": auth, "Content-Length": "0"}
+        h._send = lambda code, b, ctype, cache=0: sent.append((code, b))
+        h.do_POST()
+        return sent[-1]
+    assert post("Bearer nope")[0] == 401 and not asked
+    code, body = post("Bearer " + "k" * 32)
+    assert code == 200 and json.loads(body)["signed_url"].startswith("wss://")
+    assert asked[-1] == ("https://api.elevenlabs.io/v1/convai/conversation/get_signed_url?agent_id=agent_x", "el-test")
+    monkeypatch.delenv("ELEVENLABS_API_KEY")
+    assert post("Bearer " + "k" * 32)[0] == 503

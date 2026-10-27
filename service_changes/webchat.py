@@ -22,6 +22,7 @@ from collections import defaultdict, deque
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import urllib.error
+import urllib.parse
 import urllib.request
 from urllib.parse import parse_qs, urlparse
 
@@ -508,6 +509,8 @@ def make_handler(chat: Chat, public_url: str):
                 return self._agent()
             if path == "/api/donna/tool":
                 return self._agent_tool()
+            if path == "/api/donna/agent":
+                return self._agent_link()
             if path != "/api/chat":
                 return self._send(404, b"not found", "text/plain")
             try:
@@ -585,6 +588,16 @@ def make_handler(chat: Chat, public_url: str):
             self.send_header("Content-Length", str(len(out)))
             self.end_headers()
             self.wfile.write(out)
+
+        def _agent_link(self):
+            """A one-time link into Scott's private ElevenLabs agent (ELEVENLABS_AGENT_ID) for the talk page, so it opens
+            straight into a conversation. Needs his key; the ElevenLabs key itself never leaves the server."""
+            if not self._owner((self.headers.get("Authorization") or "").removeprefix("Bearer ").strip()):
+                return self._send(401, b'{"error":"bad key"}', "application/json")
+            link = agent_link()
+            if not link:
+                return self._send(503, b'{"error":"agent not available"}', "application/json")
+            self._send(200, json.dumps({"signed_url": link}).encode(), "application/json")
 
         def _agent_tool(self):
             """The ElevenLabs agent's "ask_donna" tool: {"question": ...} with Scott's key in, {"answer": ...} out, from the
@@ -718,6 +731,31 @@ def speak(text: str) -> bytes | None:
                 return None
         except Exception as e:
             print(time.strftime("%H:%M"), "donna voice (ElevenLabs) failed:", str(e)[:200], flush=True)
+            return None
+    return None
+
+
+def agent_link() -> str | None:
+    """A signed link (good for a few minutes) to start a conversation with the ElevenLabs agent; None if it isn't set up.
+    The ElevenLabs API key needs the Agents permission for this, as well as Text to Speech."""
+    key = os.environ.get("ELEVENLABS_API_KEY", "").strip()
+    agent = os.environ.get("ELEVENLABS_AGENT_ID", "agent_2401m5yb5t1vffc94cb4j5qfr67c").strip()
+    if not key or not agent:
+        return None
+    for path in ("get-signed-url", "get_signed_url"):  # ElevenLabs has used both spellings
+        req = urllib.request.Request(f"https://api.elevenlabs.io/v1/convai/conversation/{path}?"
+                                     + urllib.parse.urlencode({"agent_id": agent}), headers={"xi-api-key": key})
+        try:
+            with urllib.request.urlopen(req, timeout=20) as r:
+                link = json.loads(r.read()).get("signed_url")
+            if link:
+                return link
+        except urllib.error.HTTPError as e:
+            print(time.strftime("%H:%M"), f"donna agent link ({path}) failed:", e.code, e.read(300)[:300], flush=True)
+            if e.code != 404:
+                return None
+        except Exception as e:
+            print(time.strftime("%H:%M"), "donna agent link failed:", str(e)[:200], flush=True)
             return None
     return None
 

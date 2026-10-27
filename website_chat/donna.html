@@ -35,7 +35,7 @@
   #setup p{color:var(--dim);margin:0}
 </style>
 </head><body>
-<header><h1>Donna</h1><p id="sub">Tap the mic and talk.</p></header>
+<header><h1>Donna</h1><p id="sub">Tap to talk to Donna.</p></header>
 
 <div id="setup">
   <p>One-time setup: paste your Donna key (from the server). It stays on this phone only.</p>
@@ -145,9 +145,52 @@
     if (talking) setTimeout(() => listen(true), 250);
   }
 
+  // The real conversation: Scott's private ElevenLabs agent, which listens, knows when he's finished, lets him
+  // interrupt and answers in her voice (asking the server for anything about the business). The server hands out a
+  // short-lived link to it. If that isn't set up or doesn't work, the mic falls back to tap-to-talk below.
+  let agent = null, agentOK = true, connecting = false;
+  async function loadSDK() {
+    for (const url of ["https://cdn.jsdelivr.net/npm/@elevenlabs/client/+esm", "https://cdn.jsdelivr.net/npm/@11labs/client/+esm"]) {
+      try { const m = await import(url); if (m.Conversation) return m.Conversation; } catch (e) {}
+    }
+    return null;
+  }
+  async function startAgent() {
+    connecting = true; $("mic").classList.add("on"); status("Connecting…");
+    try {
+      const r = await fetch("/api/donna/agent", { method: "POST", headers: { "Authorization": "Bearer " + key } });
+      if (r.status === 401) { add("note", "That key didn't work. Paste it again."); key = ""; store.set("donnaKey", ""); showSetup(); return true; }
+      if (r.status !== 200) return false;
+      const { signed_url } = await r.json();
+      const Conversation = await loadSDK();
+      if (!Conversation || !signed_url) return false;
+      await navigator.mediaDevices.getUserMedia({ audio: true });
+      agent = await Conversation.startSession({
+        signedUrl: signed_url, connectionType: "websocket",
+        onConnect: () => { status("Listening… just talk. Tap to hang up."); },
+        onDisconnect: () => { agent = null; $("mic").classList.remove("on"); status("Tap to talk to Donna."); },
+        onModeChange: m => { if (agent) status(m.mode === "speaking" ? "Donna is talking… (just talk to interrupt)" : "Listening…"); },
+        onMessage: m => { if (m && m.message) add(m.source === "user" ? "me" : "her", m.message); },
+        onError: e => { add("note", "Connection trouble: " + (e && e.message ? e.message : e)); },
+      });
+      return true;
+    } catch (e) {
+      if (e && e.name === "NotAllowedError") { add("note", "Allow the microphone: Settings → Apps → Safari → Microphone → Allow."); return true; }
+      return false;
+    } finally { connecting = false; if (!agent) $("mic").classList.remove("on"); }
+  }
+
   let current = null;  // the microphone while it's listening: tapping the mic again stops it and sends what you said
-  function micTap() {
+  async function micTap() {
+    if (!key) { showSetup(); return; }
+    if (agent) { try { await agent.endSession(); } catch (e) {} agent = null; return; }
+    if (connecting) return;
     if (listening && current) { status("Got it…"); try { current.stop(); } catch (e) {} return; }
+    if (agentOK && !busy) {
+      if (await startAgent()) return;
+      agentOK = false;  // not set up: tap-to-talk for the rest of this visit
+      status("");
+    }
     listen(false);
   }
 
@@ -190,7 +233,7 @@
   $("typeform").onsubmit = e => { e.preventDefault(); unlock(); const t = $("typed").value; $("typed").value = ""; ask(t, false); };
   $("mic").onclick = micTap;
 
-  if (!key) showSetup(); else add("note", "Tap the mic and talk. Say goodbye when you're done.");
+  if (!key) showSetup(); else add("note", "Tap the button and just talk. Tap again to hang up.");
 })();
 </script>
 </body></html>
