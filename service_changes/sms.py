@@ -320,6 +320,9 @@ class TextDesk:
         self.state.setdefault("convos", {})
         self.state.setdefault("counts", {})
 
+    def log(self, addr: str, what: str) -> None:
+        print(time.strftime("%H:%M"), f"{self.word} from {self.masked(addr)}: {what}", flush=True)
+
     def save(self) -> None:
         self.state["seen"] = self.state["seen"][-2000:]
         tmp = self.state_path + ".tmp"
@@ -353,6 +356,7 @@ class TextDesk:
         if cmd and demo.allowed(key, self.key):
             return self.demo_command(phone, cmd.group(1))
         if key in self.state.get("demo", {}):
+            self.log(phone, "in demo mode")
             return self.demo_text(phone, body)
         who = self.contacts().get(self.key(phone))
         today = datetime.now(ALASKA).strftime("%Y-%m-%d")
@@ -361,8 +365,12 @@ class TextDesk:
         self.state["counts"] = {k: v for k, v in self.state["counts"].items() if k.startswith(today)}
         masked = self.masked(phone)
         if not who:
+            p = self.state.get("pending", {}).get(self.key(phone))
+            self.log(phone, "unknown number: " + ("asked who they are" if p is None else
+                     f"sign-up {p.get('stage')}, held for the office to approve"))
             return self.sign_up(phone, body, sid, n)
         if n > MAX_TEXTS_PER_DAY:
+            self.log(phone, f"over {MAX_TEXTS_PER_DAY} today, not answered")
             if n == MAX_TEXTS_PER_DAY + 1:
                 self.office(f"⚠️ {who['name'] or 'A customer'} {masked} has sent {MAX_TEXTS_PER_DAY} {self.word}s today; "
                             "I've stopped answering them until tomorrow.", {"kind": "sms_limit"})
@@ -387,6 +395,7 @@ class TextDesk:
             c.account_number = None
         acct = parsed.account_number
 
+        self.log(phone, f"{parsed.category.value} for {acct or 'no account yet'}")
         if parsed.category == Category.not_a_request:
             self.state["convos"].pop(self.key(phone), None)
             return
@@ -561,6 +570,10 @@ class TextDesk:
                 continue
             text = m.get("text", "")
             add, rem = self.add_cmd.match(text), self.remove_cmd.match(text)
+            if re.match(r"^\s*(add|approve|remove|delete)\b", text, re.I) and m["ts"] not in self.__dict__.setdefault("logged", set()):
+                self.logged.add(m["ts"])
+                print(time.strftime("%H:%M"), f"{self.word} office command: " + (
+                    "add" if add else "remove" if rem else f"not understood: {text[:80]!r}"), flush=True)
             if rem:
                 ok = self.remove_contact(rem.group(1))
                 self.state.get("pending", {}).pop(self.key(rem.group(1)), None)
