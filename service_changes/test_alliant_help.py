@@ -255,3 +255,16 @@ def test_donna_simple_address(monkeypatch):
     assert get("/api/donna?key=" + "k" * 32 + "&text=How%20are%20things%20going%3F") == (200, b"Hi Harvey.")
     assert got[-1] == {"text": "How are things going?", "convo": "phone"}
     assert get("/api/donna?key=nope&text=hi")[0] == 404 and len(got) == 1
+
+
+def test_donna_page_has_no_key(monkeypatch):
+    from .webchat import make_handler
+    monkeypatch.setenv("OWNER_VOICE_TOKEN", "k" * 32)
+    H = make_handler(None, "https://x")
+    sent = []
+    h = H.__new__(H)
+    h.path, h.headers = "/donna", {}
+    h._send = lambda code, body, ctype, cache=0: sent.append((code, body, ctype))
+    h.do_GET()
+    code, body, ctype = sent[-1]
+    assert code == 200 and ctype.startswith("text/html") and b"/api/donna" in body and b"k" * 32 not in body

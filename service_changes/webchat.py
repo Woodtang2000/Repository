@@ -392,6 +392,7 @@ def slack_poster(slack, data_dir: str, sales_channel: str, desk_channel: str):
 
 WIDGET = os.path.join(REPO, "website_chat", "widget.js")
 QUOTE_PAGE = os.path.join(REPO, "website_chat", "quote.html")
+DONNA_PAGE = os.path.join(REPO, "website_chat", "donna.html")  # Scott's talk-to-Donna page (no key in it)
 LOGOS = {"sw": os.path.join(REPO, "brand", "logo_sw.png"), "tlg": os.path.join(REPO, "brand", "logo_tlg.png")}
 
 
@@ -440,6 +441,9 @@ def make_handler(chat: Chat, public_url: str):
                 return self._send(200, b"ok", "text/plain")
             if u.path == "/api/donna":  # the simple shortcut: .../api/donna?key=...&text=what he said
                 return self._donna(q)
+            if u.path == "/donna":  # Scott's "talk to Donna" page for his iPhone home screen; the key is typed in on the phone
+                with open(DONNA_PAGE, "rb") as f:
+                    return self._send(200, f.read(), "text/html; charset=utf-8")
             if u.path == "/widget.js":
                 site = (q.get("site") or ["sw"])[0]
                 if site not in COMPANIES:

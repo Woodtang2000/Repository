@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Donna">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="robots" content="noindex">
+<title>Donna</title>
+<link rel="apple-touch-icon" href="/logo/sw.png">
+<style>
+  :root{--bg:#0f1420;--card:#1a2232;--ink:#f2f4f8;--dim:#9aa5b8;--gold:#f9af10;--me:#2b3a55}
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:-apple-system,"SF Pro Text","Helvetica Neue",Arial,sans-serif}
+  body{display:flex;flex-direction:column;padding:env(safe-area-inset-top) 16px env(safe-area-inset-bottom)}
+  header{text-align:center;padding:18px 0 6px}
+  header h1{margin:0;font-size:26px;letter-spacing:.5px}
+  header p{margin:4px 0 0;color:var(--dim);font-size:14px}
+  #log{flex:1;overflow-y:auto;padding:10px 0;display:flex;flex-direction:column;gap:10px}
+  .b{max-width:85%;padding:10px 14px;border-radius:18px;font-size:17px;line-height:1.35;white-space:pre-wrap}
+  .me{align-self:flex-end;background:var(--me)}
+  .her{align-self:flex-start;background:var(--card)}
+  .note{align-self:center;color:var(--dim);font-size:14px;text-align:center}
+  #controls{padding:10px 0 22px;display:flex;flex-direction:column;align-items:center;gap:12px}
+  #mic{width:96px;height:96px;border-radius:50%;border:0;background:var(--gold);color:#111;font-size:40px;box-shadow:0 0 0 0 rgba(249,175,16,.6)}
+  #mic.on{animation:pulse 1.2s infinite}
+  #mic:disabled{opacity:.5}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(249,175,16,.6)}70%{box-shadow:0 0 0 22px rgba(249,175,16,0)}100%{box-shadow:0 0 0 0 rgba(249,175,16,0)}}
+  #status{color:var(--dim);font-size:15px;min-height:20px}
+  form{display:flex;gap:8px;width:100%}
+  input{flex:1;font-size:17px;padding:10px 12px;border-radius:12px;border:1px solid #33405a;background:var(--card);color:var(--ink)}
+  button.small{font-size:16px;padding:10px 14px;border-radius:12px;border:0;background:#33405a;color:var(--ink)}
+  #setup{display:none;flex-direction:column;gap:10px;padding:20px 0}
+  #setup p{color:var(--dim);margin:0}
+</style>
+</head><body>
+<header><h1>Donna</h1><p id="sub">Tap the mic and talk.</p></header>
+
+<div id="setup">
+  <p>One-time setup: paste your Donna key (from the server). It stays on this phone only.</p>
+  <form id="keyform"><input id="key" type="password" autocomplete="off" placeholder="Paste key"><button class="small">Save</button></form>
+</div>
+
+<div id="log"></div>
+
+<div id="controls">
+  <button id="mic" aria-label="Talk">🎙️</button>
+  <div id="status"></div>
+  <form id="typeform"><input id="typed" placeholder="Or type here" autocomplete="off"><button class="small">Send</button></form>
+</div>
+
+<script>
+(function () {
+  const $ = id => document.getElementById(id);
+  const store = {
+    get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
+  };
+  let key = store.get("donnaKey") || "";
+  const convo = "phone-" + (store.get("donnaConvo") || (Date.now() + "")); store.set("donnaConvo", convo.slice(6));
+  const Rec = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let busy = false, listening = false, voice = null;
+
+  function add(cls, text) {
+    const d = document.createElement("div"); d.className = "b " + cls; d.textContent = text;
+    if (cls === "note") d.className = "note";
+    $("log").appendChild(d); $("log").scrollTop = $("log").scrollHeight;
+  }
+  function status(t) { $("status").textContent = t || ""; }
+
+  function pickVoice() {
+    const vs = speechSynthesis.getVoices().filter(v => /^en/i.test(v.lang));
+    const like = ["Ava (Premium)", "Zoe (Premium)", "Ava (Enhanced)", "Zoe (Enhanced)", "Samantha (Enhanced)", "Ava", "Zoe", "Samantha"];
+    for (const n of like) { const v = vs.find(v => v.name === n); if (v) return v; }
+    return vs.find(v => /female|samantha|ava|zoe|allison|susan/i.test(v.name)) || vs[0] || null;
+  }
+  if ("speechSynthesis" in window) { voice = pickVoice(); speechSynthesis.onvoiceschanged = () => { voice = pickVoice(); }; }
+
+  function say(text) {
+    if (!("speechSynthesis" in window)) return;
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    if (voice) u.voice = voice;
+    u.rate = 1.02;
+    speechSynthesis.speak(u);
+  }
+
+  async function ask(text) {
+    text = (text || "").trim();
+    if (!text || busy) return;
+    if (!key) { showSetup(); return; }
+    busy = true; $("mic").disabled = true;
+    add("me", text); status("Donna is thinking…");
+    try {
+      const r = await fetch("/api/donna", {
+        method: "POST",
+        headers: { "Authorization": "Bearer " + key, "Content-Type": "application/json" },
+        body: JSON.stringify({ text, convo }),
+      });
+      if (r.status === 404) { add("note", "That key didn't work. Paste it again."); key = ""; store.set("donnaKey", ""); showSetup(); return; }
+      const reply = (await r.text()).trim();
+      add("her", reply); say(reply); status("");
+    } catch (e) {
+      add("note", "Couldn't reach Donna. Check your connection and try again."); status("");
+    } finally { busy = false; $("mic").disabled = false; }
+  }
+
+  function listen() {
+    if (!key) { showSetup(); return; }
+    if (!Rec) { status("Voice isn't available in this browser. Type below."); $("typed").focus(); return; }
+    if (listening || busy) return;
+    if ("speechSynthesis" in window) { speechSynthesis.cancel(); speechSynthesis.speak(new SpeechSynthesisUtterance("")); } // unlocks speech on iPhone
+    const rec = new Rec();
+    rec.lang = "en-US"; rec.interimResults = true; rec.continuous = false;
+    let heard = "";
+    rec.onstart = () => { listening = true; $("mic").classList.add("on"); status("Listening…"); };
+    rec.onresult = e => { heard = Array.from(e.results).map(r => r[0].transcript).join(" "); status(heard); };
+    rec.onerror = e => {
+      if (e.error === "not-allowed" || e.error === "service-not-allowed")
+        add("note", "Allow the microphone for this page: Settings → Apps → Safari → Microphone → Allow (and Speech Recognition).");
+    };
+    rec.onend = () => { listening = false; $("mic").classList.remove("on"); status(""); if (heard.trim()) ask(heard); };
+    try { rec.start(); } catch (e) { status("Tap the mic again."); }
+  }
+
+  function showSetup() { $("setup").style.display = "flex"; $("key").focus(); }
+  $("keyform").onsubmit = e => {
+    e.preventDefault();
+    key = $("key").value.trim(); store.set("donnaKey", key); $("key").value = "";
+    $("setup").style.display = "none"; add("note", "Saved. Tap the mic and talk.");
+  };
+  $("typeform").onsubmit = e => { e.preventDefault(); const t = $("typed").value; $("typed").value = ""; ask(t); };
+  $("mic").onclick = listen;
+
+  if (!key) showSetup(); else add("note", "Tap the mic and talk. Say goodbye when you're done.");
+})();
+</script>
+</body></html>
