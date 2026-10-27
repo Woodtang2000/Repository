@@ -14,6 +14,9 @@ class Slack:
     def chat_update(self, channel, ts, text, attachments=None, metadata=None):
         self.msgs[ts].update(attachments=attachments, metadata=metadata)
 
+    def chat_postEphemeral(self, channel, user, text):
+        self.thread.append(("ephemeral", text))
+
     def chat_postMessage(self, channel, text, thread_ts=None, **kw):
         self.thread.append((thread_ts, text))
 
@@ -28,7 +31,7 @@ def setup(tmp_path):
     slack = Slack()
     readbacks = []
     desk = SimpleNamespace(slack=slack, desk_id="CDESK", data_dir=str(tmp_path), me="UBOT",
-                           is_office=lambda u: u == "UANA", name=lambda u: {"UANA": "Ana Faamita"}.get(u, u),
+                           is_office=lambda u: u == "UANA", is_owner=lambda u: u == "U4KFSQCDQ", name=lambda u: {"UANA": "Ana Faamita"}.get(u, u),
                            send_readback=lambda t, user, notes: readbacks.append((t["ts"], user, notes)))
     t = ticket()
     slack.msgs[t["ts"]] = t
@@ -47,7 +50,8 @@ def test_button_then_entered(tmp_path):
     jobs, slack, t, readbacks = setup(tmp_path)
     assert jobs.offer([t], set()) == 1 and "donna" in blocks(t)
     assert jobs.offer([t], set()) == 0  # once
-    assert jobs.queue(tap("UDRIVER")) == "ignored" and jobs.next() is None  # office staff only
+    assert jobs.queue(tap("UDRIVER")).startswith("ignored") and jobs.next() is None  # office staff only
+    assert slack.thread.pop() == ("ephemeral", "Only the office can send tickets to Donna for Alliant.")
     assert jobs.queue(tap("UANA")) == "queued 100.1"
     assert "donna" not in blocks(t) and "Queued for Donna · asked by Ana" in str(t["attachments"])
     job = jobs.next()
@@ -103,3 +107,8 @@ def test_workstation_key(monkeypatch):
     h._send = lambda code, b, ctype, cache=0: sent.append((code, b))
     h.do_GET()
     assert sent[-1][0] == 200 and b"Never change anything in the **Billing** box" in sent[-1][1]
+
+
+def test_owner_can_always_send_a_ticket(tmp_path):
+    jobs, slack, t, readbacks = setup(tmp_path)
+    assert jobs.queue(tap("U4KFSQCDQ")) == "queued 100.1"

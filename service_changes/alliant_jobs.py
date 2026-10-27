@@ -72,8 +72,12 @@ class Jobs:
         from .desk import KIND, meta
         user = payload.get("user", {}).get("id")
         ts = next((a.get("value") for a in payload.get("actions", []) if a.get("action_id") == ACTION), None)
-        if not ts or not self.desk.is_office(user):
-            return "ignored"
+        allowed = self.desk.is_office(user) or getattr(self.desk, "is_owner", lambda u: False)(user)
+        if not ts or not allowed:
+            if ts and user:  # say why, so a tap never just vanishes
+                self.desk.slack.chat_postEphemeral(channel=self.desk.desk_id, user=user,
+                                                   text="Only the office can send tickets to Donna for Alliant.")
+            return f"ignored: {self.desk.name(user)} isn't on the office list"
         r = self.desk.slack.conversations_history(channel=self.desk.desk_id, latest=ts, inclusive=True, limit=1,
                                                    include_all_metadata=True)
         t = next((m for m in r.get("messages", []) if m["ts"] == ts), None)
