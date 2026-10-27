@@ -441,6 +441,9 @@ def make_handler(chat: Chat, public_url: str):
                 return self._send(200, b"ok", "text/plain")
             if u.path == "/api/donna":  # the simple shortcut: .../api/donna?key=...&text=what he said
                 return self._donna(q)
+            if u.path == "/donna-icon.png":  # Donna's home-screen icon (navy and gold, like Squirrel Tamer's acorn)
+                with open(os.path.join(REPO, "website_chat", "donna_icon.png"), "rb") as f:
+                    return self._send(200, f.read(), "image/png", cache=86400)
             if u.path == "/donna":  # Scott's "talk to Donna" page for his iPhone home screen; the key is typed in on the phone
                 with open(DONNA_PAGE, "rb") as f:
                     return self._send(200, f.read(), "text/html; charset=utf-8")

@@ -268,3 +268,6 @@ def test_donna_page_has_no_key(monkeypatch):
     h.do_GET()
     code, body, ctype = sent[-1]
     assert code == 200 and ctype.startswith("text/html") and b"/api/donna" in body and b"k" * 32 not in body
+    h.path = "/donna-icon.png"
+    h.do_GET()
+    assert sent[-1][0] == 200 and sent[-1][2] == "image/png" and sent[-1][1][:4] == b"\x89PNG"
