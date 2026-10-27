@@ -35,6 +35,8 @@ Account 1205-1-00004 = Account **1205**, Branch **1** (Snow White; 2 = The Laund
 - Never touch the **Locking** box, Stop Customer, Seasonal, or New Business on Customer Entry.
 - Never change an account the ticket doesn't name, and never more than the ticket asks.
 - Never type passwords or MFA codes. Never close or sign out of Alliant or the remote desktop.
+- Never put prices, balances, invoice amounts or anything from A/R in your note: notes are read in Slack.
+- Work only in the Alliant tab in your Claude tab group; never open other sites or other browsers.
 - If a ticket has open questions (❓), a ⚠️ warning, or asks for something these rules don't cover (a hold, a special
   order, a new customer, pricing): `needs_person` with why.
 
