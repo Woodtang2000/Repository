@@ -203,7 +203,8 @@ def test_hey_donna_voice(monkeypatch):
         return False
     chats = []
     monkeypatch.setattr(parser, "owner_chat", lambda c, turns, about, spoken=False: chats.append((turns, spoken)) or "Leave it with me.")
-    d = SimpleNamespace(claude=None, office_lookup=lookup, briefing=lambda: "", pulse=lambda: "PULSE")
+    d = SimpleNamespace(claude=None, office_lookup=lookup, briefing=lambda: "", pulse=lambda: "PULSE",
+                        sounds_like_lookup=lambda t: "mats" in t or "Safeway" in t)
     assert Desk.voice(d, "  ", "c1").startswith("I didn't catch anything") and not chats and not asked
     assert Desk.voice(d, "how many mats do they get", "c1") == "Which customer?"
     assert Desk.voice(d, "Safeway 1807", "c1") == "4000-1-01807 SAFEWAY: 6 mats a week"
@@ -306,3 +307,13 @@ def test_spoken_text_flows():
     from .webchat import smooth
     assert smooth("Two hundred a week — want more?") == "Two hundred a week, want more?"
     assert smooth("Here's the deal: towels are late...\nI'll call them.") == "Here's the deal, towels are late, I'll call them."
+
+
+def test_only_account_questions_take_the_slow_lookup():
+    from types import SimpleNamespace
+    from .desk import Desk
+    from .context import Alliant, Customer
+    d = SimpleNamespace(alliant=Alliant(customers=[Customer("4000-1-01807", "SAFEWAY 1807 DELI", "4", ["Mon"])]))
+    look = lambda t: Desk.sounds_like_lookup(d, t)
+    assert look("how many mats does safeway get") and look("what's on route 4") and look("what about Safeway?")
+    assert not look("should we raise prices next year") and not look("tell me a joke")

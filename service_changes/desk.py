@@ -696,9 +696,10 @@ class Desk:
         h = {"user": owner, "ts": f"{now:.6f}",
              "text": f"{ask['q']}\nDonna asked: {ask['said']}\nAnswer: {text}" if ask else text}
         talk["ask"] = None
-        reply = ""
-        if not PULSE.search(text) and self.office_lookup(h, [], channel="voice", say=lambda t, p: heard.append((t, p))) \
-                and heard:
+        reply, kind = "", "chat"
+        if (ask or self.sounds_like_lookup(text)) and not PULSE.search(text) \
+                and self.office_lookup(h, [], channel="voice", say=lambda t, p: heard.append((t, p))) and heard:
+            kind = "lookup"
             said, payload = heard[-1]
             reply = spoken(said)
             if payload.get("kind") == "office_ask":
@@ -707,7 +708,23 @@ class Desk:
             about = self.briefing() + ("\n\n" + self.pulse() if PULSE.search(text) else "")
             reply = owner_chat(self.claude, talk["turns"][-16:] + [{"role": "user", "content": text}], about, spoken=True)
         talk["turns"] += [{"role": "user", "content": text}, {"role": "assistant", "content": reply or "I'm here."}]
+        print(time.strftime("%H:%M"), f"voice: answered ({kind}) in {time.time() - now:.1f}s", flush=True)
         return reply or "I'm here. What do you need?"
+
+    def sounds_like_lookup(self, text: str) -> bool:
+        """Worth the (slower) account lookup: a number, an account or route word, or a customer's name. Everything else
+        goes straight to Donna, which is much quicker when you're talking."""
+        low = text.lower()
+        if re.search(r"\d|\bhow (many|much)\b|\b(account|route|stop|deliver\w*|garments?|wearers?|uniforms?|mats?|towels?|"
+                     r"aprons?|mops?|napkins?|shirts?|pants|coats?|sheets?|linens?|items?|barcode)\b", low):
+            return True
+        words = set(re.findall(r"[a-z']{4,}", low))
+        names = getattr(self, "_name_words", None)
+        if names is None or names[0] is not self.alliant:
+            common = {"the", "inc", "llc", "company", "service", "services", "store", "center", "alaska", "anchorage"}
+            names = (self.alliant, {w for c in self.alliant.customers for w in re.findall(r"[a-z']{4,}", c.name.lower())} - common)
+            self._name_words = names
+        return bool(words & names[1])
 
     def serve_voice(self, port: int = 0) -> None:
         """Answer /voice on 127.0.0.1 for the website server (webchat.py), which checks Scott's key before passing it on."""

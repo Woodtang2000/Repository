@@ -631,7 +631,8 @@ def smooth(text: str) -> str:
 
 def speak(text: str) -> bytes | None:
     """Donna's voice: `text` as MP3 from ElevenLabs, or None when it isn't set up or doesn't answer. ELEVENLABS_VOICE_ID
-    picks the voice (from the ElevenLabs Voice Library); ELEVENLABS_MODEL trades quality for speed."""
+    picks the voice (from the ElevenLabs Voice Library); ELEVENLABS_MODEL trades speed for quality
+    (eleven_flash_v2_5 answers fastest; eleven_multilingual_v2 is richer but slower)."""
     key = os.environ.get("ELEVENLABS_API_KEY", "").strip()
     if not key:
         return None
@@ -641,13 +642,16 @@ def speak(text: str) -> bytes | None:
                 "similarity_boost": 0.8, "style": float(os.environ.get("ELEVENLABS_STYLE", "0.3")),
                 "use_speaker_boost": True, "speed": float(os.environ.get("ELEVENLABS_SPEED", "1.12"))}  # 1.0 is the voice's own pace
     for attempt in (settings, {k: v for k, v in settings.items() if k != "speed"}):  # an older model may not take speed
-        body = {"text": text, "model_id": os.environ.get("ELEVENLABS_MODEL", "eleven_multilingual_v2"), "voice_settings": attempt}
+        body = {"text": text, "model_id": os.environ.get("ELEVENLABS_MODEL", "eleven_flash_v2_5"), "voice_settings": attempt}
         req = urllib.request.Request(f"https://api.elevenlabs.io/v1/text-to-speech/{voice}?output_format=mp3_44100_128",
                                      data=json.dumps(body).encode(), method="POST",
                                      headers={"xi-api-key": key, "Content-Type": "application/json", "Accept": "audio/mpeg"})
         try:
+            t0 = time.time()
             with urllib.request.urlopen(req, timeout=60) as r:
-                return r.read(10_000_000)
+                audio = r.read(10_000_000)
+            print(time.strftime("%H:%M"), f"donna voice: {len(text)} characters spoken in {time.time() - t0:.1f}s", flush=True)
+            return audio
         except urllib.error.HTTPError as e:
             print(time.strftime("%H:%M"), "donna voice (ElevenLabs) failed:", e.code, e.read(300)[:300], flush=True)
             if e.code not in (400, 422):
