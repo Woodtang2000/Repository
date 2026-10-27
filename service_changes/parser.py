@@ -1,4 +1,5 @@
 """Turn one route-channel Slack message into a ParsedMessage with Claude."""
+import os
 from typing import Optional
 
 import anthropic
@@ -178,7 +179,7 @@ def owner_chat(client: anthropic.Anthropic, turns: list[dict], briefing: str, sp
               "that you're an AI, but if he asks, say so honestly."
               + (SPOKEN if spoken else "") + "\n\nWhere things stand:\n" + briefing)
     response = client.messages.create(
-        model=MODEL,
+        model=os.environ.get("VOICE_MODEL", "claude-sonnet-5-5") if spoken else MODEL,
         max_tokens=2000,
         system=system,
         messages=turns,

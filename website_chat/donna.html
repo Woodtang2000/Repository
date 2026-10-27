@@ -152,17 +152,22 @@
     if (!auto) { player.pause(); if ("speechSynthesis" in window) speechSynthesis.cancel(); unlock(); }  // a tap interrupts her
     if (!auto && "speechSynthesis" in window) speechSynthesis.speak(new SpeechSynthesisUtterance(""));  // unlocks speech on iPhone
     const rec = new Rec();
-    rec.lang = "en-US"; rec.interimResults = true; rec.continuous = false;
+    rec.lang = "en-US"; rec.interimResults = true; rec.continuous = true;
+    // The phone waits a long time to decide you've stopped talking: stop after a short pause instead, and give up
+    // quietly if nothing is said at all.
+    let quiet = null;
+    const stopSoon = ms => { clearTimeout(quiet); quiet = setTimeout(() => { try { rec.stop(); } catch (e) {} }, ms); };
+    stopSoon(auto ? 7000 : 9000);
     let heard = "";
     rec.onstart = () => { listening = true; $("mic").classList.add("on"); status("Listening…"); };
-    rec.onresult = e => { heard = Array.from(e.results).map(r => r[0].transcript).join(" "); status(heard); };
+    rec.onresult = e => { heard = Array.from(e.results).map(r => r[0].transcript).join(" "); status(heard); stopSoon(1100); };
     rec.onerror = e => {
       if (auto) return;  // the phone wouldn't let her start listening on her own: onend asks for a tap
       if (e.error === "not-allowed" || e.error === "service-not-allowed")
         add("note", "Allow the microphone for this page: Settings → Apps → Safari → Microphone → Allow (and Speech Recognition).");
     };
     rec.onend = () => {
-      listening = false; $("mic").classList.remove("on");
+      clearTimeout(quiet); listening = false; $("mic").classList.remove("on");
       if (heard.trim()) { status(""); ask(heard, true); }
       else status(auto ? "Tap the mic to keep talking." : "");
     };
