@@ -569,9 +569,12 @@ class Desk:
             if t["ts"] in done:
                 self.send_readback(t, *done[t["ts"]])
                 counts["readback"] += 1
-        if os.environ.get("DONNA_ALLIANT", "off").lower() == "on":  # Donna's workstation is set up (alliant_jobs.py)
+        only = os.environ.get("DONNA_ALLIANT", "off").strip()  # on, off, or account numbers to try her on ("5045")
+        if only.lower() != "off":  # Donna's workstation is set up (alliant_jobs.py)
             try:
-                self.jobs().offer(tickets, set(done))
+                bases = [] if only.lower() == "on" else [a.strip() for a in only.split(",") if a.strip()]
+                self.jobs().offer([t for t in tickets if not bases or any(
+                    (meta(t) or {}).get("account", "").startswith(b) for b in bases)], set(done))
             except Exception as e:
                 print(time.strftime("%H:%M"), "alliant jobs: button not added:", e, flush=True)
         open_t: dict[tuple[str, str], list[str]] = {}
