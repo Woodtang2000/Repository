@@ -77,6 +77,28 @@
   }
   if ("speechSynthesis" in window) { voice = pickVoice(); speechSynthesis.onvoiceschanged = () => { voice = pickVoice(); }; }
 
+  // Donna's own voice (ElevenLabs, through the server). iPhone only plays sound started by a tap, so the tap that
+  // sends a question also "unlocks" this player with a moment of silence; the answer then plays in it.
+  const player = new Audio();
+  player.setAttribute("playsinline", "");
+  const SILENCE = "data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//tQxAADB8AhSmxhIIEVCSiJrDCQBTcu3UrAIwUdkRgQbFAZC1CQEwTJ9mjRvBA4UOLD8nKVOWfh+UlK3z/177OXrfOdKl7pyn3Xf//WreyTRUoAWgBgkOAGbZHBgG1OF6zM82DWbZaUmMBptgQhGjsyYqc9ae9XFz280948NMBWInljyzsNRFLPWdnZGWrddDsjK1unuSrVN9jJsK8KuQtQCtMBjCEtImISdNKJOopIpBFpNSMbIHCSRpRR5iakjTiyzLhchUUBwCgyKiweBv/7UsQbg8isVNoMPMjAAAA0gAAABEVFGmgqK////9bP/6XCykxBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq";
+  function unlock() { try { player.src = SILENCE; const p = player.play(); if (p) p.catch(() => {}); } catch (e) {} }
+
+  async function voiced(text) {
+    try {
+      const r = await fetch("/api/donna/voice", {
+        method: "POST",
+        headers: { "Authorization": "Bearer " + key, "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      if (r.status !== 200) return false;
+      const url = URL.createObjectURL(await r.blob());
+      player.src = url;
+      await player.play();
+      return true;
+    } catch (e) { return false; }
+  }
+
   function say(text) {
     if (!("speechSynthesis" in window)) return;
     speechSynthesis.cancel();
@@ -100,7 +122,8 @@
       });
       if (r.status === 404) { add("note", "That key didn't work. Paste it again."); key = ""; store.set("donnaKey", ""); showSetup(); return; }
       const reply = (await r.text()).trim();
-      add("her", reply); say(reply); status("");
+      add("her", reply); status("");
+      if (!(await voiced(reply))) say(reply);
     } catch (e) {
       add("note", "Couldn't reach Donna. Check your connection and try again."); status("");
     } finally { busy = false; $("mic").disabled = false; }
@@ -110,6 +133,7 @@
     if (!key) { showSetup(); return; }
     if (!Rec) { status("Voice isn't available in this browser. Type below."); $("typed").focus(); return; }
     if (listening || busy) return;
+    unlock();
     if ("speechSynthesis" in window) { speechSynthesis.cancel(); speechSynthesis.speak(new SpeechSynthesisUtterance("")); } // unlocks speech on iPhone
     const rec = new Rec();
     rec.lang = "en-US"; rec.interimResults = true; rec.continuous = false;
@@ -130,7 +154,7 @@
     key = $("key").value.trim(); store.set("donnaKey", key); $("key").value = "";
     $("setup").style.display = "none"; add("note", "Saved. Tap the mic and talk.");
   };
-  $("typeform").onsubmit = e => { e.preventDefault(); const t = $("typed").value; $("typed").value = ""; ask(t); };
+  $("typeform").onsubmit = e => { e.preventDefault(); unlock(); const t = $("typed").value; $("typed").value = ""; ask(t); };
   $("mic").onclick = listen;
 
   if (!key) showSetup(); else add("note", "Tap the mic and talk. Say goodbye when you're done.");

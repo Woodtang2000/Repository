@@ -271,3 +271,31 @@ def test_donna_page_has_no_key(monkeypatch):
     h.path = "/donna-icon.png"
     h.do_GET()
     assert sent[-1][0] == 200 and sent[-1][2] == "image/png" and sent[-1][1][:4] == b"\x89PNG"
+
+
+def test_donnas_voice_from_elevenlabs(monkeypatch):
+    import io, json
+    import urllib.request
+    from . import webchat
+    monkeypatch.setenv("OWNER_VOICE_TOKEN", "k" * 32)
+    monkeypatch.setattr("time.sleep", lambda s: None)
+    calls = []
+    monkeypatch.setattr(urllib.request, "urlopen", lambda req, timeout: calls.append(req) or io.BytesIO(b"ID3mp3"))
+    H = webchat.make_handler(None, "https://x")
+    sent = []
+
+    def post(auth, text):
+        h = H.__new__(H)
+        body = json.dumps({"text": text}).encode()
+        h.path, h.rfile, h.headers = "/api/donna/voice", io.BytesIO(body), {"Authorization": auth, "Content-Length": str(len(body))}
+        h._send = lambda code, b, ctype, cache=0: sent.append((code, b, ctype))
+        h.do_POST()
+        return sent[-1]
+    monkeypatch.delenv("ELEVENLABS_API_KEY", raising=False)
+    assert post("Bearer " + "k" * 32, "Hi Harvey.")[0] == 204 and not calls  # not set up: the phone's own voice
+    monkeypatch.setenv("ELEVENLABS_API_KEY", "el-test")
+    monkeypatch.setenv("ELEVENLABS_VOICE_ID", "VOICE1")
+    assert post("Bearer " + "k" * 32, "Hi Harvey.") == (200, b"ID3mp3", "audio/mpeg")
+    assert calls[-1].full_url.startswith("https://api.elevenlabs.io/v1/text-to-speech/VOICE1")
+    assert calls[-1].headers["Xi-api-key"] == "el-test" and json.loads(calls[-1].data)["text"] == "Hi Harvey."
+    assert post("Bearer nope", "x")[0] == 404 and len(calls) == 1  # never spends voice credit for a stranger

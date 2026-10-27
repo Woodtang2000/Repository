@@ -496,6 +496,8 @@ def make_handler(chat: Chat, public_url: str):
                 return self._quote()
             if path == "/api/donna":
                 return self._donna()
+            if path == "/api/donna/voice":
+                return self._donna_voice()
             if path != "/api/chat":
                 return self._send(404, b"not found", "text/plain")
             try:
@@ -515,18 +517,39 @@ def make_handler(chat: Chat, public_url: str):
                 print(time.strftime("%H:%M"), "error:", e, flush=True)
                 self._send(200, json.dumps({"reply": "Sorry, something went wrong on our end. Please call us at "
                                                      "(907) 222-7738.", "events": []}).encode(), "application/json")
+        def _owner(self, given: str) -> bool:
+            """Is this Scott's key (OWNER_VOICE_TOKEN, 24+ characters)? A wrong one waits a second, to slow guessing."""
+            import hmac
+            key = os.environ.get("OWNER_VOICE_TOKEN", "")
+            if len(key) >= 24 and hmac.compare_digest(given.encode(), key.encode()):
+                return True
+            time.sleep(1)
+            return False
+
+        def _donna_voice(self):
+            """Donna's answer as speech from ElevenLabs (ELEVENLABS_API_KEY, ELEVENLABS_VOICE_ID), for the talk page.
+            204 when no voice service is set up or it fails, so the page falls back to the iPhone's own voice."""
+            if not self._owner((self.headers.get("Authorization") or "").removeprefix("Bearer ").strip()):
+                return self._send(404, b"not found", "text/plain")
+            try:
+                n = min(int(self.headers.get("Content-Length") or 0), 8000)
+                text = str(json.loads(self.rfile.read(n) or b"{}").get("text") or "").strip()[:1500]
+            except ValueError:
+                return self._send(400, b"bad request", "text/plain")
+            audio = speak(text) if text else None
+            if not audio:
+                return self._send(204, b"", "text/plain")
+            self._send(200, audio, "audio/mpeg")
+
         def _donna(self, q: dict | None = None):
             """Scott's "Hey Donna" iPhone Shortcut: his private key, then on to the desk (desk.voice) on this server.
             Either a GET with ?key=...&text=... in the address (nothing to set up in the shortcut but the address), or a
             POST with "Authorization: Bearer <key>" and {"text", "convo"}."""
-            import hmac
-            key = os.environ.get("OWNER_VOICE_TOKEN", "")
             if q is not None:
                 given = (q.get("key") or [""])[0].strip()
             else:
                 given = (self.headers.get("Authorization") or "").removeprefix("Bearer ").strip()
-            if len(key) < 24 or not hmac.compare_digest(given.encode(), key.encode()):
-                time.sleep(1)  # slows down guessing
+            if not self._owner(given):
                 return self._send(404, b"not found", "text/plain")
             try:
                 if q is not None:
@@ -564,6 +587,26 @@ def make_handler(chat: Chat, public_url: str):
                 self._send(200, json.dumps({"error": "Sorry, something went wrong on our end. Please call us at "
                                                      "(907) 222-7738."}).encode(), "application/json")
     return H
+
+
+def speak(text: str) -> bytes | None:
+    """Donna's voice: `text` as MP3 from ElevenLabs, or None when it isn't set up or doesn't answer. ELEVENLABS_VOICE_ID
+    picks the voice (from the ElevenLabs Voice Library); ELEVENLABS_MODEL trades quality for speed."""
+    key = os.environ.get("ELEVENLABS_API_KEY", "").strip()
+    if not key:
+        return None
+    voice = os.environ.get("ELEVENLABS_VOICE_ID", "").strip() or "21m00Tcm4TlvDq8ikWAM"
+    body = {"text": text, "model_id": os.environ.get("ELEVENLABS_MODEL", "eleven_multilingual_v2"),
+            "voice_settings": {"stability": 0.45, "similarity_boost": 0.8, "style": 0.35, "use_speaker_boost": True}}
+    req = urllib.request.Request(f"https://api.elevenlabs.io/v1/text-to-speech/{voice}?output_format=mp3_44100_128",
+                                 data=json.dumps(body).encode(), method="POST",
+                                 headers={"xi-api-key": key, "Content-Type": "application/json", "Accept": "audio/mpeg"})
+    try:
+        with urllib.request.urlopen(req, timeout=60) as r:
+            return r.read(10_000_000)
+    except Exception as e:
+        print(time.strftime("%H:%M"), "donna voice (ElevenLabs) failed:", str(e)[:200], flush=True)
+        return None
 
 
 def keep_pictures(data_dir: str) -> None:
