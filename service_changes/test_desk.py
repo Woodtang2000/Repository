@@ -169,7 +169,7 @@ def test_main_channel_loop(setup):
     # 2. The driver answers in the main channel: one ticket, read together with the request and the question.
     slack.say("C1", "U1", "6")
     assert d.run_once()["ticket"] == 1
-    assert "Service Desk asked:" in CALLS[-1] and "Mike Driver: 6" in CALLS[-1]
+    assert "Donna (Service Desk) asked:" in CALLS[-1] and "Mike Driver: 6" in CALLS[-1]
     [t] = slack.bot_posts("D1", "ticket")
     assert t["text"].startswith("*W1*  WENDY'S #4412") and "4 → *6*" in t["text"] and "Correction" not in t["text"]
     assert d.run_once() == NOTHING
@@ -330,7 +330,7 @@ def test_driver_question_is_answered_from_alliant(setup, monkeypatch):
     # A follow-up in the channel is read with the first question; one the data can't answer goes to the office.
     slack.say("C1", "U1", "and shop towels?")
     assert d.run_once()["answered"] == 1
-    assert "Service Desk answered:" in CALLS[-1]
+    assert "Donna (Service Desk) answered:" in CALLS[-1]
     assert "I've asked the office" in slack.bot_posts("C1", "answer")[-1]["text"]
     [t] = slack.bot_posts("D1", "ticket")
     assert "Driver question I couldn't answer" in t["text"]

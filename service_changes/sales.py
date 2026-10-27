@@ -127,7 +127,7 @@ def handle_action(slack, payload: dict, data_dir: str, create=salesforce.create_
         return "already in Salesforce"
     if not salesforce.configured():
         slack.chat_postEphemeral(channel=channel, user=payload["user"]["id"],
-                                 text="Salesforce isn't connected to the Service Desk yet, so nothing was created.")
+                                 text="Salesforce isn't connected to Donna yet, so nothing was created.")
         return "salesforce not configured"
     if "found" not in lead:
         lead["found"] = find(lead)

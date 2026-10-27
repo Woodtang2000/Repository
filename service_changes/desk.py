@@ -47,6 +47,10 @@ DONE_REACTIONS = {"white_check_mark", "heavy_check_mark", "ballot_box_with_check
 DONE_WORDS = re.compile(r"^\s*(done|changed|entered|complete[d]?|made|updated|ok(ay)?|got it|all set|finished)\b[\s.!]*$", re.I)
 MAX_ASKS = 2
 MAX_QUESTIONS = 3  # per message to a driver; the rest come up again once they answer
+PULSE = re.compile(r"\b(how('?s| is| are)? (things|everything|it|we|the team|business|operations?)( going| doing)?|vibe|pulse|"
+                   r"morale|feel(ing)?|opinion|better|improve|feedback|complain\w*|brief|catch me up|what'?s going on|"
+                   r"what am i missing|happening)\b", re.I)
+BRIEF_HOUR = int(os.environ.get("OWNER_BRIEF_HOUR", "7"))  # Donna's morning read for Scott, weekdays from this hour
 HOW_TO = re.compile(r"\bhow (do|can|would|should) (i|you|we)\b.*\b(alliant|handheld|enter|make|set up|print|run)\b", re.I)  # Alliant how-to notes
 VERIFY_HOUR = 7  # entry check posts once the morning's Alliant data is in, from this hour (Alaska)
 STOCKROOM = os.environ.get("STOCKROOM_CHANNEL", "stockroom")  # Ana's channel: weekly garment data checks
@@ -130,7 +134,7 @@ class Desk:
                 break
         missing = [n for n in [desk, *routes] if n not in channels]
         if missing:
-            sys.exit("Invite @Service Desk to " + ", ".join("#" + n for n in missing) + " first.")
+            sys.exit("Invite the bot (@Donna, formerly @Service Desk) to " + ", ".join("#" + n for n in missing) + " first.")
         self.desk_name, self.desk_id = desk, channels[desk]
         self.routes = {n: channels[n] for n in routes}
         self.channels = channels
@@ -201,11 +205,11 @@ class Desk:
             if _is_bot(m, self.me):
                 kind = (meta(m) or {}).get("kind")
                 if kind == "question":
-                    lines.append(f"Service Desk asked: {text}")
+                    lines.append(f"Donna (Service Desk) asked: {text}")
                 elif kind == "readback":
                     lines.append(f"Office entered it and confirmed: {text}")
                 elif kind == "answer":
-                    lines.append(f"Service Desk answered: {text}")
+                    lines.append(f"Donna (Service Desk) answered: {text}")
             elif new and m is src:
                 lines.append(f"{self.name(m.get('user'))} (NEW message, read this one): {text}")
             elif i == 0:
@@ -570,7 +574,7 @@ class Desk:
                       and (meta(b) or {}).get("kind") == "office_ask" and meta(b).get("user") == user
                       and float(h["ts"]) - float(b["ts"]) < 900), None)
         if asked:
-            text = f"{meta(asked)['q']}\nService Desk asked: {asked.get('text', '')}\nAnswer: {text}"
+            text = f"{meta(asked)['q']}\nDonna asked: {asked.get('text', '')}\nAnswer: {text}"
         codes = [b for b in re.findall(r"\b\d{5,14}\b", text) if b in self.alliant.by_barcode]
         if codes:  # "how many washes on 1234567?"
             from .context import barcode_facts
@@ -645,13 +649,16 @@ class Desk:
                 return "lookup"
         if owner and not (self.helper and HOW_TO.search(ev.get("text", ""))):
             from .parser import owner_chat
-            reply = owner_chat(self.claude, self.owner_turns(channel, ev), self.briefing())
+            about = self.briefing()
+            if PULSE.search(ev.get("text", "")):
+                about += "\n\n" + self.pulse()
+            reply = owner_chat(self.claude, self.owner_turns(channel, ev), about)
             self.slack.chat_postMessage(channel=channel, text=reply[:3900] or "I'm here. What do you need?",
                                         unfurl_links=False)
             return "donna"
         if self.helper is None:
             self.slack.chat_postMessage(channel=channel, text="I can answer account, route and garment questions here. "
-                                        "The Alliant how-to notes aren't set up on the Service Desk yet.")
+                                        "The Alliant how-to notes aren't set up for me yet.")
             return "no notes"
         reply, missed = self.helper.answer([{"role": "user", "content": ev.get("text", "")}], user)
         if missed:
@@ -693,9 +700,71 @@ class Desk:
                 out.append(f"{company}: {len(mine)} customer locations on {len({c.route for c in mine})} routes")
         if self.alliant.as_of:
             out.append(f"Alliant data as of {self.alliant.as_of}")
-        out.append("Service Desk handles route-channel changes, customer texts (Twilio), service@ email (Bird), "
+        out.append("You (Donna, the Service Desk bot) handle route-channel changes, customer texts (Twilio), service@ email (Bird), "
                    "the website chat and /quote page, and the morning stockroom garment check.")
         return "\n".join(out)
+
+    def pulse(self, hours: float = 48, limit: int = 60_000) -> str:
+        """What's been said in every channel the bot is in, for Donna's read on the operation: the team's own words,
+        and customers' texts, emails and website chats as they reached the office channel. Never private messages."""
+        since = time.time() - hours * 3600
+        out = []
+        for name, cid in sorted(self.channels.items(), key=lambda kv: kv[0] != self.desk_name):
+            lines = []
+            try:
+                for m in _messages(self.slack, cid, since):
+                    if m.get("subtype") not in (None, "thread_broadcast", "bot_message"):
+                        continue
+                    text = todo_bar.body(m) if not m.get("text") else m["text"]
+                    who = "Donna" if _is_bot(m, self.me) else self.name(m.get("user"))
+                    t = datetime.fromtimestamp(float(m["ts"]), ALASKA).strftime("%a %-I:%M %p")
+                    lines.append(f"[{t}] {who}: {_short(text, 400)}" + (f" ({m['reply_count']} replies)" if m.get("reply_count") else ""))
+            except Exception as e:
+                print(time.strftime("%H:%M"), f"pulse: #{name} unread:", e, flush=True)
+                continue
+            if lines:
+                out.append(f"#{name}:\n" + "\n".join(reversed(lines[:150])))
+        text = "\n\n".join(out)
+        if len(text) > limit:
+            text = text[:limit] + "\n[...more not shown]"
+        return (f"WHAT'S BEEN SAID in the last {hours:.0f} hours, in every Slack channel you're in (customer texts, "
+                "emails and website chats show up as your (Donna's) posts in #" + self.desk_name + "). Give Scott your "
+                "honest read: what's going well (credit people by name), what could be better and what you'd do about "
+                "it, and anything he should step into. Upbeat, but tell him the truth. Talk about how the operation is "
+                "running, not people's private lives; nobody gets singled out over being sick.\n\n"
+                + (text or "(nothing posted)"))
+
+    def owner_brief_pass(self, now: float) -> None:
+        """Weekdays from OWNER_BRIEF_HOUR, once a day: Donna's morning read of the last day, in Scott's private messages."""
+        local = datetime.fromtimestamp(now, ALASKA)
+        if local.weekday() > 4 or local.hour < BRIEF_HOUR or os.environ.get("OWNER_BRIEF", "on").lower() == "off":
+            return
+        mark = os.path.join(self.data_dir, "owner_brief.txt")
+        day = local.strftime("%Y-%m-%d")
+        try:
+            if open(mark).read().strip() == day:
+                return
+        except OSError:
+            pass
+        with open(mark, "w") as f:  # first, so a failure below can't send twice
+            f.write(day)
+        owner = os.environ.get("OWNER_SLACK_ID", "U4KFSQCDQ").split(",")[0].strip()
+
+        def send():
+            try:
+                from .parser import owner_chat
+                hours = 72 if local.weekday() == 0 else 24  # Monday covers the weekend
+                ask = ("Good morning. Give me my morning brief: the few things that matter today, what went well, what "
+                       "could be better, and your honest read on how things are going. Keep it tight.")
+                reply = owner_chat(self.claude, [{"role": "user", "content": ask}],
+                                   self.briefing() + "\n\n" + self.pulse(hours))
+                # A user id as the channel lands in Scott's private messages with the bot (no im:write scope needed)
+                self.slack.chat_postMessage(channel=owner, text=f"☕ *Morning brief*\n{reply}"[:3900], unfurl_links=False)
+                print(time.strftime("%H:%M"), "owner brief sent", flush=True)
+            except Exception as e:
+                print(time.strftime("%H:%M"), "owner brief error:", e, flush=True)
+        import threading
+        threading.Thread(target=send, daemon=True).start()
 
     def office_group(self, text: str, parsed) -> list[str]:
         """Every location under an account number ("4000", "all of 4000") or every customer whose name has all the
@@ -984,7 +1053,7 @@ class Desk:
         self.api_warned = time.time()
         why = "the Anthropic account is out of credit" if "credit" in str(e).lower() else f"Claude refused the request ({e.status_code})"
         try:
-            self.post(self.desk_id, f"⚠️ *Service Desk can't read driver posts right now*: {why}. Posts are waiting with ⏳ "
+            self.post(self.desk_id, f"⚠️ *Donna can't read driver posts right now*: {why}. Posts are waiting with ⏳ "
                       "and will be handled automatically once it's fixed. Please tell Scotty.", {"kind": "api_trouble"})
         except Exception:
             pass
@@ -1012,6 +1081,7 @@ class Desk:
                     self.check_stale(now)
                     self.verify_pass(now)
                     self.stockroom_pass(now)
+                    self.owner_brief_pass(now)
                     # Route passes share an office pass from the last few seconds: during a burst of drivers they
                     # don't queue up behind each other here. Office events (✅, "done") always get a fresh one.
                     if ch not in names or time.time() - fresh["at"] > 3:

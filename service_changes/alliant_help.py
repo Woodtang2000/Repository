@@ -163,7 +163,7 @@ class Helper:
             return None
         root = ev.get("thread_ts") or ev["ts"]
         if not self.notes.ready():
-            text = "The Alliant notes haven't reached the Service Desk yet, so I can't answer here yet. A person will follow up."
+            text = "The Alliant notes haven't reached me yet, so I can't answer here yet. A person will follow up."
             self.slack.chat_postMessage(channel=self.channel, thread_ts=root, text=text)
             return "notes missing"
         try:

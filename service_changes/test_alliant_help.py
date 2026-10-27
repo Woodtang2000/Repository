@@ -144,3 +144,41 @@ def test_scott_gets_donna_in_his_private_messages(monkeypatch):
     assert Desk.dm(d, ev("UDRIVER", "what's our biggest risk?")) == "no notes"  # anyone else: no Donna, no data
     monkeypatch.setenv("OWNER_SLACK_ID", "UOTHER")
     assert not Desk.is_owner(None, "U4KFSQCDQ")
+
+
+def test_donnas_read_on_the_operation_and_morning_brief(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from datetime import datetime
+    from .desk import Desk, PULSE
+    from .context import ALASKA
+    import service_changes.parser as parser
+    import threading
+
+    class S(Slack):
+        def conversations_history(self, channel, **kw):
+            return {"messages": {"CDESK": [{"ts": "1700000000.0", "bot_id": "B1", "text": "📱 Customer text: towels were late again"}],
+                                 "CR4": [{"ts": "1700000100.0", "user": "UMIKE", "text": "Truck 4 heater is out"},
+                                         {"ts": "1700000200.0", "user": "UMIKE", "subtype": "channel_join", "text": "joined"}]}[channel]}
+
+    d = SimpleNamespace(slack=S(), me="UBOT", desk_name="service-desk", channels={"service-desk": "CDESK", "route-4": "CR4"},
+                        name=lambda u: {"UMIKE": "Mike Driver"}.get(u, u), data_dir=str(tmp_path), claude=None,
+                        briefing=lambda: "SW: 3 customers")
+    text = Desk.pulse(d)
+    assert "#service-desk:\n" in text and "Donna: 📱 Customer text: towels were late again" in text
+    assert "Mike Driver: Truck 4 heater is out" in text and "joined" not in text
+    assert text.index("#service-desk") < text.index("#route-4")  # the office channel (customers) first
+    assert PULSE.search("how are things going?") and PULSE.search("what could be better") and not PULSE.search("how many mats at 4000")
+
+    d.pulse = lambda hours=48: Desk.pulse(d, hours)
+    got = {}
+    monkeypatch.setattr(parser, "owner_chat", lambda c, turns, about: got.update(about=about) or "Towels were late twice.")
+    monkeypatch.setattr(threading, "Thread", lambda target, daemon: SimpleNamespace(start=target))
+    monday_6 = datetime(2026, 10, 26, 6, 30, tzinfo=ALASKA).timestamp()
+    Desk.owner_brief_pass(d, monday_6)
+    assert d.slack.posts == []  # before 7
+    Desk.owner_brief_pass(d, monday_6 + 3600)
+    Desk.owner_brief_pass(d, monday_6 + 7200)  # once a day
+    assert d.slack.posts == [{"channel": "U4KFSQCDQ", "text": "☕ *Morning brief*\nTowels were late twice.", "unfurl_links": False}]
+    assert "last 72 hours" in got["about"]  # Monday covers the weekend
+    Desk.owner_brief_pass(d, datetime(2026, 10, 31, 9, tzinfo=ALASKA).timestamp())  # Saturday: none
+    assert len(d.slack.posts) == 1
