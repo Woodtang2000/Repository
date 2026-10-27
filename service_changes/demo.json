@@ -1,0 +1,103 @@
+{
+  "_": "Made-up businesses for showing Donna on a sales call (demo.py). Account numbers start 99, which no real account uses. Edit freely; 'script' is the cheat sheet of texts to send, in order.",
+  "restaurant": {
+    "account": "9901-1-00001", "name": "NORTHERN LIGHTS BISTRO", "contact": "Maria", "label": "Restaurant, bar or café",
+    "items": {"TOWEL BAR MOP GOLD STRIPE": 150, "APRON BLACK BIB": 40, "NAPKIN BLACK": 200, "T/C WHITE 52X52": 24,
+              "MAT CHARCOAL HEATHER 3X5": 3, "MAT BLACK COMFORT FLOW 3X5": 2, "TOWEL OVEN MIT": 6, "MOP WET 24 OZ": 2},
+    "wearers": {"11": ["Maria", "Lopez", {"SHIRT COOK WHITE M": 11, "PANT CHEF WHITE M": 11}],
+                "12": ["Danny", "Kim", {"SHIRT COOK BLACK L": 11}]},
+    "script": [
+      ["How many bar mops do we get each week?", "You get 150 bar mops every week. Want me to bump that up for the busy season?"],
+      ["Can you add 50 more bar mops?", "Consider it done! I've passed it to our office, and I'll text you the moment it's entered."],
+      ["What does Danny get for uniforms?", "Danny Kim gets 11 black cook shirts, size L."],
+      ["We're closed next Tuesday for a holiday, skip our delivery", "Consider it done! I've passed it to our office, and I'll text you the moment it's entered."]
+    ]
+  },
+  "grocery": {
+    "account": "9902-1-00001", "name": "TUNDRA FRESH MARKET DELI", "contact": "Pat", "label": "Grocery, deli, meat or bakery",
+    "items": {"APRON WHITE BIB": 60, "TOWEL BAR MOP GOLD STRIPE": 200, "MAT CHARCOAL HEATHER 3X10": 4, "MAT BLACK COMFORT FLOW 3X5": 4,
+              "TOWEL MICROFIBER BLUE": 50, "MOP WET 24 OZ": 3},
+    "wearers": {"21": ["Pat", "Nguyen", {"COAT BUTCHER WHITE L": 11}], "22": ["Sam", "Olsen", {"COAT BUTCHER WHITE XL": 11}]},
+    "script": [
+      ["How many white aprons do we get?", "You get 60 white bib aprons every week."],
+      ["Add 20 more white aprons please", "Consider it done! I've passed it to our office, and I'll text you the moment it's entered."],
+      ["What mats do we have?", "Four 3x10 charcoal heather mats and four 3x5 black comfort flow mats."]
+    ]
+  },
+  "auto": {
+    "account": "9903-1-00001", "name": "MIDNIGHT SUN AUTO & TIRE", "contact": "Joe", "label": "Auto, tire or fleet",
+    "items": {"TOWEL SHOP": 300, "FENDER COVER GREY": 10, "MAT CHARCOAL WATERHOG 4X6": 3, "MAT CHARCOAL HEATHER 3X5": 2},
+    "wearers": {"31": ["Joe", "Peters", {"SHIRT INDUSTRIAL OIL BLOCK L": 11, "PANT INDUSTRIAL SHOP 34X32": 11}],
+                "32": ["Tyler", "Banks", {"SHIRT INDUSTRIAL OIL BLOCK XL": 11, "PANT INDUSTRIAL SHOP 36X30": 11}]},
+    "script": [
+      ["How many shop towels do we get?", "You get 300 shop towels every week."],
+      ["Add 100 shop towels", "Consider it done! I've passed it to our office, and I'll text you the moment it's entered."],
+      ["What size pants does Tyler wear?", "Tyler Banks wears 36x30 industrial shop pants, 11 pairs."],
+      ["Tyler quit, stop his uniforms", "Consider it done! I've passed it to our office, and I'll text you the moment it's entered."]
+    ]
+  },
+  "industrial": {
+    "account": "9904-1-00001", "name": "PTARMIGAN PIPE & STEEL", "contact": "Dale", "label": "Industrial, construction or oilfield",
+    "items": {"TOWEL SHOP": 400, "MAT CHARCOAL WATERHOG 4X6": 4, "MAT SCRAPER 4X6": 2},
+    "wearers": {"41": ["Dale", "Hughes", {"COVERALL NAVY HI VIS 44 R": 11}], "42": ["Rita", "Cole", {"COVERALL NAVY HI VIS 38 R": 11}]},
+    "script": [
+      ["How many coveralls does Dale have?", "Dale Hughes has 11 navy hi-vis coveralls, size 44 R."],
+      ["Add 2 more scraper mats", "Consider it done! I've passed it to our office, and I'll text you the moment it's entered."]
+    ]
+  },
+  "office": {
+    "account": "9905-1-00001", "name": "WILLOW CREEK INSURANCE", "contact": "Karen", "label": "Office, bank, store or services",
+    "items": {"MAT CHARCOAL HEATHER 4X6": 2, "MAT LOGO SAFETY 3X5": 1, "ROUTE PAPER TOWEL": 4, "ROUTE SOAP HANDS FREE": 2, "ROUTE AIR FRESHNER": 2},
+    "wearers": {},
+    "script": [
+      ["What mats do we get?", "Two 4x6 charcoal heather mats and one 3x5 safety logo mat."],
+      ["Can we get one more 4x6 mat for the back door?", "Consider it done! I've passed it to our office, and I'll text you the moment it's entered."]
+    ]
+  },
+  "healthcare": {
+    "account": "9906-1-00001", "name": "AURORA PEAK FAMILY CLINIC", "contact": "Dr. Lee", "label": "Clinic or medical office",
+    "items": {"MEDICAL GOWN PETPAR L": 40, "MEDICAL TOWEL HAND": 100, "MEDICAL SHEET FLAT": 30, "MAT CHARCOAL HEATHER 3X5": 2},
+    "wearers": {},
+    "script": [
+      ["How many patient gowns do we get?", "You get 40 patient gowns every week."],
+      ["Add 20 more gowns", "Consider it done! I've passed it to our office, and I'll text you the moment it's entered."]
+    ]
+  },
+  "government": {
+    "account": "9907-1-00001", "name": "RAVEN RIDGE ELEMENTARY", "contact": "Mr. Hall", "label": "Government, school or church",
+    "items": {"MAT CHARCOAL HEATHER 4X8": 4, "MAT SCRAPER 4X6": 2, "MOP DUST 36\"": 4, "MOP WET 24 OZ": 4, "TOWEL MICROFIBER BLUE": 40},
+    "wearers": {},
+    "script": [
+      ["How many dust mops do we get?", "You get 4 36\" dust mops every week."],
+      ["We're out for winter break Dec 20 to Jan 5, hold our service", "Consider it done! I've passed it to our office, and I'll text you the moment it's entered."]
+    ]
+  },
+  "hospital": {
+    "account": "9908-2-00001", "name": "AURORA BAY MEDICAL CENTER", "contact": "Linda", "label": "Hospital or clinic",
+    "items": {"MEDICAL SHEET FLAT": 600, "MEDICAL SHEET DRAW": 300, "MEDICAL PILLOW CASE": 400, "MEDICAL BLANKET THERMAL WHITE": 200,
+              "MEDICAL TOWEL BATH": 500, "MEDICAL WASH CLOTH": 800, "MEDICAL GOWN PETPAR L": 300},
+    "wearers": {},
+    "script": [
+      ["How many thermal blankets do we get?", "You get 200 white thermal blankets every week."],
+      ["Add 100 thermal blankets, flu season is here", "Consider it done! I've passed it to our office, and I'll text you the moment it's entered."]
+    ]
+  },
+  "care": {
+    "account": "9909-2-00001", "name": "SILVER BIRCH ASSISTED LIVING", "contact": "Grace", "label": "Nursing home or assisted living",
+    "items": {"SHEET TWIN T-180": 120, "SHEET PILLOW CASE T-180": 120, "TOWEL BATH": 150, "MEDICAL WASH CLOTH": 300},
+    "wearers": {},
+    "script": [
+      ["How many bath towels do we get?", "You get 150 bath towels every week."],
+      ["Add 30 twin sheets", "Consider it done! I've passed it to our office, and I'll text you the moment it's entered."]
+    ]
+  },
+  "hotel": {
+    "account": "9910-2-00001", "name": "CARIBOU CROSSING LODGE", "contact": "Ben", "label": "Hotel or lodging",
+    "items": {"SHEET KING FLAT": 80, "SHEET QUEEN FLAT": 120, "SHEET PILLOW CASE T-180": 300, "TOWEL BATH": 250, "TOWEL HAND": 250},
+    "wearers": {},
+    "script": [
+      ["How many king sheets do we get?", "You get 80 king flat sheets every week."],
+      ["We're full for the festival this weekend, add 40 bath towels", "Consider it done! I've passed it to our office, and I'll text you the moment it's entered."]
+    ]
+  }
+}

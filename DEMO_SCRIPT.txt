@@ -1,0 +1,35 @@
+Restaurant, bar or café: text "demo restaurant"  (Northern Lights Bistro)
+  1. How many bar mops do we get each week?
+  2. Can you add 50 more bar mops?
+  3. What does Danny get for uniforms?
+  4. We're closed next Tuesday for a holiday, skip our delivery
+Grocery, deli, meat or bakery: text "demo grocery"  (Tundra Fresh Market Deli)
+  1. How many white aprons do we get?
+  2. Add 20 more white aprons please
+  3. What mats do we have?
+Auto, tire or fleet: text "demo auto"  (Midnight Sun Auto & Tire)
+  1. How many shop towels do we get?
+  2. Add 100 shop towels
+  3. What size pants does Tyler wear?
+  4. Tyler quit, stop his uniforms
+Industrial, construction or oilfield: text "demo industrial"  (Ptarmigan Pipe & Steel)
+  1. How many coveralls does Dale have?
+  2. Add 2 more scraper mats
+Office, bank, store or services: text "demo office"  (Willow Creek Insurance)
+  1. What mats do we get?
+  2. Can we get one more 4x6 mat for the back door?
+Clinic or medical office: text "demo healthcare"  (Aurora Peak Family Clinic)
+  1. How many patient gowns do we get?
+  2. Add 20 more gowns
+Government, school or church: text "demo government"  (Raven Ridge Elementary)
+  1. How many dust mops do we get?
+  2. We're out for winter break Dec 20 to Jan 5, hold our service
+Hospital or clinic: text "demo hospital"  (Aurora Bay Medical Center)
+  1. How many thermal blankets do we get?
+  2. Add 100 thermal blankets, flu season is here
+Nursing home or assisted living: text "demo care"  (Silver Birch Assisted Living)
+  1. How many bath towels do we get?
+  2. Add 30 twin sheets
+Hotel or lodging: text "demo hotel"  (Caribou Crossing Lodge)
+  1. How many king sheets do we get?
+  2. We're full for the festival this weekend, add 40 bath towels

@@ -27,6 +27,7 @@ import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
 
+from . import demo
 from .checks import check, readback, ticket
 from .todo import GREEN, attachment, shrink, stamp
 from .verify import expectations
@@ -337,6 +338,7 @@ class TextDesk:
         since = datetime.now(timezone.utc) - timedelta(days=1)
         new = [m for m in self.inbound(since) if m["id"] not in self.state["seen"]]
         handled = self.office_pass() if not first else 0
+        self.demo_pass()
         for m in new:
             self.state["seen"].append(m["id"])
             if not first:
@@ -346,6 +348,12 @@ class TextDesk:
         return handled
 
     def handle(self, phone: str, body: str, sid: str) -> None:
+        key = self.key(phone)
+        cmd = demo.COMMAND.match(body)
+        if cmd and demo.allowed(key, self.key):
+            return self.demo_command(phone, cmd.group(1))
+        if key in self.state.get("demo", {}):
+            return self.demo_text(phone, body)
         who = self.contacts().get(self.key(phone))
         today = datetime.now(ALASKA).strftime("%Y-%m-%d")
         count_key = f"{today} {self.key(phone)}"
@@ -422,6 +430,89 @@ class TextDesk:
                     todo="own")
         self.send(phone, GOT_IT.format(how="text" if self.word == "text" else "email"))
         self.state["convos"].pop(self.key(phone), None)
+
+    # ---- demo mode: a made-up business for showing Donna on a sales call (demo.py) ---------------------------
+
+    def demo_command(self, phone: str, word: str) -> None:
+        key, shows = self.key(phone), self.state.setdefault("demo", {})
+        if word.lower() in ("off", "stop", "end", "done"):
+            shows.pop(key, None)
+            self.state["convos"].pop(key, None)
+            return self.send(phone, "🎬 Demo off. Nice work, Harvey.")
+        businesses = demo.load()
+        bid = demo.pick(word, businesses)
+        if bid is None:
+            return self.send(phone, "🎬 Which one? " + ", ".join(f"demo {b}" for b in businesses))
+        shows[key] = {"biz": bid, "changed": {}}
+        self.state["convos"].pop(key, None)
+        self.send(phone, demo.started(businesses[bid]))
+
+    def demo_text(self, phone: str, body: str) -> None:
+        """A text during a demo: the real Donna on the made-up business, with nothing sent to the office."""
+        key = self.key(phone)
+        show = self.state["demo"][key]
+        b = demo.load()[show["biz"]]
+        try:
+            self.demo_answer(phone, body, b, show)
+        except Exception as e:  # never fumble in front of a customer: the scripted answer instead
+            print(time.strftime("%H:%M"), "demo fallback:", e, flush=True)
+            reply = demo.fallback(b, body)
+            self.send(phone, reply)
+            if reply.startswith("Consider it done"):
+                self.state.setdefault("demo_due", []).append(
+                    {"to": phone, "at": time.time() + demo.ENTER_SECONDS, "changed": {},
+                     "text": f"All done! {demo.ENTERED_BY} entered it for you.\nThanks so much!"})
+
+    def demo_answer(self, phone: str, body: str, b: dict, show: dict) -> None:
+        from .desk import customer_readback
+        from .parser import answer_lookup, parse_message
+        from .run import fill_item_matches
+        key, acct, mine = self.key(phone), b["account"], demo.alliant(b, show["changed"])
+        convo = self.state["convos"].get(key)
+        if convo and time.time() - convo["at"] > CONVO_MINUTES * 60:
+            convo = None
+        lines = (convo["lines"] if convo else []) + [f"Customer: {body}"]
+        text = body if len(lines) == 1 else "\n".join(lines)
+        parsed = parse_message(self.claude, text, f"customer-{self.word}", f"{time.time():.6f}", mine,
+                               author=f"{b['contact']} (the customer, by {self.word})")
+        parsed.account_number = acct
+        for c in parsed.changes:
+            c.account_number = None
+        if parsed.category == Category.not_a_request:
+            self.state["convos"].pop(key, None)
+            return self.send(phone, "Anytime! I'm right here whenever you need anything.")
+        if parsed.category == Category.lookup:
+            self.state["convos"].pop(key, None)
+            return self.send(phone, answer_lookup(self.claude, parsed.summary or body, customer_facts(mine, acct),
+                                                  asker="customer").answer)
+        if parsed.category in ACTIONABLE:
+            fill_item_matches(self.claude, parsed, mine)
+        result = check(parsed, mine)
+        if parsed.category in ACTIONABLE and result.questions and (convo["asks"] if convo else 0) < MAX_ASKS:
+            return self.ask(phone, lines, result.questions[:MAX_QUESTIONS], convo)
+        rb = readback(result) if parsed.category in ACTIONABLE else f"✅ {parsed.summary}"
+        changed = {cc.alliant_item: cc.new_total for cc in result.changes
+                   if cc.alliant_item and cc.new_total is not None and not cc.change.wearer}
+        self.send(phone, GOT_IT.format(how="text" if self.word == "text" else "email"))
+        self.state["convos"].pop(key, None)
+        self.state.setdefault("demo_due", []).append({"to": phone, "at": time.time() + demo.ENTER_SECONDS,
+                                                      "changed": changed,
+                                                      "text": customer_readback(rb, demo.ENTERED_BY, [])})
+
+    def demo_pass(self) -> None:
+        """Send the "All done!" texts whose time has come, and count the change in for the rest of the demo."""
+        due = self.state.get("demo_due") or []
+        now = time.time()
+        for d in [d for d in due if d["at"] <= now]:
+            due.remove(d)
+            show = self.state.get("demo", {}).get(self.key(d["to"]))
+            if show is None:
+                continue  # the demo was turned off
+            show["changed"].update(d["changed"])
+            self.send(d["to"], d["text"])
+        if due or "demo_due" in self.state:
+            self.state["demo_due"] = due
+            self.save()
 
     # ---- sign-up: an unknown number tells us who they are, the office approves --------------------------------
 

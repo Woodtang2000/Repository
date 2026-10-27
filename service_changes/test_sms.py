@@ -212,3 +212,35 @@ def test_messages_sign_as_the_customers_company():
     assert company_for("1205-1-00007") == "Snow White Linen"
     assert company_for("3100-2-00001") == "The Laundry Group"
     assert company_for(None) == "Snow White Linen"
+
+
+def test_demo_mode_for_sales_calls(desk, monkeypatch):
+    from . import demo
+    td, slack, texts, seen = desk
+    monkeypatch.setenv("DEMO_FROM", "(907) 555-4242")
+    monkeypatch.setattr(demo, "ENTER_SECONDS", 0)
+    td.handle("+19075550000", "demo restaurant", "S0")  # not a demo number: a stranger signing up, no demo
+    assert "demo" not in td.state or "9075550000" not in td.state["demo"]
+    td.handle("+19075554242", "Demo restaurant", "S1")
+    assert texts[-1][1].startswith("🎬 Demo on: you're Maria at Northern Lights Bistro")
+    td.handle("+19075554242", "how many bar mops costco", "S2")  # (fake parser: "how many" is a lookup)
+    assert [c.account for c in seen["alliant"].customers] == ["9901-1-00001"]  # only the made-up business
+    td.handle("+19075554242", "add 200 bar mops", "S3")
+    assert texts[-1][1].startswith("Consider it done") and not slack.posts  # nothing to the office
+    td.demo_pass()
+    assert texts[-1][1].startswith("All done!") and "Ana entered it for you" in texts[-1][1]
+
+    import service_changes.parser as parser
+    monkeypatch.setattr(parser, "parse_message", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("API down")))
+    td.handle("+19075554242", "What does Danny get for uniforms?", "S4")
+    assert texts[-1][1] == "Danny Kim gets 11 black cook shirts, size L."  # the scripted answer, no fumble
+    td.handle("+19075554242", "demo off", "S5")
+    assert td.state["demo"] == {} and not slack.posts
+
+
+def test_demo_businesses_and_cheat_sheet():
+    from . import demo
+    b = demo.load()
+    assert demo.pick("tire shop", b) == "auto" and demo.pick("a hotel", b) == "hotel" and demo.pick("xyz", b) is None
+    assert all(v["account"].startswith("99") and v["script"] for v in b.values())
+    assert "demo restaurant" in demo.cheat_sheet()
