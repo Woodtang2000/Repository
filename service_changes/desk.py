@@ -573,8 +573,9 @@ class Desk:
         group = self.office_group(text, parsed)
         if group:
             from .context import group_facts
-            ans = answer_lookup(self.claude, (parsed.summary or text) + "\n(Covers every account listed: give the total "
-                                "first, then a short per-location list if it helps.)", group_facts(self.alliant, group),
+            ans = answer_lookup(self.claude, (parsed.summary or text) + "\n(Covers every account listed: give the combined "
+                                "totals first, by SKU, from the TOTALS lines, then a short per-location list only if asked.)",
+                                group_facts(self.alliant, group, text + " " + (parsed.summary or "")),
                                 asker="office staff member")
             as_of = f" _(Alliant as of {self.alliant.as_of})_" if self.alliant.as_of else ""
             self.post(here, f"<@{user}> *{len(group)} accounts*: {ans.answer}{as_of}"[:3900],
@@ -631,15 +632,20 @@ class Desk:
     def office_group(self, text: str, parsed) -> list[str]:
         """Every location under an account number ("4000", "all of 4000") or every customer whose name has all the
         words given ("all the Safeways"), when the question isn't about one location. Empty otherwise."""
-        if parsed.account_number and not re.search(r"\b(all|every|each|total|combined)\b", text, re.I):
+        full = re.search(r"\b\d{4}-\d-\d{5}\b", text)  # a full account number means that one location
+        if full and not re.search(r"\b(all|every|each|total|combined)\b", text, re.I):
             return []
-        for base in re.findall(r"(?<![\d-])(\d{4})(?![\d-])", text):
+        every = re.search(r"\b(all|every|each|total|combined)\b", text, re.I)
+        one = (parsed.account_number or "").split("-")[0]
+        for base in re.findall(r"(?<![\d-])(\d{4})(?![\d-])", text):  # a bare 4-digit number: every location under it
+            if one and base != one and not every:
+                continue  # "Safeway 1807": a store number, and the parser already found the one account
             hits = [c.account for c in self.alliant.customers if c.account.split("-")[0] == base]
             if len(hits) >= 2:
                 return hits
         words = re.findall(r"[a-z0-9]+", (parsed.customer_as_written or "").lower())
         words = [w.rstrip("s") if len(w) > 3 else w for w in words if w not in ("all", "the", "every", "of")]
-        if words and re.search(r"\b(all|every|each|total|combined)\b", text, re.I):
+        if words and every:
             hits = [c.account for c in self.alliant.customers
                     if all(any(n.startswith(w) for n in re.findall(r"[a-z0-9]+", c.name.lower())) for w in words)]
             if len(hits) >= 2:

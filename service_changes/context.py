@@ -355,8 +355,35 @@ def route_facts(alliant: "Alliant", route: str) -> str:
     return "\n".join(out)
 
 
-def group_facts(alliant: "Alliant", accounts: list[str]) -> str:
-    """Several accounts at once (every Safeway under 4000), items and holds only: one line per account."""
+def group_totals(alliant: "Alliant", accounts: list[str], question: str = "") -> list[str]:
+    """Totals across a group of accounts, added up in code (never by the model): each item (by SKU) with its
+    per-delivery count, inventory and how many locations have it, then a subtotal for each kind of item the question
+    names ("mats" -> every item with MAT in its name)."""
+    per: dict[tuple, list] = {}
+    for acct in accounts:
+        for item, inv in alliant.items.get(acct, {}).items():
+            key = (alliant.sku.get((acct, item), ""), item)
+            auto = alliant.autocount.get(acct, {}).get(item)
+            t = per.setdefault(key, [0, 0, 0])
+            t[0] += auto if auto is not None else inv
+            t[1] += inv
+            t[2] += 1
+    words = {w[:-1] if len(w) > 3 and w.endswith("s") else w for w in re.findall(r"[a-z]{3,}", question.lower())}
+    words = {w for w in words if any(w.upper() in re.findall(r"[A-Z]+", item) for _, item in per)}
+    out = []
+    for w in sorted(words):
+        hits = [(k, v) for k, v in per.items() if w.upper() in re.findall(r"[A-Z]+", k[1])]
+        if hits:
+            locs = len({a for a in accounts for item in alliant.items.get(a, {}) if w.upper() in re.findall(r"[A-Z]+", item)})
+            out.append(f"ALL {w.upper()} ITEMS combined: {sum(v[0] for _, v in hits)} per delivery, inventory "
+                       f"{sum(v[1] for _, v in hits)}, {len(hits)} different items, at {locs} of {len(accounts)} locations")
+    for (sku, item), (auto, inv, n) in sorted(per.items(), key=lambda kv: (-kv[1][1], kv[0][1])):
+        out.append(f"{item}" + (f" ({sku})" if sku else "") + f": {auto} per delivery, inventory {inv}, at {n} locations")
+    return out
+
+
+def group_facts(alliant: "Alliant", accounts: list[str], question: str = "") -> str:
+    """Several accounts at once (every Safeway under 4000): the totals, computed here, then one line per account."""
     out = []
     for acct in accounts:
         cust = next((c for c in alliant.customers if c.account == acct), None)
@@ -370,7 +397,9 @@ def group_facts(alliant: "Alliant", accounts: list[str]) -> str:
         if holds:
             line += " | on hold: " + ", ".join(h.get("item", "") for h in holds)
         out.append(line)
-    return f"{len(accounts)} accounts (item per-delivery autocount, inventory):\n" + "\n".join(out)
+    totals = group_totals(alliant, accounts, question)
+    return (f"TOTALS across all {len(accounts)} accounts (already added up; use these numbers, don't add them yourself):\n"
+            + "\n".join(totals) + f"\n\nPer account (item per-delivery autocount, inventory):\n" + "\n".join(out))
 
 
 def account_facts(alliant: "Alliant", account: str) -> str:

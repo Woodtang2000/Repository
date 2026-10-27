@@ -700,3 +700,25 @@ def test_drivers_ask_about_their_route_and_the_handheld(setup, monkeypatch):
     howto = slack.bot_posts("C1", "answer")[-1]
     assert howto["text"] == 'Tap "Start Route"' and howto["thread_ts"] == post["ts"]
     assert not slack.bot_posts("D1", "ticket")
+
+
+def test_account_number_groups_and_totals():
+    from types import SimpleNamespace
+    from .context import Alliant, Customer, group_facts
+    a = Alliant(customers=[Customer("4000-1-00800", "SAFEWAY 1807AS", "2", ["Mon"]),
+                           Customer("4000-1-01606", "SAFEWAY 1817", "3", ["Tue"]),
+                           Customer("1205-1-00007", "MIDAS 7", "4", ["Thu"])],
+                items={"4000-1-00800": {"MAT CONFETTI GREY 3X10": 5, "MAT CHARCOAL HEATHER 4X6": 2, "TOWEL BAR MOP": 100},
+                       "4000-1-01606": {"MAT CONFETTI GREY 3X10": 3}},
+                autocount={"4000-1-00800": {"MAT CONFETTI GREY 3X10": 5, "MAT CHARCOAL HEATHER 4X6": 2},
+                           "4000-1-01606": {"MAT CONFETTI GREY 3X10": 3}},
+                sku={("4000-1-00800", "MAT CONFETTI GREY 3X10"): "10-10-02", ("4000-1-01606", "MAT CONFETTI GREY 3X10"): "10-10-02"})
+    d = SimpleNamespace(alliant=a)
+    group = lambda text, acct=None: desk.Desk.office_group(d, text, SimpleNamespace(account_number=acct, customer_as_written=""))
+    assert group("how many mats does account 4000 have on inventory?") == ["4000-1-00800", "4000-1-01606"]
+    assert group("how many mats does 4000 have", "4000-1-00800") == ["4000-1-00800", "4000-1-01606"]
+    assert group("mats at 4000-1-00800") == []                       # one location
+    assert group("mats at Safeway 1807", "4000-1-00800") == []        # a store number, not an account
+    facts = group_facts(a, ["4000-1-00800", "4000-1-01606"], "how many mats in all of 4000")
+    assert "ALL MAT ITEMS combined: 10 per delivery, inventory 10, 2 different items, at 2 of 2 locations" in facts
+    assert "MAT CONFETTI GREY 3X10 (10-10-02): 8 per delivery, inventory 8, at 2 locations" in facts
