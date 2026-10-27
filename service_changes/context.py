@@ -74,6 +74,7 @@ class Alliant:
     aliases: dict[str, list[str]] = field(default_factory=dict)  # account -> other names drivers use ("BSI")
     sku: dict[tuple, str] = field(default_factory=dict)  # (account, item) or (account, wearer#, "ITEM SIZE") -> Alliant SKU
     skus: dict[str, dict] = field(default_factory=dict)  # SKU -> its details from skus.csv (no prices)
+    ar: dict[str, dict] = field(default_factory=dict)  # account -> balance and last payment (ar.csv): Scott and Bill only
     cards: dict[str, dict] = field(default_factory=dict)  # account -> record card header (stop_sequence, special_instructions, ...)
     as_of: str = ""  # date of the export the data came from, e.g. "Oct 3"
     exported_at: datetime | None = None  # when the data was exported from Alliant (feed_done.txt, else file time)
@@ -101,6 +102,7 @@ class Alliant:
         data = cls.load(f("customers.csv"), f("current_items.csv"), f("garments.csv"), f("wearers.csv"))
         data.load_aliases(f("aliases.csv") or os.path.join(os.path.dirname(__file__), "aliases.csv"))
         data.load_skus(f("skus.csv"))
+        data.load_ar(f("ar.csv"))
         if f("feed_done.txt"):  # the nightly Alliant SQL feed: its export time, written last
             try:
                 data.exported_at = datetime.strptime(open(f("feed_done.txt")).read().split()[0], "%Y-%m-%dT%H:%M:%S%z")
@@ -217,6 +219,18 @@ class Alliant:
                         auto = data.autocount.setdefault(acct, {})
                         auto[item] = auto.get(item, 0) + int(row["autocount"])
         return data
+
+    def load_ar(self, path: str | None) -> None:
+        """ar.csv from the Alliant feed: account, balance, last_payment_date, last_payment_amount. Only Scott and Bill
+        may ever see it (desk.ar_answer), in a private message or by voice: never drivers, customers or channels."""
+        self.ar = {}
+        if not path:
+            return
+        with open(path, newline="") as f:
+            for row in csv.DictReader(f):
+                acct = (row.get("account") or "").strip()
+                if acct:
+                    self.ar[acct] = {k.strip(): (v or "").strip() for k, v in row.items() if k and k.strip() != "account"}
 
     def load_skus(self, path: str | None) -> None:
         """skus.csv from the Alliant feed: one row per SKU with whatever details it has (description, category, size,
@@ -430,6 +444,25 @@ def group_facts(alliant: "Alliant", accounts: list[str], question: str = "") -> 
     totals = group_totals(alliant, accounts, question)
     return (f"TOTALS across all {len(accounts)} accounts (already added up; use these numbers, don't add them yourself):\n"
             + "\n".join(totals) + f"\n\nPer account (item per-delivery autocount, inventory):\n" + "\n".join(out))
+
+
+def ar_facts(alliant: "Alliant", accounts: list[str]) -> str:
+    """What these accounts owe and when they last paid, with the total worked out here for several. Scott and Bill only."""
+    names = {c.account: c.name for c in alliant.customers}
+    out, total = [], 0.0
+    for a in accounts:
+        r = alliant.ar.get(a)
+        if r is None:
+            out.append(f"- {a} {names.get(a, '')}: nothing in the AR file (probably owes nothing)")
+            continue
+        try:
+            total += float(re.sub(r"[^\d.-]", "", r.get("balance", "")) or 0)
+        except ValueError:
+            pass
+        out.append(f"- {a} {names.get(a, '')} ({company_for(a)}): " + "; ".join(f"{k.replace('_', ' ')} {v}" for k, v in r.items()))
+    if len(accounts) > 1:
+        out.insert(0, f"TOTAL owed across these {len(accounts)} accounts (already added up): ${total:,.2f}")
+    return "\n".join(out)
 
 
 def sku_facts(alliant: "Alliant", question: str, limit: int = 8) -> str:

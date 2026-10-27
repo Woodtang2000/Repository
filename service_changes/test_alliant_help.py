@@ -435,3 +435,43 @@ def test_route_questions_by_voice_skip_the_parse(monkeypatch):
                         office_lookup=lambda *a, **k: (_ for _ in ()).throw(AssertionError("no parse for a route")))
     assert Desk.voice(d, "what stops are on route 1 thursday", "r") == "Thursday on route 1: Carlile first, then Costco."
     assert "CARLILE" in seen["facts"] and "COSTCO" not in seen["facts"] and "owner" in seen["asker"]
+
+
+def test_balances_only_for_scott_and_bill_in_private(monkeypatch):
+    from types import SimpleNamespace
+    from .desk import Desk
+    from .context import Alliant, Customer, ar_facts
+    import service_changes.parser as parser
+    from .parser import Answer
+    data = Alliant(customers=[Customer("1205-1-00004", "MIDAS #4", "4", ["Mon"]), Customer("1205-1-00007", "MIDAS 7", "4", ["Thu"])],
+                   ar={"1205-1-00004": {"balance": "1,240.50", "last_payment_date": "2026-09-30", "last_payment_amount": "600.00"},
+                       "1205-1-00007": {"balance": "100.00", "last_payment_date": "2026-10-20"}})
+    seen = []
+    monkeypatch.setattr(parser, "answer_lookup", lambda c, q, facts, asker="": seen.append(facts) or Answer(answer="Owes $1,240.50.", found=True))
+    said = []
+    d = SimpleNamespace(alliant=data, desk_id="CDESK", claude=None, asker=lambda u: "owner",
+                        office_group=lambda t, p: [], say=None)
+    parsed = SimpleNamespace(account_number="1205-1-00004")
+    ask = lambda user, here: Desk.ar_answer(d, user, "how much does Midas 4 owe us", parsed, here,
+                                            lambda t, p: said.append((t, p["ar"])))
+    ask("UDRIVER", "D123")
+    assert said[-1][1] == "refused" and "aren't something I can share" in said[-1][0] and not seen
+    ask("U9SGPJP0C", "CDESK")  # Bill, but in the office channel
+    assert said[-1][1] == "private" and not seen
+    ask("U9SGPJP0C", "D123")  # Bill, privately
+    assert said[-1][1] == "answered" and "balance 1,240.50" in seen[-1] and "last payment date 2026-09-30" in seen[-1]
+    ask("U4KFSQCDQ", "voice")  # Scott by voice
+    assert said[-1][1] == "answered"
+    assert ar_facts(data, ["1205-1-00004", "1205-1-00007"]).startswith("TOTAL owed across these 2 accounts (already added up): $1,340.50")
+    d.alliant = Alliant()
+    ask("U4KFSQCDQ", "D1")
+    assert said[-1][1] == "missing"
+
+
+def test_drivers_and_customers_never_get_balances():
+    from .context import Alliant, Customer, account_facts
+    from .sms import customer_facts
+    data = Alliant(customers=[Customer("1205-1-00004", "MIDAS #4", "4", ["Mon"])],
+                   ar={"1205-1-00004": {"balance": "1240.50", "last_payment_date": "2026-09-30"}})
+    for facts in (account_facts(data, "1205-1-00004"), customer_facts(data, "1205-1-00004")):
+        assert "1240" not in facts and "2026-09-30" not in facts

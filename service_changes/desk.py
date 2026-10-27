@@ -54,6 +54,9 @@ BRIEF_HOUR = int(os.environ.get("OWNER_BRIEF_HOUR", "7"))  # Donna's morning rea
 VOICE_PORT = int(os.environ.get("DESK_VOICE_PORT", "8091"))  # Donna's voice (desk.voice), on 127.0.0.1 only
 SKU_Q = re.compile(r"\b(weigh\w*|pounds?|lbs?|dimensions?|materials?|fabric|made of|blend|sku|how big|"
                    r"case pack|pack size|\d-\d\d-\d\d)\b", re.I)  # questions about what an item is, not who has it
+AR_Q = re.compile(r"\b(owes?|owing|balance|past due|overdue|paid us|last paid|last payment|pay(s|ing)? us|"
+                  r"credit hold|collections?|receivables?|a/?r)\b", re.I)
+AR_USERS = {u.strip() for u in os.environ.get("AR_SLACK_IDS", "U4KFSQCDQ,U9SGPJP0C").split(",") if u.strip()}  # Scott, Bill
 HOW_TO = re.compile(r"\bhow (do|can|would|should) (i|you|we)\b.*\b(alliant|handheld|enter|make|set up|print|run)\b", re.I)  # Alliant how-to notes
 VERIFY_HOUR = 7  # entry check posts once the morning's Alliant data is in, from this hour (Alaska)
 STOCKROOM = os.environ.get("STOCKROOM_CHANNEL", "stockroom")  # Ana's channel: weekly garment data checks
@@ -602,6 +605,8 @@ class Desk:
             return True
         parsed = parse_message(self.claude, text, self.desk_name, h["ts"], self.alliant, author=self.name(user),
                                office=True)
+        if AR_Q.search(text):  # "how much does Midas owe us, and when did they last pay?"
+            return self.ar_answer(user, text, parsed, here, say)
         if parsed.category != Category.lookup:
             return False
         route = re.search(r"\b(?:route|rte|rt)\s*#?\s*(\d{1,2})\b", text, re.I)
@@ -648,6 +653,33 @@ class Desk:
         ans = answer_lookup(self.claude, question, facts, asker=self.asker(user))
         as_of = f" _(Alliant as of {self.alliant.as_of})_" if self.alliant.as_of else ""
         say(f"<@{user}> *{acct}* {name}: {ans.answer}{as_of}", {"kind": "answer", "account": acct})
+        return True
+
+    def ar_answer(self, user: str | None, text: str, parsed, here: str, say) -> bool:
+        """What an account owes and when it last paid: for Scott and Bill only (AR_SLACK_IDS), and only in a private
+        message with the bot or by voice, never in a channel. Everyone else is told it's not something Donna shares."""
+        if user not in AR_USERS:
+            say(f"<@{user}> Balances and payments aren't something I can share. Scott or Bill can help with that.",
+                {"kind": "answer", "ar": "refused"})
+            return True
+        if here == self.desk_id or not (here == "voice" or str(here).startswith("D")):
+            say(f"<@{user}> Ask me that in a private message and I'll tell you there.", {"kind": "answer", "ar": "private"})
+            return True
+        if not self.alliant.ar:
+            say(f"<@{user}> I don't have the balances yet. They're coming in the Alliant feed as ar.csv.",
+                {"kind": "answer", "ar": "missing"})
+            return True
+        accounts = self.office_group(text, parsed) or ([parsed.account_number] if parsed.account_number else [])
+        if not accounts:
+            say(f"<@{user}> Which customer? Give me the account number or location.",
+                {"kind": "office_ask", "user": user, "q": text})
+            return True
+        from .context import ar_facts
+        from .parser import answer_lookup
+        ans = answer_lookup(self.claude, text, "Accounts receivable (private, for the owner and Bill):\n"
+                            + ar_facts(self.alliant, accounts[:60]), asker=self.asker(user))
+        as_of = f" _(Alliant as of {self.alliant.as_of})_" if self.alliant.as_of else ""
+        say(f"<@{user}> {ans.answer}{as_of}"[:3900], {"kind": "answer", "ar": "answered"})
         return True
 
     def dm(self, ev: dict) -> str | None:
