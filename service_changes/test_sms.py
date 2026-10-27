@@ -244,3 +244,12 @@ def test_demo_businesses_and_cheat_sheet():
     assert demo.pick("tire shop", b) == "auto" and demo.pick("a hotel", b) == "hotel" and demo.pick("xyz", b) is None
     assert all(v["account"].startswith("99") and v["script"] for v in b.values())
     assert "demo restaurant" in demo.cheat_sheet()
+
+
+def test_slack_phone_links_in_office_commands(desk):
+    td, slack, texts, seen = desk
+    slack.say("add <tel:9075557777|(907) 555-7777> to M4")
+    slack.say("add <tel:9075558888|(907) >555-8888 to M4")  # Slack linked only part of it
+    assert td.office_pass() == 2
+    phones = sms.load_phones(td.data_dir + "/customer_phones.csv")
+    assert phones["9075557777"]["accounts"] == ["M4"] and phones["9075558888"]["accounts"] == ["M4"]

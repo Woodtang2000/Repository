@@ -569,6 +569,9 @@ class TextDesk:
             if m.get("bot_id") or m.get("subtype"):
                 continue
             text = m.get("text", "")
+            # Slack links phone numbers: "<tel:9075551234|(907) 555-1234>" reads as what was typed
+            text = re.sub(r"<tel:[^|>]*\|([^>]*)>", r"\1", text)
+            text = re.sub(r"<tel:([^|>]*)>", r"\1", text)
             add, rem = self.add_cmd.match(text), self.remove_cmd.match(text)
             if re.match(r"^\s*(add|approve|remove|delete)\b", text, re.I) and m["ts"] not in self.__dict__.setdefault("logged", set()):
                 self.logged.add(m["ts"])
@@ -608,7 +611,7 @@ class TextDesk:
         said, send = [self.set_up.format(names=names)], self.send
         self.send = lambda _to, msg: said.append(msg)  # the welcome and the answer to what they sent go out together
         try:
-            for body, sid in (p or {}).get("held", []):  # what they sent before being set up
+            for body, sid in (p or {}).get("held", [])[-3:]:  # what they sent before being set up (the latest few)
                 self.handle(to, body, sid)
         finally:
             self.send = send
