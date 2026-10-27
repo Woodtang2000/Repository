@@ -204,6 +204,7 @@ def test_hey_donna_voice(monkeypatch):
     chats = []
     monkeypatch.setattr(parser, "owner_chat", lambda c, turns, about, spoken=False: chats.append((turns, spoken)) or "Leave it with me.")
     d = SimpleNamespace(claude=None, office_lookup=lookup, briefing=lambda: "", pulse=lambda: "PULSE")
+    assert Desk.voice(d, "  ", "c1").startswith("I didn't catch anything") and not chats and not asked
     assert Desk.voice(d, "how many mats do they get", "c1") == "Which customer?"
     assert Desk.voice(d, "Safeway 1807", "c1") == "4000-1-01807 SAFEWAY: 6 mats a week"
     assert asked[-1] == "how many mats do they get\nDonna asked: Which customer?\nAnswer: Safeway 1807"

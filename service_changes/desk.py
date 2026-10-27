@@ -681,6 +681,9 @@ class Desk:
         """Scott talking to Donna on his iPhone ("Hey Donna", an iOS Shortcut through webchat's /api/donna): the same
         Harvey mode as his private Slack messages, answered to be read aloud. Remembers the conversation 30 minutes."""
         from .parser import owner_chat
+        print(time.strftime("%H:%M"), f"voice: heard {len(text.split())} words", flush=True)
+        if not text.strip():  # the shortcut sent nothing: nothing was said, or its words aren't in the address
+            return "I didn't catch anything. Tap the microphone on the keyboard, tell me what you need, then tap Done."
         talks = self.__dict__.setdefault("talks", {})
         now = time.time()
         for k in [k for k, t in talks.items() if now - t["at"] > 1800]:
