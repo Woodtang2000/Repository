@@ -1263,7 +1263,9 @@ class Desk:
                 print(time.strftime("%H:%M"), "✅ from", ev["user"], flush=True)
             if ev.get("type") == "reaction_removed" and channel == self.desk_id:  # tapped ✅ by mistake
                 self.done_events.pop(ev.get("item", {}).get("ts"), None)
-            if ev.get("type") in ("message", "reaction_added") and ev.get("user") != self.me:
+            own_ticket = (channel == self.desk_id and ev.get("type") == "message" and ev.get("subtype") is None
+                          and ev.get("user") == self.me and not ev.get("thread_ts"))  # texts/email/phone posting one
+            if ev.get("type") in ("message", "reaction_added") and (ev.get("user") != self.me or own_ticket):
                 new_top = (ev.get("type") == "message" and ev.get("subtype") is None and channel != self.desk_id
                            and ev.get("thread_ts") in (None, ev.get("ts")))
                 todo.put((channel, ev.get("ts") if new_top else None, 0))
