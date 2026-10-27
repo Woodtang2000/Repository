@@ -182,3 +182,54 @@ def test_donnas_read_on_the_operation_and_morning_brief(tmp_path, monkeypatch):
     assert "last 72 hours" in got["about"]  # Monday covers the weekend
     Desk.owner_brief_pass(d, datetime(2026, 10, 31, 9, tzinfo=ALASKA).timestamp())  # Saturday: none
     assert len(d.slack.posts) == 1
+
+
+def test_hey_donna_voice(monkeypatch):
+    from types import SimpleNamespace
+    from .desk import Desk, spoken
+    import service_changes.parser as parser
+    assert spoken("<@U4KFSQCDQ> *4000-1-00001* SAFEWAY: 12 mats _(Alliant as of Oct 26)_") == "4000-1-00001 SAFEWAY: 12 mats"
+
+    asked = []
+
+    def lookup(h, top, channel=None, say=None):
+        asked.append(h["text"])
+        if "mats" in h["text"] and "Answer:" not in h["text"]:
+            say("<@U4KFSQCDQ> Which customer?", {"kind": "office_ask", "q": h["text"]})
+            return True
+        if "Answer: Safeway 1807" in h["text"]:
+            say("<@U4KFSQCDQ> *4000-1-01807* SAFEWAY: 6 mats a week _(Alliant as of Oct 26)_", {"kind": "answer"})
+            return True
+        return False
+    chats = []
+    monkeypatch.setattr(parser, "owner_chat", lambda c, turns, about, spoken=False: chats.append((turns, spoken)) or "Leave it with me.")
+    d = SimpleNamespace(claude=None, office_lookup=lookup, briefing=lambda: "", pulse=lambda: "PULSE")
+    assert Desk.voice(d, "how many mats do they get", "c1") == "Which customer?"
+    assert Desk.voice(d, "Safeway 1807", "c1") == "4000-1-01807 SAFEWAY: 6 mats a week"
+    assert asked[-1] == "how many mats do they get\nDonna asked: Which customer?\nAnswer: Safeway 1807"
+    assert Desk.voice(d, "should we raise the route 4 minimum?", "c1") == "Leave it with me."
+    turns, was_spoken = chats[-1]
+    assert was_spoken and len(turns) == 5 and turns[-1]["content"] == "should we raise the route 4 minimum?"
+
+
+def test_donna_voice_needs_scotts_key(monkeypatch):
+    import io
+    from .webchat import make_handler
+    monkeypatch.setenv("OWNER_VOICE_TOKEN", "k" * 32)
+    monkeypatch.setattr("time.sleep", lambda s: None)
+    H = make_handler(None, "https://x")
+    sent = []
+
+    def call(auth):
+        h = H.__new__(H)
+        h.path, h.rfile = "/api/donna", io.BytesIO(b'{"text":"hi"}')
+        h.headers = {"Authorization": auth, "Content-Length": "13"}
+        h._send = lambda code, body, ctype, cache=0: sent.append((code, body))
+        import urllib.request
+        monkeypatch.setattr(urllib.request, "urlopen", lambda req, timeout: io.BytesIO(b"Hi Harvey."))
+        h.do_POST()
+        return sent[-1]
+    assert call("Bearer wrong") == (404, b"not found")
+    assert call("Bearer " + "k" * 32) == (200, b"Hi Harvey.")
+    monkeypatch.setenv("OWNER_VOICE_TOKEN", "short")
+    assert call("Bearer short")[0] == 404  # a weak key never works

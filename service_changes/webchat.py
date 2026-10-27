@@ -21,6 +21,7 @@ import time
 from collections import defaultdict, deque
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+import urllib.request
 from urllib.parse import parse_qs, urlparse
 
 from . import catalog, sales, todo
@@ -484,6 +485,8 @@ def make_handler(chat: Chat, public_url: str):
             path = urlparse(self.path).path
             if path == "/api/quote":
                 return self._quote()
+            if path == "/api/donna":
+                return self._donna()
             if path != "/api/chat":
                 return self._send(404, b"not found", "text/plain")
             try:
@@ -503,6 +506,30 @@ def make_handler(chat: Chat, public_url: str):
                 print(time.strftime("%H:%M"), "error:", e, flush=True)
                 self._send(200, json.dumps({"reply": "Sorry, something went wrong on our end. Please call us at "
                                                      "(907) 222-7738.", "events": []}).encode(), "application/json")
+        def _donna(self):
+            """Scott's "Hey Donna" iPhone Shortcut: his private key, then on to the desk (desk.voice) on this server."""
+            import hmac
+            key = os.environ.get("OWNER_VOICE_TOKEN", "")
+            given = (self.headers.get("Authorization") or "").removeprefix("Bearer ").strip()
+            if len(key) < 24 or not hmac.compare_digest(given.encode(), key.encode()):
+                time.sleep(1)  # slows down guessing
+                return self._send(404, b"not found", "text/plain")
+            try:
+                n = min(int(self.headers.get("Content-Length") or 0), 8000)
+                body = self.rfile.read(n) or b"{}"
+                json.loads(body)
+                req = urllib.request.Request(f"http://127.0.0.1:{os.environ.get('DESK_VOICE_PORT', '8091')}/voice", data=body,
+                                             headers={"Content-Type": "application/json"})
+                with urllib.request.urlopen(req, timeout=110) as r:
+                    out = r.read()
+            except ValueError:
+                return self._send(400, b"bad request", "text/plain")
+            except Exception as e:
+                print(time.strftime("%H:%M"), "donna voice error:", e, flush=True)
+                out = "I can't reach the desk right now. Give me a minute and try again.".encode()
+            print(time.strftime("%H:%M"), "donna voice", flush=True)
+            self._send(200, out, "text/plain; charset=utf-8")
+
         def _quote(self):
             try:
                 n = int(self.headers.get("Content-Length") or 0)

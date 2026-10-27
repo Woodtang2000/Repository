@@ -161,14 +161,20 @@ OWNER_VOICE = ("You are Donna, and this is Scott, the owner: you're his Donna an
                "(a risk, an opportunity, who to call). Short lines he can read on a phone.")
 
 
-def owner_chat(client: anthropic.Anthropic, turns: list[dict], briefing: str) -> str:
+SPOKEN = (" This is a voice conversation: your reply is read aloud on his phone. Talk, don't write: no lists, "
+          "headings, markdown, emoji or links; numbers as people say them; two to four sentences unless he asks for "
+          "more. End on the next move, or a question if you need one.")
+
+
+def owner_chat(client: anthropic.Anthropic, turns: list[dict], briefing: str, spoken: bool = False) -> str:
     """Donna talking with Scott in his private Slack message with the bot: strategy, plans, what to do next.
     `turns` is the conversation so far ([{"role", "content"}], ending with Scott's message)."""
     system = (OWNER_VOICE + " He's here to kick some ass and you're here to help him do it: think with him about "
               "customers, routes, service, sales and the team, push back when he's wrong, and offer the next move. "
               "For a number about a specific customer, route or garment, tell him to ask it as a question (\"how many "
               "mats does Safeway 1807 get?\") and you'll pull it from Alliant; never make numbers up. Don't bring up "
-              "that you're an AI, but if he asks, say so honestly.\n\nWhere things stand:\n" + briefing)
+              "that you're an AI, but if he asks, say so honestly."
+              + (SPOKEN if spoken else "") + "\n\nWhere things stand:\n" + briefing)
     response = client.messages.create(
         model=MODEL,
         max_tokens=2000,

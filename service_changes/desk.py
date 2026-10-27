@@ -51,6 +51,7 @@ PULSE = re.compile(r"\b(how('?s| is| are)? (things|everything|it|we|the team|bus
                    r"morale|feel(ing)?|opinion|better|improve|feedback|complain\w*|brief|catch me up|what'?s going on|"
                    r"what am i missing|happening)\b", re.I)
 BRIEF_HOUR = int(os.environ.get("OWNER_BRIEF_HOUR", "7"))  # Donna's morning read for Scott, weekdays from this hour
+VOICE_PORT = int(os.environ.get("DESK_VOICE_PORT", "8091"))  # Donna's voice (desk.voice), on 127.0.0.1 only
 HOW_TO = re.compile(r"\bhow (do|can|would|should) (i|you|we)\b.*\b(alliant|handheld|enter|make|set up|print|run)\b", re.I)  # Alliant how-to notes
 VERIFY_HOUR = 7  # entry check posts once the morning's Alliant data is in, from this hour (Alaska)
 STOCKROOM = os.environ.get("STOCKROOM_CHANNEL", "stockroom")  # Ana's channel: weekly garment data checks
@@ -88,6 +89,14 @@ def customer_readback(rb: str, who: str, notes: list[str]) -> str:
     out = f"All done! {what}. {first} entered it for you." if what else f"All done! {first} took care of it."
     out += "".join(f"\nA note from our office: {n}" for n in notes)
     return out + "\nThanks so much!"
+
+
+def spoken(text: str) -> str:
+    """A Slack answer as it should sound: no mentions, bold, links or the data-age note."""
+    text = re.sub(r"<@\w+>\s*", "", text)
+    text = re.sub(r"<[^|>]+\|([^>]+)>", r"\1", text)
+    text = re.sub(r"\s*_?\(Alliant as of [^)]*\)_?", "", text)
+    return re.sub(r"[*_`]", "", text).strip()
 
 
 def _is_bot(m: dict, me: str) -> bool:
@@ -561,12 +570,14 @@ class Desk:
                 open_t.setdefault((meta(t)["src_channel"], meta(t)["src_ts"]), []).append(t["ts"])
         return open_t
 
-    def office_lookup(self, h: dict, top: list[dict], channel: str | None = None) -> bool:
+    def office_lookup(self, h: dict, top: list[dict], channel: str | None = None, say=None) -> bool:
         """A question typed in the office channel ("how many shop towels does Midas get?"), answered from the Alliant
         export right in the channel, like the route channels. Any customer on any route; no daily limit and no log,
         since it is the office. If the bot just asked this person which customer, this message is read as the answer.
-        `channel` is a private message with the bot (dm) instead of the office channel."""
+        `channel` is a private message with the bot (dm) instead of the office channel; `say(text, payload)` gets the
+        answer instead of Slack (Donna's voice on Scott's phone)."""
         here = channel or self.desk_id
+        say = say or (lambda text, payload: self.post(here, text, payload))
         from .context import account_facts, garment_facts
         from .parser import answer_lookup, parse_message
         user, text = h.get("user"), h.get("text", "")
@@ -581,7 +592,7 @@ class Desk:
             ans = answer_lookup(self.claude, text, barcode_facts(self.alliant, codes[:10]),
                                 asker=self.asker(user))
             as_of = f" _(Alliant as of {self.alliant.as_of})_" if self.alliant.as_of else ""
-            self.post(here, f"<@{user}> {ans.answer}{as_of}"[:3900], {"kind": "answer", "barcodes": codes[:10]})
+            say(f"<@{user}> {ans.answer}{as_of}"[:3900], {"kind": "answer", "barcodes": codes[:10]})
             return True
         parsed = parse_message(self.claude, text, self.desk_name, h["ts"], self.alliant, author=self.name(user),
                                office=True)
@@ -594,7 +605,7 @@ class Desk:
             if facts:
                 ans = answer_lookup(self.claude, parsed.summary or text, facts, asker=self.asker(user))
                 as_of = f" _(Alliant as of {self.alliant.as_of})_" if self.alliant.as_of else ""
-                self.post(here, f"<@{user}> *Route {route.group(1)}*: {ans.answer}{as_of}"[:3900],
+                say(f"<@{user}> *Route {route.group(1)}*: {ans.answer}{as_of}"[:3900],
                           {"kind": "answer", "route": route.group(1)})
                 return True
         group = self.office_group(text, parsed)
@@ -605,7 +616,7 @@ class Desk:
                                 group_facts(self.alliant, group, text + " " + (parsed.summary or "")),
                                 asker=self.asker(user))
             as_of = f" _(Alliant as of {self.alliant.as_of})_" if self.alliant.as_of else ""
-            self.post(here, f"<@{user}> *{len(group)} accounts*: {ans.answer}{as_of}"[:3900],
+            say(f"<@{user}> *{len(group)} accounts*: {ans.answer}{as_of}"[:3900],
                       {"kind": "answer", "accounts": len(group)})
             return True
         if not parsed.account_number:  # "show me Joey Smith's garments": find the wearer on any account
@@ -616,13 +627,13 @@ class Desk:
                 parsed.account_number = found[0][0]
             elif 2 <= len(found) <= 6:
                 names = {c.account: c.name for c in self.alliant.customers}
-                self.post(here, f"<@{user}> Which one? " + "; ".join(
+                say(f"<@{user}> Which one? " + "; ".join(
                     f"{w.name} (#{w.employee}) at {acct} {names.get(acct, '')}" for acct, w in found),
                     {"kind": "office_ask", "user": user, "q": text})
                 return True
         if not parsed.account_number:
             qs = parsed.questions_for_driver or ["Which customer? Add the account number or location."]
-            self.post(here, f"<@{user}> " + " ".join(qs), {"kind": "office_ask", "user": user, "q": text})
+            say(f"<@{user}> " + " ".join(qs), {"kind": "office_ask", "user": user, "q": text})
             return True
         acct = parsed.account_number
         name = next((c.name for c in self.alliant.customers if c.account == acct), parsed.customer_as_written or acct)
@@ -630,7 +641,7 @@ class Desk:
         facts = "\n".join(x for x in (account_facts(self.alliant, acct), garment_facts(self.alliant, acct, text + " " + question)) if x)
         ans = answer_lookup(self.claude, question, facts, asker=self.asker(user))
         as_of = f" _(Alliant as of {self.alliant.as_of})_" if self.alliant.as_of else ""
-        self.post(here, f"<@{user}> *{acct}* {name}: {ans.answer}{as_of}", {"kind": "answer", "account": acct})
+        say(f"<@{user}> *{acct}* {name}: {ans.answer}{as_of}", {"kind": "answer", "account": acct})
         return True
 
     def dm(self, ev: dict) -> str | None:
@@ -665,6 +676,64 @@ class Desk:
             reply += "\n\n_I've logged this one for Scott._"
         self.slack.chat_postMessage(channel=channel, text=reply[:3900], unfurl_links=False)
         return "how-to"
+
+    def voice(self, text: str, convo: str = "") -> str:
+        """Scott talking to Donna on his iPhone ("Hey Donna", an iOS Shortcut through webchat's /api/donna): the same
+        Harvey mode as his private Slack messages, answered to be read aloud. Remembers the conversation 30 minutes."""
+        from .parser import owner_chat
+        talks = self.__dict__.setdefault("talks", {})
+        now = time.time()
+        for k in [k for k, t in talks.items() if now - t["at"] > 1800]:
+            talks.pop(k)
+        talk = talks.setdefault(convo or "phone", {"turns": [], "ask": None, "at": now})
+        talk["at"] = now
+        owner = os.environ.get("OWNER_SLACK_ID", "U4KFSQCDQ").split(",")[0].strip()
+        heard = []
+        ask = talk["ask"]
+        h = {"user": owner, "ts": f"{now:.6f}",
+             "text": f"{ask['q']}\nDonna asked: {ask['said']}\nAnswer: {text}" if ask else text}
+        talk["ask"] = None
+        reply = ""
+        if not PULSE.search(text) and self.office_lookup(h, [], channel="voice", say=lambda t, p: heard.append((t, p))) \
+                and heard:
+            said, payload = heard[-1]
+            reply = spoken(said)
+            if payload.get("kind") == "office_ask":
+                talk["ask"] = {"q": payload.get("q", text), "said": reply}
+        if not reply:
+            about = self.briefing() + ("\n\n" + self.pulse() if PULSE.search(text) else "")
+            reply = owner_chat(self.claude, talk["turns"][-16:] + [{"role": "user", "content": text}], about, spoken=True)
+        talk["turns"] += [{"role": "user", "content": text}, {"role": "assistant", "content": reply or "I'm here."}]
+        return reply or "I'm here. What do you need?"
+
+    def serve_voice(self, port: int = 0) -> None:
+        """Answer /voice on 127.0.0.1 for the website server (webchat.py), which checks Scott's key before passing it on."""
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+        import threading
+        desk = self
+
+        class H(BaseHTTPRequestHandler):
+            def log_message(self, *a):
+                pass
+
+            def do_POST(self):
+                try:
+                    body = json.loads(self.rfile.read(min(int(self.headers.get("Content-Length") or 0), 8000)) or b"{}")
+                    out = desk.voice(str(body.get("text") or "").strip()[:2000], str(body.get("convo") or ""))
+                    code = 200
+                except Exception as e:
+                    print(time.strftime("%H:%M"), "voice error:", e, flush=True)
+                    out, code = "Sorry, I lost you for a second. Say that again?", 200
+                data = out.encode()
+                self.send_response(code)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+
+        srv = ThreadingHTTPServer(("127.0.0.1", port or VOICE_PORT), H)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        print(time.strftime("%H:%M"), f"voice on 127.0.0.1:{port or VOICE_PORT}", flush=True)
 
     def owner_turns(self, channel: str, ev: dict) -> list[dict]:
         """The last couple of hours of Scott's private conversation with the bot, so Donna remembers what he just said."""
@@ -1182,6 +1251,8 @@ def main():
             desk.alliant, loaded[0] = Alliant.from_dir(args.data), time.time()
 
     if args.listen:
+        if os.environ.get("OWNER_VOICE_TOKEN"):
+            desk.serve_voice()
         desk.listen(os.environ["SLACK_APP_TOKEN"], os.environ["SLACK_BOT_TOKEN"], args.since_minutes,
                     args.watch or 300, reload)
         return
