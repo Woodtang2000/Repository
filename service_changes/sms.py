@@ -28,7 +28,7 @@ import urllib.request
 from datetime import datetime, timedelta, timezone
 
 from .checks import check, readback, ticket
-from .todo import GREEN, attachment, restyle, stamp
+from .todo import GREEN, attachment, shrink, stamp
 from .verify import expectations
 from .context import ALASKA, Alliant, frequency_label
 from .schema import Category
@@ -440,7 +440,8 @@ class TextDesk:
                 if who:
                     self.approve(pl["phone"], pl["accounts"], pl.get("name", ""))
                     self.slack.chat_update(channel=self.desk_id, ts=m["ts"], text="",
-                                           attachments=restyle(m, GREEN, status=stamp(person(self.slack, who), "Approved")),
+                                           attachments=shrink(self.slack, self.desk_id, m, GREEN,
+                                                              stamp(person(self.slack, who), "Approved"), lines=1),
                                            metadata={"event_type": KIND, "event_payload": {**pl, "kind": "sms_approved"}})
                     done.add(m["ts"])
                     changed += 1

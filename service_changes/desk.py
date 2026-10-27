@@ -36,7 +36,7 @@ from datetime import datetime
 from .bot import _messages, _name, _office_staff
 from .checks import check, readback, split_by_account, ticket
 from . import todo as todo_bar  # (listen() has its own `todo` queue)
-from .todo import GOLD, GREEN, GREY, attachment, restyle, stamp
+from .todo import GOLD, GREEN, GREY, attachment, restyle, shrink, stamp
 from .context import ALASKA, Alliant, route_from_channel, service_day
 from .schema import Category
 
@@ -399,8 +399,9 @@ class Desk:
         for old_ts in replaces:
             old = self.desk_msgs.get(old_ts)
             if old:
-                self.slack.chat_update(channel=self.desk_id, ts=old_ts, text="", attachments=restyle(
-                                           old, GREY, status="🚫 *Replaced by a newer ticket below. Don't enter this one.*"),
+                self.slack.chat_update(channel=self.desk_id, ts=old_ts, text="", attachments=shrink(
+                                           self.slack, self.desk_id, old, GREY,
+                                           "🚫 *Replaced by a newer ticket below. Don't enter this one.*"),
                                        metadata={"event_type": KIND, "event_payload": {**meta(old), "kind": "replaced"}})
         return new["ts"]
 
@@ -674,7 +675,7 @@ class Desk:
             self.post(p["src_channel"], msg, {"kind": "readback", "src_ts": p["src_ts"], "driver_id": p.get("driver_id"),
                                               "msgs": p.get("msgs", [])})
         self.slack.chat_update(channel=self.desk_id, ts=t["ts"], text="",
-                               attachments=restyle(t, GREEN, status=stamp(who, "Entered") + " · readback sent"),
+                               attachments=shrink(self.slack, self.desk_id, t, GREEN, stamp(who, "Entered") + " · readback sent"),
                                metadata={"event_type": KIND, "event_payload": {**p, "kind": "done", "done_at": time.time(),
                                                                                "entered_by": who}})
 

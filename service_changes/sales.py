@@ -91,8 +91,9 @@ def card_text(lead: dict) -> str:
     return "\n".join(lines)
 
 
-def blocks(lead: dict, footer: str = "") -> list:
-    b = [{"type": "section", "text": {"type": "mrkdwn", "text": card_text(lead)[:2900]}}]
+def blocks(lead: dict, footer: str = "", short: bool = False) -> list:
+    text = todo.summary(card_text(lead), 2) if short else card_text(lead)[:2900]
+    b = [{"type": "section", "text": {"type": "mrkdwn", "text": text}}]
     if footer:
         b.append({"type": "context", "elements": [{"type": "mrkdwn", "text": footer}]})
     else:
@@ -139,8 +140,14 @@ def handle_action(slack, payload: dict, data_dir: str, create=salesforce.create_
         return f"salesforce error: {e}"
     lead.update(sf_id=sf_id, sf_owner=owner[0], given_by=clicker, given_at=time.time())
     save(data_dir, lead)
+    try:  # the full card goes into the thread; the card itself shrinks to its first lines (todo.shrink)
+        slack.chat_postMessage(channel=channel, thread_ts=ts, text=card_text(lead), unfurl_links=False,
+                               metadata={"event_type": KIND, "event_payload": {"kind": "todo_full"}})
+        short = True
+    except Exception:
+        short = False
     slack.chat_update(channel=channel, ts=ts, text="", attachments=[{"color": todo.GREEN, "fallback": todo.plain(card_text(lead))[:150],
-                      "blocks": blocks(lead, footer=todo.stamp(clicker, f"Given to {owner[0]}") + f" · <{link}|Salesforce Opportunity>"
+                      "blocks": blocks(lead, short=short, footer=todo.stamp(clicker, f"Given to {owner[0]}") + f" · <{link}|Salesforce Opportunity>"
                                                     + ("" if lead["found"].get("street") or lead.get("street") else " · address not found online, add it in Salesforce")
                                                     + (f" · ⚠️ {note}" if note else ""))}])
     return f"lead {lead['id']} -> {owner[0]} ({sf_id})"

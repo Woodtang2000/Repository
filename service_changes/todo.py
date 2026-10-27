@@ -4,6 +4,7 @@ Slack can't color a message, so a message that asks someone to do something carr
 colored bar: gold while it's open, green when it's done (with who and when), grey when it was closed without doing.
 Messages with their own button or reaction (tickets ✅, sign-up cards ✅, sales "Give to") keep it and turn green when
 it's recorded; the rest get a ✓ Done button, and Done gets an Undo. Confirmations and reports get no bar.
+Once done, a message shrinks to a line or two (its full text moves into its thread), so the channel stays readable.
 
 Posted with no top-level text (it would show twice); Slack notifications use the attachment's fallback."""
 from datetime import datetime
@@ -82,6 +83,34 @@ def restyle(m: dict, color: str, status: str = "", button: bool = False, undo: b
     return [a]
 
 
+def summary(text: str, lines: int = 2) -> str:
+    """The first line or two of a message, for the one-line version a done message shrinks to."""
+    keep = [ln.strip() for ln in (text or "").split("\n") if ln.strip() and not ln.startswith(">")][:lines]
+    return "  ·  ".join(keep)[:600] or (text or "")[:200]
+
+
+def shrink(slack, channel: str, m: dict, color: str, status: str, undo: bool = False, lines: int = 2) -> list[dict]:
+    """Done messages shrink so the channel stays readable: the full text goes into the message's thread (nothing is
+    lost) and the message itself becomes a one-line summary with its status. Returns the new attachments."""
+    full = body(m)
+    try:
+        slack.chat_postMessage(channel=channel, thread_ts=m["ts"], text=full, unfurl_links=False,
+                               metadata={"event_type": "service_desk", "event_payload": {"kind": "todo_full"}})
+    except Exception as e:  # never lose the status change over the thread copy
+        print("todo: full text not copied to the thread:", e, flush=True)
+        return restyle(m, color, status=status, undo=undo)
+    return attachment(summary(full, lines), color=color, button=False, status=status, undo=undo)
+
+
+def _full_text(slack, channel: str, ts: str) -> tuple[str, str] | None:
+    """The full text a shrunk message put in its thread: (text, the thread reply's ts)."""
+    r = slack.conversations_replies(channel=channel, ts=ts, limit=50, include_all_metadata=True)
+    for m in reversed(r.get("messages", [])[1:]):
+        if ((m.get("metadata") or {}).get("event_payload") or {}).get("kind") == "todo_full":
+            return m.get("text", ""), m["ts"]
+    return None
+
+
 def handle_action(slack, payload: dict, name_of) -> str | None:
     """✓ Done and Undo on a to-do message: green with who and when, or back to gold. Returns what happened."""
     act = next((a for a in payload.get("actions", []) if a.get("action_id") in (DONE, UNDO)), None)
@@ -92,8 +121,14 @@ def handle_action(slack, payload: dict, name_of) -> str | None:
     if not user or not channel or not msg.get("ts") or msg.get("bot_id") is None and not msg.get("attachments"):
         return "ignored"
     if act["action_id"] == DONE:
-        atts = restyle(msg, GREEN, status=stamp(name_of(user)), undo=True)
-    else:
-        atts = restyle(msg, GOLD, button=True)
+        atts = shrink(slack, channel, msg, GREEN, stamp(name_of(user)), undo=True, lines=1)
+    else:  # Undo: the full text back from the thread, gold, ✓ Done again
+        found = _full_text(slack, channel, msg["ts"])
+        atts = attachment(found[0]) if found else restyle(msg, GOLD, button=True)
+        if found:
+            try:
+                slack.chat_delete(channel=channel, ts=found[1])
+            except Exception:
+                pass
     slack.chat_update(channel=channel, ts=msg["ts"], text="", attachments=atts)
     return f"{act['action_id']} {msg['ts']}"

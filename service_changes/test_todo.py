@@ -6,10 +6,20 @@ from .context import ALASKA
 
 class Slack:
     def __init__(self):
-        self.updates = []
+        self.updates, self.thread, self.deleted = [], [], []
 
     def chat_update(self, **kw):
         self.updates.append(kw)
+
+    def chat_postMessage(self, **kw):
+        self.thread.append({"ts": f"2.{len(self.thread)}", "text": kw["text"], "metadata": kw.get("metadata")})
+        return {"ts": self.thread[-1]["ts"]}
+
+    def conversations_replies(self, **kw):
+        return {"messages": [{"ts": "1.0"}] + self.thread}
+
+    def chat_delete(self, channel, ts):
+        self.deleted.append(ts)
 
 
 def test_open_done_undo():
@@ -25,12 +35,14 @@ def test_open_done_undo():
     status = next(b for b in done["blocks"] if b.get("block_id") == "status")["elements"][0]["text"]
     assert status.startswith(":white_check_mark: Done · Bill · ")
     assert [e["action_id"] for e in done["blocks"][-1]["elements"]] == [todo.UNDO]
-    assert todo.body({"attachments": [done]}) == "*W1* WENDY'S\nPlease check the mats"
+    assert todo.body({"attachments": [done]}) == "*W1* WENDY'S"  # shrunk to its first line
+    assert slack.thread[0]["text"] == "*W1* WENDY'S\nPlease check the mats"  # the full text, in the thread
     payload["actions"], payload["message"] = [{"action_id": todo.UNDO}], {**msg, "attachments": [done]}
     todo.handle_action(slack, payload, lambda u: "Bill Dubinsky")
     [back] = slack.updates[-1]["attachments"]
     assert back["color"] == todo.GOLD and not any(b.get("block_id") == "status" for b in back["blocks"])
     assert [e["action_id"] for e in back["blocks"][-1]["elements"]] == [todo.DONE]
+    assert todo.body({"attachments": [back]}) == "*W1* WENDY'S\nPlease check the mats" and slack.deleted == ["2.0"]
     assert todo.handle_action(slack, {"actions": [{"action_id": "sales_give_bill"}]}, str) is None
 
 
