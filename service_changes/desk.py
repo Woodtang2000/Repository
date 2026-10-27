@@ -52,6 +52,8 @@ PULSE = re.compile(r"\b(how('?s| is| are)? (things|everything|it|we|the team|bus
                    r"what am i missing|happening)\b", re.I)
 BRIEF_HOUR = int(os.environ.get("OWNER_BRIEF_HOUR", "7"))  # Donna's morning read for Scott, weekdays from this hour
 VOICE_PORT = int(os.environ.get("DESK_VOICE_PORT", "8091"))  # Donna's voice (desk.voice), on 127.0.0.1 only
+SKU_Q = re.compile(r"\b(weigh\w*|pounds?|lbs?|dimensions?|materials?|fabric|made of|blend|sku|how big|"
+                   r"case pack|pack size|\d-\d\d-\d\d)\b", re.I)  # questions about what an item is, not who has it
 HOW_TO = re.compile(r"\bhow (do|can|would|should) (i|you|we)\b.*\b(alliant|handheld|enter|make|set up|print|run)\b", re.I)  # Alliant how-to notes
 VERIFY_HOUR = 7  # entry check posts once the morning's Alliant data is in, from this hour (Alaska)
 STOCKROOM = os.environ.get("STOCKROOM_CHANNEL", "stockroom")  # Ana's channel: weekly garment data checks
@@ -594,6 +596,10 @@ class Desk:
             as_of = f" _(Alliant as of {self.alliant.as_of})_" if self.alliant.as_of else ""
             say(f"<@{user}> {ans.answer}{as_of}"[:3900], {"kind": "answer", "barcodes": codes[:10]})
             return True
+        sku_answer = self.sku_answer(text, user)
+        if sku_answer:
+            say(f"<@{user}> {sku_answer}"[:3900], {"kind": "answer", "skus": True})
+            return True
         parsed = parse_message(self.claude, text, self.desk_name, h["ts"], self.alliant, author=self.name(user),
                                office=True)
         if parsed.category != Category.lookup:
@@ -714,7 +720,11 @@ class Desk:
              "text": f"{ask['q']}\nDonna asked: {ask['said']}\nAnswer: {text}" if ask else text}
         talk["ask"] = None
         reply, kind = "", "chat"
-        route = re.search(r"\b(?:route|rte|rt)\s*#?\s*(\d{1,2})\b", text, re.I)
+        if not ask:
+            item = self.sku_answer(text, owner)
+            if item:
+                reply, kind = spoken(item), "sku"
+        route = None if reply else re.search(r"\b(?:route|rte|rt)\s*#?\s*(\d{1,2})\b", text, re.I)
         if route and not ask and not re.search(r"\b\d{4}-\d-\d{5}\b", text) \
                 and re.search(r"\b(stops?|customers?|accounts?|order|deliver\w*|first|last|next|who|which|list)\b", text, re.I):
             # "what stops are on route 1 Thursday": straight to the route, no parse ("should we raise the route 4
@@ -737,6 +747,22 @@ class Desk:
         talk["turns"] += [{"role": "user", "content": text}, {"role": "assistant", "content": reply or "I'm here."}]
         print(time.strftime("%H:%M"), f"voice: answered ({kind}) in {time.time() - now:.1f}s", flush=True)
         return reply or "I'm here. What do you need?"
+
+    def sku_answer(self, text: str, user: str | None = None) -> str:
+        """A question about an item itself ("how much does a bath blanket weigh?"), answered from skus.csv; empty if
+        it isn't one. Without the file yet, says so rather than guessing."""
+        if not SKU_Q.search(text):
+            return ""
+        from .context import sku_facts
+        if not getattr(self.alliant, "skus", None):
+            return ("I don't have the SKU details (weights, sizes, materials) yet. They're coming in the Alliant feed "
+                    "as skus.csv.")
+        facts = sku_facts(self.alliant, text)
+        if not facts:
+            return ""
+        from .parser import answer_lookup
+        return answer_lookup(self.claude, text, "SKU details from Alliant (no prices):\n" + facts,
+                             asker=self.asker(user) if user else "office staff member").answer
 
     def sounds_like_lookup(self, text: str) -> bool:
         """Worth the (slower) account lookup: a number, an account or route word, or a customer's name. Everything else

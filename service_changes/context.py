@@ -73,6 +73,7 @@ class Alliant:
     garments: dict[tuple[str, str], dict[str, int]] = field(default_factory=dict)  # (account, wearer#) -> "ITEM SIZE" -> qty
     aliases: dict[str, list[str]] = field(default_factory=dict)  # account -> other names drivers use ("BSI")
     sku: dict[tuple, str] = field(default_factory=dict)  # (account, item) or (account, wearer#, "ITEM SIZE") -> Alliant SKU
+    skus: dict[str, dict] = field(default_factory=dict)  # SKU -> its details from skus.csv (no prices)
     cards: dict[str, dict] = field(default_factory=dict)  # account -> record card header (stop_sequence, special_instructions, ...)
     as_of: str = ""  # date of the export the data came from, e.g. "Oct 3"
     exported_at: datetime | None = None  # when the data was exported from Alliant (feed_done.txt, else file time)
@@ -99,6 +100,7 @@ class Alliant:
         f = lambda n: os.path.join(data_dir, n) if os.path.exists(os.path.join(data_dir, n)) else None
         data = cls.load(f("customers.csv"), f("current_items.csv"), f("garments.csv"), f("wearers.csv"))
         data.load_aliases(f("aliases.csv") or os.path.join(os.path.dirname(__file__), "aliases.csv"))
+        data.load_skus(f("skus.csv"))
         if f("feed_done.txt"):  # the nightly Alliant SQL feed: its export time, written last
             try:
                 data.exported_at = datetime.strptime(open(f("feed_done.txt")).read().split()[0], "%Y-%m-%dT%H:%M:%S%z")
@@ -216,6 +218,19 @@ class Alliant:
                         auto[item] = auto.get(item, 0) + int(row["autocount"])
         return data
 
+    def load_skus(self, path: str | None) -> None:
+        """skus.csv from the Alliant feed: one row per SKU with whatever details it has (description, category, size,
+        color, weight, material, pack size...). Price and cost columns are dropped here, so they never reach an answer."""
+        self.skus = {}
+        if not path:
+            return
+        with open(path, newline="") as f:
+            for row in csv.DictReader(f):
+                sku = (row.get("sku") or "").strip()
+                if sku:
+                    self.skus[sku] = {k.strip(): (v or "").strip() for k, v in row.items() if k and (v or "").strip()
+                                      and not re.search(r"price|cost|rate|charge|amount", k, re.I)}
+
     def match_account(self, name: str | None, route: str | None, day: str) -> str | None:
         """Account number when `name` matches exactly one candidate, ignoring case and punctuation."""
         if not name:
@@ -329,31 +344,46 @@ def garment_facts(alliant: "Alliant", account: str, question: str = "") -> str:
     return "\n".join(out)
 
 
-def route_facts(alliant: "Alliant", route: str) -> str:
-    """One route: every customer on it with delivery days, stop number on each day (from the record cards' stop
-    sequence, e.g. "Mon:5;Thu:22") and any item delivered less often than weekly."""
+def route_facts(alliant: "Alliant", route: str, today: datetime | None = None) -> str:
+    """One route number, for each company that has it (Snow White's route 1 and The Laundry Group's route 1 are
+    different trucks): every customer with delivery days and stop numbers (from the record cards' stop sequence, e.g.
+    "Mon 5;Thu 22"), the stop order and count for each day worked out here, today's first, and items delivered less
+    often than weekly."""
+    today = (today or datetime.now(ALASKA)).astimezone(ALASKA)
+    day = DAYS[today.weekday()]
     custs = [c for c in alliant.customers if c.route == route]
     if not custs:
         return ""
-    stops: dict[str, list[tuple[int, str]]] = {}
-    out = [f"Route {route}: {len(custs)} customers (account name: delivery days; stop number by day; items not delivered "
-           "weekly with how often)"]
-    for c in custs:
-        seq = alliant.cards.get(c.account, {}).get("stop_sequence") or ""
-        for day, num in re.findall(r"([A-Za-z]{3})[a-z]*\s*[:\s]\s*(\d+)", seq):
-            stops.setdefault(day.title(), []).append((int(num), f"{c.account} {c.name}"))
-        odd = []
-        for item, code in alliant.frequency.get(c.account, {}).items():
-            label = frequency_label(code)
-            if label and label != "weekly":
-                odd.append(f"{item} {label}")
-        out.append(f"- {c.account} {c.name}: {'/'.join(c.service_days) or '?'}; stops {seq or 'not on the card'}"
-                   + (f"; {', '.join(odd)}" if odd else ""))
-    for day in DAYS:
-        if day in stops:
-            out.append(f"Stop order {day}: " + ", ".join(f"{n}. {name}" for n, name in sorted(stops[day])))
+    out = [f"Today is {today.strftime('%A %B')} {today.day}, {today.year} ({day}). Account numbers ending -1-xxxxx are "
+           "Snow White Linen customers; -2-xxxxx are The Laundry Group. Each company has its own route numbers, so route "
+           f"{route} is listed per company. Stop counts, first and last stops are worked out already: use them as given."]
+    for branch, company in (("1", "Snow White Linen"), ("2", "The Laundry Group")):
+        mine = [c for c in custs if ((c.account.split("-") + ["", ""])[1] == "2") == (branch == "2")]
+        if not mine:
+            continue
+        stops: dict[str, list[tuple[int, str]]] = {}
+        lines = []
+        for c in mine:
+            seq = alliant.cards.get(c.account, {}).get("stop_sequence") or ""
+            for d, num in re.findall(r"([A-Za-z]{3})[a-z]*\s*[:\s]\s*(\d+)", seq):
+                stops.setdefault(d.title(), []).append((int(num), f"{c.account} {c.name}"))
+            odd = [f"{item} {frequency_label(code)}" for item, code in alliant.frequency.get(c.account, {}).items()
+                   if frequency_label(code) and frequency_label(code) != "weekly"]
+            lines.append(f"- {c.account} {c.name}: {'/'.join(c.service_days) or '?'}; stops {seq or 'not on the card'}"
+                         + (f"; {', '.join(odd)}" if odd else ""))
+        out.append(f"\n{company} route {route}: {len(mine)} customers")
+        for d in [day] + [x for x in DAYS if x != day]:
+            if d not in stops:
+                if d == day:
+                    out.append(f"TODAY ({d}): no stops on {company} route {route}.")
+                continue
+            order = sorted(stops[d])
+            label = f"TODAY ({d})" if d == day else d
+            out.append(f"{label}: {len(order)} stops; first {order[0][1]} (stop {order[0][0]}), last {order[-1][1]} "
+                       f"(stop {order[-1][0]}). Order: " + ", ".join(f"{n}. {name}" for n, name in order))
+        out.append("Customers (account name: delivery days; stop numbers; items not weekly):")
+        out += lines
     return "\n".join(out)
-
 
 def group_totals(alliant: "Alliant", accounts: list[str], question: str = "") -> list[str]:
     """Totals across a group of accounts, added up in code (never by the model): each item (by SKU) with its
@@ -402,11 +432,31 @@ def group_facts(alliant: "Alliant", accounts: list[str], question: str = "") -> 
             + "\n".join(totals) + f"\n\nPer account (item per-delivery autocount, inventory):\n" + "\n".join(out))
 
 
+def sku_facts(alliant: "Alliant", question: str, limit: int = 8) -> str:
+    """The SKUs a question is about ("how much does a bath blanket weigh?", "what's 6-01-55?"), with every detail the
+    feed has on them. Matched by SKU code, else by the most words shared with the description."""
+    skus = getattr(alliant, "skus", {}) or {}
+    if not skus:
+        return ""
+    codes = [s for s in skus if re.search(rf"(?<![\w-]){re.escape(s)}(?![\w-])", question, re.I)]
+    if not codes:
+        words = {w.rstrip("s") for w in re.findall(r"[a-z0-9]{3,}", question.lower())} - {
+            "how", "much", "many", "does", "the", "what", "weigh", "weight", "size", "sku", "item", "our", "are", "for", "and"}
+        scored = []
+        for s, d in skus.items():
+            desc = {w.rstrip("s") for w in re.findall(r"[a-z0-9]{3,}", " ".join(d.values()).lower())}
+            hit = len(words & desc)
+            if hit:
+                scored.append((-hit, s))
+        codes = [s for _, s in sorted(scored)[:limit]]
+    return "\n".join("SKU " + s + ": " + "; ".join(f"{k} {v}" for k, v in skus[s].items() if k != "sku") for s in codes)
+
+
 def account_facts(alliant: "Alliant", account: str) -> str:
     """What a driver may be told about an account: stop, contact, notes, items and wearers. No prices or contract terms."""
     cust = next((c for c in alliant.customers if c.account == account), None)
     card = alliant.cards.get(account, {})
-    out = [f"{account} {cust.name if cust else card.get('name', '')}"]
+    out = [f"{account} {cust.name if cust else card.get('name', '')} ({company_for(account)} customer)"]
     if card.get("stop_sequence") or cust:
         out.append(f"Route {cust.route if cust else card.get('route', '')} · stops: "
                    + (card.get("stop_sequence") or ", ".join(cust.service_days if cust else [])))

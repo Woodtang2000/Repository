@@ -698,7 +698,7 @@ def test_drivers_ask_about_their_route_and_the_handheld(setup, monkeypatch):
     [a] = slack.bot_posts("C1", "answer")
     assert a["text"].startswith("<@U1> 1. Wendy's")
     q, facts = asked[0]
-    assert q.startswith("(Today is ") and "Route 1: 2 customers" in facts
+    assert q.startswith("(Today is ") and "route 1: 2 customers" in facts
     post = slack.say("C1", "U1", "new: how do I start my route on the handheld?")
     d.run_once()
     howto = slack.bot_posts("C1", "answer")[-1]

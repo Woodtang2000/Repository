@@ -65,12 +65,30 @@ def test_route_facts():
                            Customer("1400-1-00000", "OTHER", "5", ["Thu"])],
                 cards={"1205-1-00007": {"stop_sequence": "Mon:5;Thu:22"}, "1300-1-00000": {"stop_sequence": "Thu 3"}},
                 frequency={"1300-1-00000": {"MAT 3X5": "5", "BAR MOP": "7"}})
-    f = route_facts(a, "4")
-    assert "Route 4: 2 customers" in f and "OTHER" not in f
+    from datetime import datetime
+    from .context import ALASKA
+    a.customers.append(Customer("5900-2-00000", "WESTMARK HOTEL", "4", ["Thu"]))  # TLG's own route 4
+    a.cards["5900-2-00000"] = {"stop_sequence": "Thu 1"}
+    f = route_facts(a, "4", datetime(2026, 10, 29, 8, tzinfo=ALASKA))  # a Thursday
+    assert f.startswith("Today is Thursday October 29, 2026 (Thu).") and "OTHER" not in f
+    assert "Snow White Linen route 4: 2 customers" in f and "The Laundry Group route 4: 1 customers" in f
     assert "- 1300-1-00000 KOBUK COFFEE: Thu; stops Thu 3; MAT 3X5 every other week" in f and "BAR MOP" not in f
-    assert "Stop order Thu: 3. 1300-1-00000 KOBUK COFFEE, 22. 1205-1-00007 MIDAS 7" in f
-    assert "Stop order Mon: 5. 1205-1-00007 MIDAS 7" in f
+    assert ("TODAY (Thu): 2 stops; first 1300-1-00000 KOBUK COFFEE (stop 3), last 1205-1-00007 MIDAS 7 (stop 22). "
+            "Order: 3. 1300-1-00000 KOBUK COFFEE, 22. 1205-1-00007 MIDAS 7") in f
+    assert "Mon: 1 stops; first 1205-1-00007 MIDAS 7 (stop 5)" in f
+    assert "TODAY (Thu): 1 stops; first 5900-2-00000 WESTMARK HOTEL" in f  # never mixed with Snow White's stop order
     assert route_facts(a, "9") == ""
+
+
+def test_sku_details_without_prices(tmp_path):
+    from .context import sku_facts
+    (tmp_path / "skus.csv").write_text("sku,description,weight_lbs,size,unit_price,replacement_cost\n"
+                                       "6-01-05,BATH BLANKET WHITE,1.8,27x52,4.10,12.00\n7-00-07,BAR MOP,0.12,16x19,0.30,1.00\n")
+    a = Alliant()
+    a.load_skus(str(tmp_path / "skus.csv"))
+    f = sku_facts(a, "how much does a bath blanket weigh?")
+    assert f == "SKU 6-01-05: description BATH BLANKET WHITE; weight_lbs 1.8; size 27x52"  # no price or cost
+    assert sku_facts(a, "what is 7-00-07").startswith("SKU 7-00-07: description BAR MOP")
 
 
 def test_barcode_facts(tmp_path):
