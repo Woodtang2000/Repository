@@ -298,4 +298,11 @@ def test_donnas_voice_from_elevenlabs(monkeypatch):
     assert post("Bearer " + "k" * 32, "Hi Harvey.") == (200, b"ID3mp3", "audio/mpeg")
     assert calls[-1].full_url.startswith("https://api.elevenlabs.io/v1/text-to-speech/VOICE1")
     assert calls[-1].headers["Xi-api-key"] == "el-test" and json.loads(calls[-1].data)["text"] == "Hi Harvey."
+    assert json.loads(calls[-1].data)["voice_settings"]["speed"] == 1.12
     assert post("Bearer nope", "x")[0] == 404 and len(calls) == 1  # never spends voice credit for a stranger
+
+
+def test_spoken_text_flows():
+    from .webchat import smooth
+    assert smooth("Two hundred a week — want more?") == "Two hundred a week, want more?"
+    assert smooth("Here's the deal: towels are late...\nI'll call them.") == "Here's the deal, towels are late, I'll call them."

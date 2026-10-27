@@ -162,8 +162,10 @@ OWNER_VOICE = ("You are Donna, and this is Scott, the owner: you're his Donna an
 
 
 SPOKEN = (" This is a voice conversation: your reply is read aloud on his phone. Talk, don't write: no lists, "
-          "headings, markdown, emoji or links; numbers as people say them; two to four sentences unless he asks for "
-          "more. End on the next move, or a question if you need one.")
+          "headings, markdown, emoji, links, dashes or colons; numbers as people say them; two to four sentences unless "
+          "he asks for more. Sound warm and easy, like you're smiling: full sentences that flow into each other (and, so, "
+          "but), never clipped one-word fragments or a bare number on its own, which sound curt out loud. Confident, "
+          "never cold. End on the next move, or a question if you need one.")
 
 
 def owner_chat(client: anthropic.Anthropic, turns: list[dict], briefing: str, spoken: bool = False) -> str:

@@ -21,6 +21,7 @@ import time
 from collections import defaultdict, deque
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+import urllib.error
 import urllib.request
 from urllib.parse import parse_qs, urlparse
 
@@ -619,24 +620,42 @@ def make_handler(chat: Chat, public_url: str):
     return H
 
 
+def smooth(text: str) -> str:
+    """Text as it should flow when spoken: dashes, ellipses, colons and line breaks make the voice stop dead, which
+    sounds curt, so they become commas or spaces."""
+    text = re.sub(r"\s*(—|–|\s-\s|\.\.\.|…)\s*", ", ", text)
+    text = re.sub(r":\s+", ", ", text)
+    text = re.sub(r"\s*\n+\s*", " ", text)
+    return re.sub(r",\s*,", ",", text).strip()
+
+
 def speak(text: str) -> bytes | None:
     """Donna's voice: `text` as MP3 from ElevenLabs, or None when it isn't set up or doesn't answer. ELEVENLABS_VOICE_ID
     picks the voice (from the ElevenLabs Voice Library); ELEVENLABS_MODEL trades quality for speed."""
     key = os.environ.get("ELEVENLABS_API_KEY", "").strip()
     if not key:
         return None
+    text = smooth(text)
     voice = os.environ.get("ELEVENLABS_VOICE_ID", "").strip() or "21m00Tcm4TlvDq8ikWAM"
-    body = {"text": text, "model_id": os.environ.get("ELEVENLABS_MODEL", "eleven_multilingual_v2"),
-            "voice_settings": {"stability": 0.45, "similarity_boost": 0.8, "style": 0.35, "use_speaker_boost": True}}
-    req = urllib.request.Request(f"https://api.elevenlabs.io/v1/text-to-speech/{voice}?output_format=mp3_44100_128",
-                                 data=json.dumps(body).encode(), method="POST",
-                                 headers={"xi-api-key": key, "Content-Type": "application/json", "Accept": "audio/mpeg"})
-    try:
-        with urllib.request.urlopen(req, timeout=60) as r:
-            return r.read(10_000_000)
-    except Exception as e:
-        print(time.strftime("%H:%M"), "donna voice (ElevenLabs) failed:", str(e)[:200], flush=True)
-        return None
+    settings = {"stability": float(os.environ.get("ELEVENLABS_STABILITY", "0.4")),  # lower: livelier, more natural
+                "similarity_boost": 0.8, "style": float(os.environ.get("ELEVENLABS_STYLE", "0.3")),
+                "use_speaker_boost": True, "speed": float(os.environ.get("ELEVENLABS_SPEED", "1.12"))}  # 1.0 is the voice's own pace
+    for attempt in (settings, {k: v for k, v in settings.items() if k != "speed"}):  # an older model may not take speed
+        body = {"text": text, "model_id": os.environ.get("ELEVENLABS_MODEL", "eleven_multilingual_v2"), "voice_settings": attempt}
+        req = urllib.request.Request(f"https://api.elevenlabs.io/v1/text-to-speech/{voice}?output_format=mp3_44100_128",
+                                     data=json.dumps(body).encode(), method="POST",
+                                     headers={"xi-api-key": key, "Content-Type": "application/json", "Accept": "audio/mpeg"})
+        try:
+            with urllib.request.urlopen(req, timeout=60) as r:
+                return r.read(10_000_000)
+        except urllib.error.HTTPError as e:
+            print(time.strftime("%H:%M"), "donna voice (ElevenLabs) failed:", e.code, e.read(300)[:300], flush=True)
+            if e.code not in (400, 422):
+                return None
+        except Exception as e:
+            print(time.strftime("%H:%M"), "donna voice (ElevenLabs) failed:", str(e)[:200], flush=True)
+            return None
+    return None
 
 
 def keep_pictures(data_dir: str) -> None:
