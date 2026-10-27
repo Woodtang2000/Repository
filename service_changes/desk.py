@@ -677,6 +677,23 @@ class Desk:
         self.slack.chat_postMessage(channel=channel, text=reply[:3900], unfurl_links=False)
         return "how-to"
 
+    def voice_messages(self, messages: list[dict]) -> str:
+        """The same as voice(), for a conversation that brings its own history (ElevenLabs' agent, through webchat's
+        /v1/chat/completions): the last user message is what was just said, the rest is the conversation so far."""
+        def text_of(m):
+            c = m.get("content")
+            return c if isinstance(c, str) else " ".join(p.get("text", "") for p in c or [] if isinstance(p, dict))
+        turns = [{"role": m["role"], "content": text_of(m)} for m in messages
+                 if m.get("role") in ("user", "assistant") and text_of(m).strip()]
+        if not turns or turns[-1]["role"] != "user":
+            return "I'm here. What do you need?"
+        convo = "agent-" + str(abs(hash(turns[0]["content"])))
+        talk = self.__dict__.setdefault("talks", {}).setdefault(convo, {"turns": [], "ask": None, "at": time.time()})
+        talk["turns"] = turns[:-1][-16:]
+        while talk["turns"] and talk["turns"][0]["role"] == "assistant":
+            talk["turns"].pop(0)
+        return self.voice(turns[-1]["content"], convo)
+
     def voice(self, text: str, convo: str = "") -> str:
         """Scott talking to Donna on his iPhone ("Hey Donna", an iOS Shortcut through webchat's /api/donna): the same
         Harvey mode as his private Slack messages, answered to be read aloud. Remembers the conversation 30 minutes."""
@@ -738,8 +755,11 @@ class Desk:
 
             def do_POST(self):
                 try:
-                    body = json.loads(self.rfile.read(min(int(self.headers.get("Content-Length") or 0), 8000)) or b"{}")
-                    out = desk.voice(str(body.get("text") or "").strip()[:2000], str(body.get("convo") or ""))
+                    body = json.loads(self.rfile.read(min(int(self.headers.get("Content-Length") or 0), 200000)) or b"{}")
+                    if self.path == "/chat":
+                        out = desk.voice_messages(body.get("messages") or [])
+                    else:
+                        out = desk.voice(str(body.get("text") or "").strip()[:2000], str(body.get("convo") or ""))
                     code = 200
                 except Exception as e:
                     print(time.strftime("%H:%M"), "voice error:", e, flush=True)

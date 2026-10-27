@@ -504,6 +504,8 @@ def make_handler(chat: Chat, public_url: str):
                 return self._donna_voice()
             if path.startswith("/twilio/voice"):
                 return self._phone(path)
+            if path == "/v1/chat/completions":
+                return self._agent()
             if path != "/api/chat":
                 return self._send(404, b"not found", "text/plain")
             try:
@@ -547,6 +549,40 @@ def make_handler(chat: Chat, public_url: str):
                 xml = (f'<Response><Say voice="{phone.TWILIO_VOICE}">Sorry, I\'m having trouble on my end. Let me put you '
                        f'through to the office.</Say><Dial>{phone.OFFICE_PHONE}</Dial></Response>')
             self._send(200, ('<?xml version="1.0" encoding="UTF-8"?>' + xml).encode(), "text/xml")
+
+        def _agent(self):
+            """Donna's brain for ElevenLabs' voice agent (its "Custom LLM" setting): the OpenAI chat format, answered
+            by the desk (desk.voice_messages) with Scott's key. The agent handles listening, turn-taking and her voice."""
+            if not self._owner((self.headers.get("Authorization") or "").removeprefix("Bearer ").strip()):
+                return self._send(401, b'{"error":{"message":"bad key"}}', "application/json")
+            try:
+                n = min(int(self.headers.get("Content-Length") or 0), 400000)
+                body = json.loads(self.rfile.read(n) or b"{}")
+                data = json.dumps({"messages": body.get("messages") or []}).encode()
+                req = urllib.request.Request(f"http://127.0.0.1:{os.environ.get('DESK_VOICE_PORT', '8091')}/chat", data=data,
+                                             headers={"Content-Type": "application/json"})
+                with urllib.request.urlopen(req, timeout=110) as r:
+                    reply = r.read().decode("utf-8", "replace")
+            except ValueError:
+                return self._send(400, b'{"error":{"message":"bad request"}}', "application/json")
+            except Exception as e:
+                print(time.strftime("%H:%M"), "donna agent error:", str(e)[:200], flush=True)
+                reply, body = "Sorry, I lost you for a second. Say that again?", body if isinstance(body, dict) else {}
+            model, made, cid = str(body.get("model") or "donna"), int(time.time()), "chatcmpl-" + secrets.token_hex(8)
+            print(time.strftime("%H:%M"), "donna agent: answered", flush=True)
+            if not body.get("stream"):
+                return self._send(200, json.dumps({"id": cid, "object": "chat.completion", "created": made, "model": model,
+                    "choices": [{"index": 0, "message": {"role": "assistant", "content": reply}, "finish_reason": "stop"}]}).encode(),
+                    "application/json")
+            chunk = lambda delta, finish=None: ("data: " + json.dumps({"id": cid, "object": "chat.completion.chunk",
+                "created": made, "model": model, "choices": [{"index": 0, "delta": delta, "finish_reason": finish}]}) + "\n\n")
+            out = (chunk({"role": "assistant", "content": reply}) + chunk({}, "stop") + "data: [DONE]\n\n").encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Content-Length", str(len(out)))
+            self.end_headers()
+            self.wfile.write(out)
 
         def _owner(self, given: str) -> bool:
             """Is this Scott's key (OWNER_VOICE_TOKEN, 24+ characters)? A wrong one waits a second, to slow guessing."""

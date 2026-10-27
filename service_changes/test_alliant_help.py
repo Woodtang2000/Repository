@@ -317,3 +317,48 @@ def test_only_account_questions_take_the_slow_lookup():
     look = lambda t: Desk.sounds_like_lookup(d, t)
     assert look("how many mats does safeway get") and look("what's on route 4") and look("what about Safeway?")
     assert not look("should we raise prices next year") and not look("tell me a joke")
+
+
+def test_elevenlabs_agent_gets_donnas_answers(monkeypatch):
+    import io, json
+    import urllib.request
+    from .webchat import make_handler
+    monkeypatch.setenv("OWNER_VOICE_TOKEN", "k" * 32)
+    monkeypatch.setattr("time.sleep", lambda s: None)
+    got = []
+    monkeypatch.setattr(urllib.request, "urlopen",
+                        lambda req, timeout: got.append((req.full_url, json.loads(req.data))) or io.BytesIO(b"Hi Harvey."))
+    H = make_handler(None, "https://x")
+
+    def post(auth, body):
+        raw = json.dumps(body).encode()
+        h = H.__new__(H)
+        h.path, h.rfile, h.headers = "/v1/chat/completions", io.BytesIO(raw), {"Authorization": auth, "Content-Length": str(len(raw))}
+        sent, out = [], io.BytesIO()
+        h._send = lambda code, b, ctype, cache=0: sent.append((code, b))
+        h.send_response = lambda code: sent.append((code, None))
+        h.send_header, h.end_headers, h.wfile = (lambda *a: None), (lambda: None), out
+        h.do_POST()
+        return sent[0][0], sent[0][1] if sent[0][1] is not None else out.getvalue()
+    msgs = [{"role": "system", "content": "ElevenLabs' own prompt"}, {"role": "user", "content": "hi"},
+            {"role": "assistant", "content": "Hey."}, {"role": "user", "content": "how are things?"}]
+    assert post("Bearer wrong", {"messages": msgs})[0] == 401 and not got
+    code, body = post("Bearer " + "k" * 32, {"messages": msgs, "model": "donna"})
+    assert code == 200 and json.loads(body)["choices"][0]["message"]["content"] == "Hi Harvey."
+    assert got[-1][0].endswith("/chat") and got[-1][1]["messages"] == msgs
+    code, body = post("Bearer " + "k" * 32, {"messages": msgs, "stream": True})
+    lines = [l for l in body.decode().split("\n\n") if l]
+    assert json.loads(lines[0][6:])["choices"][0]["delta"]["content"] == "Hi Harvey." and lines[-1] == "data: [DONE]"
+
+
+def test_desk_answers_a_conversation_with_its_own_history():
+    from types import SimpleNamespace
+    from .desk import Desk
+    seen = {}
+    d = SimpleNamespace(voice=lambda text, convo: seen.update(text=text, convo=convo, turns=list(d.talks[convo]["turns"])) or "OK")
+    msgs = [{"role": "system", "content": "x"}, {"role": "assistant", "content": "Hi Scott."},
+            {"role": "user", "content": "how are things"}, {"role": "assistant", "content": "Good."},
+            {"role": "user", "content": [{"type": "text", "text": "and route 4?"}]}]
+    assert Desk.voice_messages(d, msgs) == "OK"
+    assert seen["text"] == "and route 4?" and seen["turns"] == [{"role": "user", "content": "how are things"},
+                                                                {"role": "assistant", "content": "Good."}]
