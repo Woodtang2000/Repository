@@ -715,7 +715,10 @@ class Desk:
         talk["ask"] = None
         reply, kind = "", "chat"
         route = re.search(r"\b(?:route|rte|rt)\s*#?\s*(\d{1,2})\b", text, re.I)
-        if route and not ask and not re.search(r"\b\d{4}-\d-\d{5}\b", text):  # "what stops are on route 1 Thursday": no parse
+        if route and not ask and not re.search(r"\b\d{4}-\d-\d{5}\b", text) \
+                and re.search(r"\b(stops?|customers?|accounts?|order|deliver\w*|first|last|next|who|which|list)\b", text, re.I):
+            # "what stops are on route 1 Thursday": straight to the route, no parse ("should we raise the route 4
+            # minimum?" isn't a lookup and goes to Donna)
             from .context import route_facts
             from .parser import answer_lookup
             facts = route_facts(self.alliant, route.group(1))
