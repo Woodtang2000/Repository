@@ -362,3 +362,26 @@ def test_desk_answers_a_conversation_with_its_own_history():
     assert Desk.voice_messages(d, msgs) == "OK"
     assert seen["text"] == "and route 4?" and seen["turns"] == [{"role": "user", "content": "how are things"},
                                                                 {"role": "assistant", "content": "Good."}]
+
+
+def test_elevenlabs_tool_asks_the_desk(monkeypatch):
+    import io, json
+    import urllib.request
+    from .webchat import make_handler
+    monkeypatch.setenv("OWNER_VOICE_TOKEN", "k" * 32)
+    monkeypatch.setattr("time.sleep", lambda s: None)
+    got = []
+    monkeypatch.setattr(urllib.request, "urlopen", lambda req, timeout: got.append(json.loads(req.data)) or io.BytesIO(b"Twelve mats."))
+    H = make_handler(None, "https://x")
+    sent = []
+
+    def post(auth):
+        raw = b'{"question": "how many mats does safeway 1807 get"}'
+        h = H.__new__(H)
+        h.path, h.rfile, h.headers = "/api/donna/tool", io.BytesIO(raw), {"Authorization": auth, "Content-Length": str(len(raw))}
+        h._send = lambda code, b, ctype, cache=0: sent.append((code, b))
+        h.do_POST()
+        return sent[-1]
+    assert post("Bearer no")[0] == 401 and not got
+    assert post("Bearer " + "k" * 32) == (200, b'{"answer": "Twelve mats."}')
+    assert got[-1]["text"] == "how many mats does safeway 1807 get"

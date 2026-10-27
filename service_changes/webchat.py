@@ -506,6 +506,8 @@ def make_handler(chat: Chat, public_url: str):
                 return self._phone(path)
             if path == "/v1/chat/completions":
                 return self._agent()
+            if path == "/api/donna/tool":
+                return self._agent_tool()
             if path != "/api/chat":
                 return self._send(404, b"not found", "text/plain")
             try:
@@ -583,6 +585,28 @@ def make_handler(chat: Chat, public_url: str):
             self.send_header("Content-Length", str(len(out)))
             self.end_headers()
             self.wfile.write(out)
+
+        def _agent_tool(self):
+            """The ElevenLabs agent's "ask_donna" tool: {"question": ...} with Scott's key in, {"answer": ...} out, from the
+            desk (Alliant lookups, her read on the business). For agents whose LLM is one of ElevenLabs' own."""
+            if not self._owner((self.headers.get("Authorization") or "").removeprefix("Bearer ").strip()):
+                return self._send(401, b'{"error":"bad key"}', "application/json")
+            try:
+                n = min(int(self.headers.get("Content-Length") or 0), 20000)
+                body = json.loads(self.rfile.read(n) or b"{}")
+                question = str(body.get("question") or body.get("text") or "").strip()[:2000]
+                data = json.dumps({"text": question, "convo": "agent-tool"}).encode()
+                req = urllib.request.Request(f"http://127.0.0.1:{os.environ.get('DESK_VOICE_PORT', '8091')}/voice", data=data,
+                                             headers={"Content-Type": "application/json"})
+                with urllib.request.urlopen(req, timeout=110) as r:
+                    answer = r.read().decode("utf-8", "replace")
+            except ValueError:
+                return self._send(400, b'{"error":"bad request"}', "application/json")
+            except Exception as e:
+                print(time.strftime("%H:%M"), "donna tool error:", str(e)[:200], flush=True)
+                answer = "The office data isn't reachable right now."
+            print(time.strftime("%H:%M"), "donna tool: answered", flush=True)
+            self._send(200, json.dumps({"answer": answer}).encode(), "application/json")
 
         def _owner(self, given: str) -> bool:
             """Is this Scott's key (OWNER_VOICE_TOKEN, 24+ characters)? A wrong one waits a second, to slow guessing."""
