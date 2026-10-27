@@ -263,6 +263,33 @@ class Identified(BaseModel):
         "Account numbers from the list that the business could be, best match first, at most 3. Empty if none fits."))
 
 
+class Junk(BaseModel):
+    junk: bool = Field(description="True for marketing, spam, newsletters, sales pitches TO us, vendor offers, job "
+                                   "seekers or recruiters, invoices or notifications from services, phishing. False for a "
+                                   "customer or a business interested in becoming one, writing about linen, mat, mop, "
+                                   "towel, uniform or laundry service, their account, a delivery, a bill, or a question.")
+    kind: str = Field(description="One or two words: marketing, spam, newsletter, vendor pitch, recruiting, notification, "
+                                  "phishing, or customer.")
+
+
+def is_junk_email(client: anthropic.Anthropic, sender: str, subject: str, body: str, bulk: bool = False) -> Junk:
+    """Is an email from an unknown sender junk (so it gets no reply and no sign-up card)? When unsure, not junk:
+    a real customer must never be filtered out."""
+    prompt = (f"An email arrived at the customer service address of Snow White Linen Supply, a linen and uniform rental "
+              f"company in Alaska.\nFrom: {sender}\nSubject: {subject}\n"
+              + ("(It was sent with bulk-mail / mailing-list headers.)\n" if bulk else "")
+              + f"\n{body[:3000]}\n\nIs it junk? If there's any real chance it's a customer or a prospect, it is NOT junk.")
+    response = client.beta.messages.parse(
+        model=os.environ.get("FILTER_MODEL", "claude-haiku-5-5"),
+        max_tokens=300,
+        messages=[{"role": "user", "content": prompt}],
+        output_format=Junk,
+        betas=["server-side-fallback-2026-07-01"],
+        fallbacks="default",
+    )
+    return response.parsed_output or Junk(junk=False, kind="customer")
+
+
 def identify_customer(client: anthropic.Anthropic, text: str, customers: list) -> Identified:
     """Which customer account(s) someone means by "Jane, Midas in Fairbanks". Only the office sees the result:
     it is a suggestion for a person to approve, never access by itself."""

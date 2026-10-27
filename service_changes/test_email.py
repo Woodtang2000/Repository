@@ -113,3 +113,34 @@ def test_google_group_rewritten_sender(monkeypatch):
     via_header = {"from": {"email": "Service@SnowWhiteLinen.com"},
                   "headers": [{"name": "Reply-To", "value": "Jo <jo.k@gmail.com>"}]}
     assert real_sender(via_header) == "jo.k@gmail.com"
+
+
+def test_junk_mail_is_listed_not_answered_and_can_be_rescued(desk, monkeypatch):
+    ed, slack, sent, inbox, seen = desk
+    import service_changes.parser as parser
+    from .parser import Junk
+    slack.conversations_list = lambda **kw: [{"channels": [{"id": "D1", "name": "service-desk-test", "is_member": True},
+                                                           {"id": "F1", "name": "email-filtered", "is_member": True}]}]
+    slack.reactions_add = lambda **kw: None
+    checked = []
+    monkeypatch.setattr(parser, "is_junk_email", lambda c, sender, subject, body, bulk=False: checked.append(bulk) or
+                        Junk(junk="SEO" in subject, kind="marketing"))
+    m = mail(2, "growth@seo-rockets.io", "We can get you to page one of Google!", subject="SEO for Snow White", name="Kyle")
+    m["headers"] = [{"name": "List-Unsubscribe", "value": "<mailto:x>"}]
+    inbox.append(m)
+    ed.run_once()
+    assert checked == [True] and sent == []  # no reply: that would confirm the address to a spammer
+    assert not [p for p in slack.posts if p["meta"].get("kind") == "email_signup"]
+    [f] = [p for p in slack.posts if p["channel"] == "F1"]
+    assert "marketing" in f["text"] and "SEO for Snow White" in f["text"] and f["meta"]["kind"] == "email_filtered"
+
+    f.setdefault("reactions", []).append({"name": "white_check_mark", "users": ["U4KFSQCDQ"]})  # it was a customer after all
+    ed.run_once()
+    [card] = [p for p in slack.posts if p["meta"].get("kind") == "email_signup"]
+    assert "growth@seo-rockets.io" in card["text"] and not ed.state["filtered"]
+    ed.run_once()
+    assert len([p for p in slack.posts if p["meta"].get("kind") == "email_signup"]) == 1  # rescued once
+
+    inbox.append(mail(3, "amy@moosecafe.com", "Do you rent bar towels? We just opened.", subject="Towels", name="Amy"))
+    ed.run_once()
+    assert "getting your account confirmed" in sent[-1][1]  # a real prospect goes through as before

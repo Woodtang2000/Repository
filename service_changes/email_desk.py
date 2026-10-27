@@ -36,6 +36,8 @@ OWN_DOMAIN = os.environ.get("EMAIL_OWN_DOMAIN", "snowwhitelinen.com")
 AUTO = re.compile(r"^(mailer-daemon|postmaster|no-?reply|do-?not-?reply|bounce)", re.I)
 AUTO_SUBJECT = re.compile(r"^(automatic reply|auto(matic)?[- ]?reply|out of (the )?office|undeliverable|delivery status|"
                           r"returned mail|read:|accepted:|declined:)", re.I)
+FILTERED = os.environ.get("EMAIL_FILTERED_CHANNEL", "email-filtered")  # where junk mail is listed, for Scott to watch
+BULK = re.compile(r"^(list-unsubscribe|list-id|precedence)$", re.I)
 QUOTE = re.compile(r"^(On .{5,200} wrote:|-{2,}\s*Original Message|From: .+|Sent from my |_{5,})", re.I | re.M)
 
 
@@ -202,9 +204,12 @@ class EmailDesk(TextDesk):
             if AUTO.match(sender) or AUTO_SUBJECT.match(subject):
                 continue  # out-of-office, bounces, no-reply senders: never answered (no mail loops)
             body = clean_body(m.get("text") or "")
+            headers = m.get("headers") or {}
+            names = [h.get("name", "") for h in headers if isinstance(h, dict)] if isinstance(headers, list) else list(headers)
             self.state["threads"][sender] = {
                 "subject": subject, "msgid": m.get("message_id") or "", "name": (m.get("from") or {}).get("name") or "",
-                "verified": bool(m.get("spf_pass") or m.get("dkim_pass"))}
+                "verified": bool(m.get("spf_pass") or m.get("dkim_pass")),
+                "bulk": any(BULK.match(n) for n in names) or (m.get("precedence") or "").lower() in ("bulk", "list")}
             out.append({"id": m["id"], "from": sender,
                         "body": (f"Subject: {subject}\n" if subject and not subject.lower().startswith("re:") else "")
                         + body})
@@ -235,14 +240,82 @@ class EmailDesk(TextDesk):
         if p is not None:
             p["held"].append([body, sid])
             return
-        from .parser import identify_customer
-        who = self.state["threads"].get(key, {}).get("name", "")
+        from .parser import identify_customer, is_junk_email
+        thread = self.state["threads"].get(key, {})
+        who = thread.get("name", "")
+        try:
+            junk = is_junk_email(self.claude, f"{who} <{key}>", thread.get("subject", ""), body, thread.get("bulk", False))
+        except Exception as e:  # can't check: treat it as a customer
+            print(time.strftime("%H:%M"), "junk check failed:", e, flush=True)
+            junk = None
+        if junk is not None and junk.junk:
+            return self.filtered(key, who, thread.get("subject", ""), body, sid, junk.kind)
         found = identify_customer(self.claude, f"From: {who} <{key}>\n{body}", self.alliant.customers)
         self.state["pending"][key] = {"phone": key, "stage": "waiting", "held": [[body, sid]], "at": time.time(),
                                       "name": found.person_name or who}
         self.card(key, found.person_name or who, body, found.accounts)
         self.send(key, "Thanks so much for your email! This is Donna. I'm getting your account confirmed with our "
                        "office, and then I'll take care of your request.")
+
+    # ---- junk: listed for Scott, never answered ------------------------------------------------------------------
+
+    def filtered(self, key: str, who: str, subject: str, body: str, sid: str, kind: str) -> None:
+        """Marketing, spam and the like from an unknown sender: no reply (that would confirm the address to spammers)
+        and no sign-up card; one line in #email-filtered. ✅ on it puts the email through as a customer's."""
+        self.state.setdefault("filtered", {})[sid] = {"from": key, "body": body, "at": time.time()}
+        old = sorted(self.state["filtered"].items(), key=lambda kv: kv[1]["at"])[:-300]
+        for k, _ in old:
+            self.state["filtered"].pop(k)
+        where = self.filtered_channel()
+        if where is None:
+            print(time.strftime("%H:%M"), f"filtered ({kind}) from {key}: {subject[:80]}", flush=True)
+            return
+        self.slack.chat_postMessage(channel=where, unfurl_links=False, unfurl_media=False,
+                                    text=f"🗑️ *{kind}* · {who + ' ' if who else ''}<mailto:{key}|{key}>\n*{subject[:150] or '(no subject)'}*"
+                                         f"\n_{plain(body)[:200]}_\nNot junk? React ✅ and it goes to the office as a customer email.",
+                                    metadata={"event_type": KIND, "event_payload": {"kind": "email_filtered", "sid": sid}})
+
+    def filtered_channel(self) -> str | None:
+        if "filtered_id" not in self.__dict__:
+            self.filtered_id = next((c["id"] for p in self.slack.conversations_list(
+                types="public_channel,private_channel", exclude_archived=True, limit=1000) for c in p["channels"]
+                if c["name"] == FILTERED and c.get("is_member")), None)
+        return self.filtered_id
+
+    def rescue_pass(self) -> int:
+        """✅ on a filtered email: it wasn't junk, so it goes through the normal sign-up as a customer's email."""
+        where = self.filtered_channel()
+        if where is None or not self.state.get("filtered"):
+            return 0
+        r = self.slack.conversations_history(channel=where, oldest=f"{time.time() - 14 * 86400:.6f}", limit=200,
+                                             include_all_metadata=True)
+        n = 0
+        for m in r.get("messages", []):
+            pl = (m.get("metadata") or {}).get("event_payload") or {}
+            item = self.state["filtered"].get(pl.get("sid", "")) if pl.get("kind") == "email_filtered" else None
+            if item and any(x.get("name") in ("white_check_mark", "heavy_check_mark") for x in m.get("reactions", [])):
+                self.state["filtered"].pop(pl["sid"])
+                self.slack.reactions_add(channel=where, timestamp=m["ts"], name="outbox_tray")
+                from .parser import identify_customer
+                key = item["from"]
+                who = self.state["threads"].get(key, {}).get("name", "")
+                found = identify_customer(self.claude, f"From: {who} <{key}>\n{item['body']}", self.alliant.customers)
+                self.state.setdefault("pending", {})[key] = {"phone": key, "stage": "waiting", "held": [[item["body"], pl["sid"]]],
+                                                             "at": time.time(), "name": found.person_name or who}
+                self.card(key, found.person_name or who, item["body"], found.accounts)
+                n += 1
+        if n:
+            self.save()
+        return n
+
+    def run_once(self, first: bool = False) -> int:
+        n = super().run_once(first)
+        if not first:
+            try:
+                n += self.rescue_pass()
+            except Exception as e:
+                print(time.strftime("%H:%M"), "rescue check failed:", e, flush=True)
+        return n
 
     # ---- staff forwarding a customer's email ----------------------------------------------------------------
 
