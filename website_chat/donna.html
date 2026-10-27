@@ -84,6 +84,7 @@
   const SILENCE = "data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//tQxAADB8AhSmxhIIEVCSiJrDCQBTcu3UrAIwUdkRgQbFAZC1CQEwTJ9mjRvBA4UOLD8nKVOWfh+UlK3z/177OXrfOdKl7pyn3Xf//WreyTRUoAWgBgkOAGbZHBgG1OF6zM82DWbZaUmMBptgQhGjsyYqc9ae9XFz280948NMBWInljyzsNRFLPWdnZGWrddDsjK1unuSrVN9jJsK8KuQtQCtMBjCEtImISdNKJOopIpBFpNSMbIHCSRpRR5iakjTiyzLhchUUBwCgyKiweBv/7UsQbg8isVNoMPMjAAAA0gAAABEVFGmgqK////9bP/6XCykxBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq";
   function unlock() { try { player.src = SILENCE; const p = player.play(); if (p) p.catch(() => {}); } catch (e) {} }
 
+  // Speaks `text` and resolves when she's finished (true), or false if her own voice isn't available.
   async function voiced(text) {
     try {
       const r = await fetch("/api/donna/voice", {
@@ -93,59 +94,79 @@
       });
       if (r.status !== 200) return false;
       const url = URL.createObjectURL(await r.blob());
-      player.src = url;
-      await player.play();
+      await new Promise(done => {
+        player.onended = player.onpause = done;
+        player.onerror = done;
+        player.src = url;
+        player.play().catch(done);
+      });
       return true;
     } catch (e) { return false; }
   }
 
   function say(text) {
-    if (!("speechSynthesis" in window)) return;
-    speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text);
-    if (voice) u.voice = voice;
-    u.rate = 1.08;
-    speechSynthesis.speak(u);
+    return new Promise(done => {
+      if (!("speechSynthesis" in window)) return done();
+      speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      if (voice) u.voice = voice;
+      u.rate = 1.08;
+      u.onend = u.onerror = done;
+      speechSynthesis.speak(u);
+    });
   }
 
-  async function ask(text) {
+  // A conversation: after she answers a spoken question, she listens for the reply on her own, until "goodbye".
+  let talking = false;
+  const DONE = /\b(good ?bye|bye|that'?s all|that is all|i'?m done|thanks,? donna|thank you,? donna)\b/i;
+
+  async function ask(text, spoken) {
     text = (text || "").trim();
     if (!text || busy) return;
     if (!key) { showSetup(); return; }
+    talking = !!spoken && !DONE.test(text);
     busy = true; $("mic").disabled = true;
     add("me", text); status("Donna is thinking…");
+    let reply = "";
     try {
       const r = await fetch("/api/donna", {
         method: "POST",
         headers: { "Authorization": "Bearer " + key, "Content-Type": "application/json" },
         body: JSON.stringify({ text, convo }),
       });
-      if (r.status === 404) { add("note", "That key didn't work. Paste it again."); key = ""; store.set("donnaKey", ""); showSetup(); return; }
-      const reply = (await r.text()).trim();
+      if (r.status === 404) { add("note", "That key didn't work. Paste it again."); key = ""; store.set("donnaKey", ""); showSetup(); talking = false; return; }
+      reply = (await r.text()).trim();
       add("her", reply); status("");
-      if (!(await voiced(reply))) say(reply);
     } catch (e) {
-      add("note", "Couldn't reach Donna. Check your connection and try again."); status("");
+      add("note", "Couldn't reach Donna. Check your connection and try again."); status(""); talking = false;
     } finally { busy = false; $("mic").disabled = false; }
+    if (!reply) return;
+    if (!(await voiced(reply))) await say(reply);
+    if (talking) setTimeout(() => listen(true), 250);
   }
 
-  function listen() {
+  function listen(auto) {
     if (!key) { showSetup(); return; }
     if (!Rec) { status("Voice isn't available in this browser. Type below."); $("typed").focus(); return; }
     if (listening || busy) return;
-    unlock();
-    if ("speechSynthesis" in window) { speechSynthesis.cancel(); speechSynthesis.speak(new SpeechSynthesisUtterance("")); } // unlocks speech on iPhone
+    if (!auto) { player.pause(); if ("speechSynthesis" in window) speechSynthesis.cancel(); unlock(); }  // a tap interrupts her
+    if (!auto && "speechSynthesis" in window) speechSynthesis.speak(new SpeechSynthesisUtterance(""));  // unlocks speech on iPhone
     const rec = new Rec();
     rec.lang = "en-US"; rec.interimResults = true; rec.continuous = false;
     let heard = "";
     rec.onstart = () => { listening = true; $("mic").classList.add("on"); status("Listening…"); };
     rec.onresult = e => { heard = Array.from(e.results).map(r => r[0].transcript).join(" "); status(heard); };
     rec.onerror = e => {
+      if (auto) return;  // the phone wouldn't let her start listening on her own: onend asks for a tap
       if (e.error === "not-allowed" || e.error === "service-not-allowed")
         add("note", "Allow the microphone for this page: Settings → Apps → Safari → Microphone → Allow (and Speech Recognition).");
     };
-    rec.onend = () => { listening = false; $("mic").classList.remove("on"); status(""); if (heard.trim()) ask(heard); };
-    try { rec.start(); } catch (e) { status("Tap the mic again."); }
+    rec.onend = () => {
+      listening = false; $("mic").classList.remove("on");
+      if (heard.trim()) { status(""); ask(heard, true); }
+      else status(auto ? "Tap the mic to keep talking." : "");
+    };
+    try { rec.start(); } catch (e) { status(auto ? "Tap the mic to keep talking." : "Tap the mic again."); }
   }
 
   function showSetup() { $("setup").style.display = "flex"; $("key").focus(); }
@@ -154,8 +175,8 @@
     key = $("key").value.trim(); store.set("donnaKey", key); $("key").value = "";
     $("setup").style.display = "none"; add("note", "Saved. Tap the mic and talk.");
   };
-  $("typeform").onsubmit = e => { e.preventDefault(); unlock(); const t = $("typed").value; $("typed").value = ""; ask(t); };
-  $("mic").onclick = listen;
+  $("typeform").onsubmit = e => { e.preventDefault(); unlock(); const t = $("typed").value; $("typed").value = ""; ask(t, false); };
+  $("mic").onclick = () => listen(false);
 
   if (!key) showSetup(); else add("note", "Tap the mic and talk. Say goodbye when you're done.");
 })();
