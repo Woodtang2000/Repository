@@ -185,7 +185,7 @@ def test_plain_text_for_phones():
 
 def test_two_numbers_reply_from_the_one_texted(tmp_path, monkeypatch):
     from . import sms
-    monkeypatch.setenv("TWILIO_NUMBER", "+18668278398, +18885197604")
+    monkeypatch.setenv("TWILIO_NUMBER", "(866) 827-8398, 18885197604")  # written any which way
     monkeypatch.setattr(sms, "LAST_NUMBER", str(tmp_path / "last.json"))
     calls = []
 

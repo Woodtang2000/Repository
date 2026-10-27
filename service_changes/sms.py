@@ -97,15 +97,17 @@ def send_sms(to: str, body: str) -> None:
     """Reply from the number the customer last texted (the readback is sent by the desk, a separate process, so
     that is kept in a small file), else from the first number."""
     mine = our_numbers()
-    frm = _last_numbers().get(phone_key(to))
-    _twilio("POST", "Messages.json", {"From": frm if frm in mine else mine[0], "To": to, "Body": plain(body)[:1500]})
+    last = phone_key(_last_numbers().get(phone_key(to), ""))
+    frm = next((n for n in mine if phone_key(n) == last), mine[0])  # digits only: "+18668278398" = "(866) 827-8398"
+    _twilio("POST", "Messages.json", {"From": "+1" + phone_key(frm), "To": to, "Body": plain(body)[:1500]})
 
 
 def inbound(since: datetime) -> list[dict]:
     """Texts to any of our numbers since `since`, oldest first."""
     msgs = []
     for number in our_numbers():
-        r = _twilio("GET", "Messages.json", {"To": number, "DateSent>": since.strftime("%Y-%m-%d"), "PageSize": 100})
+        r = _twilio("GET", "Messages.json", {"To": "+1" + phone_key(number), "DateSent>": since.strftime("%Y-%m-%d"),
+                                             "PageSize": 100})
         msgs += [m for m in r.get("messages", []) if m.get("direction") == "inbound"]
     msgs.sort(key=lambda m: m.get("date_created") or "")
     if msgs:
