@@ -110,7 +110,7 @@ def test_private_messages_to_the_bot():
             return {"messages": []}
 
     looked = []
-    d = SimpleNamespace(slack=S(), is_office=lambda u: u == "USONJA",
+    d = SimpleNamespace(slack=S(), is_office=lambda u: u == "USONJA", is_owner=lambda u: False,
                         office_lookup=lambda ev, top, channel=None: looked.append(channel) or "4000" in ev["text"],
                         helper=SimpleNamespace(answer=lambda turns, user: ("Open Customer > Specials", False)))
     ev = lambda user, text: {"type": "message", "channel_type": "im", "channel": "D1", "user": user, "ts": "1.0", "text": text}
@@ -118,3 +118,29 @@ def test_private_messages_to_the_bot():
     assert Desk.dm(d, ev("USONJA", "how many mats at 4000?")) == "lookup" and looked == ["D1"]
     assert Desk.dm(d, ev("USONJA", "how do I make a special?")) == "how-to"
     assert d.slack.posts[-1] == {"channel": "D1", "text": "Open Customer > Specials", "unfurl_links": False}
+
+
+def test_scott_gets_donna_in_his_private_messages(monkeypatch):
+    from types import SimpleNamespace
+    from .desk import Desk
+    import service_changes.parser as parser
+
+    class S(Slack):
+        def conversations_history(self, **kw):
+            return {"messages": [{"ts": "2.0", "user": "U4KFSQCDQ", "text": "what's our biggest risk this week?"},
+                                 {"ts": "1.5", "bot_id": "B1", "text": "Morning, Harvey."}]}
+
+    seen = {}
+    monkeypatch.setattr(parser, "owner_chat", lambda c, turns, briefing: seen.update(turns=turns) or "Leave it with me.")
+    monkeypatch.delenv("OWNER_SLACK_ID", raising=False)
+    d = SimpleNamespace(slack=S(), me="UBOT", claude=None, is_office=lambda u: False, helper=None,
+                        office_lookup=lambda ev, top, channel=None: False, briefing=lambda: "",
+                        is_owner=lambda u: Desk.is_owner(None, u))
+    d.owner_turns = lambda ch, ev: Desk.owner_turns(d, ch, ev)
+    ev = lambda user, text: {"type": "message", "channel_type": "im", "channel": "D1", "user": user, "ts": "2.0", "text": text}
+    assert Desk.dm(d, ev("U4KFSQCDQ", "what's our biggest risk this week?")) == "donna"
+    assert d.slack.posts[-1]["text"] == "Leave it with me."
+    assert seen["turns"] == [{"role": "user", "content": "what's our biggest risk this week?"}]  # bot's line first is dropped
+    assert Desk.dm(d, ev("UDRIVER", "what's our biggest risk?")) == "no notes"  # anyone else: no Donna, no data
+    monkeypatch.setenv("OWNER_SLACK_ID", "UOTHER")
+    assert not Desk.is_owner(None, "U4KFSQCDQ")

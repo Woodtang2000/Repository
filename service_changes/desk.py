@@ -47,6 +47,7 @@ DONE_REACTIONS = {"white_check_mark", "heavy_check_mark", "ballot_box_with_check
 DONE_WORDS = re.compile(r"^\s*(done|changed|entered|complete[d]?|made|updated|ok(ay)?|got it|all set|finished)\b[\s.!]*$", re.I)
 MAX_ASKS = 2
 MAX_QUESTIONS = 3  # per message to a driver; the rest come up again once they answer
+HOW_TO = re.compile(r"\bhow (do|can|would|should) (i|you|we)\b.*\b(alliant|handheld|enter|make|set up|print|run)\b", re.I)  # Alliant how-to notes
 VERIFY_HOUR = 7  # entry check posts once the morning's Alliant data is in, from this hour (Alaska)
 STOCKROOM = os.environ.get("STOCKROOM_CHANNEL", "stockroom")  # Ana's channel: weekly garment data checks
 STOCKROOM_DAY, STOCKROOM_LEAD = 0, "Ana Faamita"  # Mondays, tagging the stockroom manager
@@ -140,6 +141,14 @@ class Desk:
 
     def is_office(self, user: str | None) -> bool:
         return self.name(user).lower() in self.office
+
+    def is_owner(self, user: str | None) -> bool:
+        """Scott, by his Slack user id (Slack signs every message, so this can't be faked the way a text or an email
+        can). OWNER_SLACK_ID in /etc/service-desk.env changes it."""
+        return bool(user) and user in {u.strip() for u in os.environ.get("OWNER_SLACK_ID", "U4KFSQCDQ").split(",")}
+
+    def asker(self, user: str | None) -> str:
+        return "owner of the company, in the office" if self.is_owner(user) else "office staff member"
 
     def is_staff(self, user: str | None) -> bool:
         """Office, plant or dispatch: not the driver the bot is talking to."""
@@ -566,7 +575,7 @@ class Desk:
         if codes:  # "how many washes on 1234567?"
             from .context import barcode_facts
             ans = answer_lookup(self.claude, text, barcode_facts(self.alliant, codes[:10]),
-                                asker="office staff member")
+                                asker=self.asker(user))
             as_of = f" _(Alliant as of {self.alliant.as_of})_" if self.alliant.as_of else ""
             self.post(here, f"<@{user}> {ans.answer}{as_of}"[:3900], {"kind": "answer", "barcodes": codes[:10]})
             return True
@@ -579,7 +588,7 @@ class Desk:
             from .context import route_facts
             facts = route_facts(self.alliant, route.group(1))
             if facts:
-                ans = answer_lookup(self.claude, parsed.summary or text, facts, asker="office staff member")
+                ans = answer_lookup(self.claude, parsed.summary or text, facts, asker=self.asker(user))
                 as_of = f" _(Alliant as of {self.alliant.as_of})_" if self.alliant.as_of else ""
                 self.post(here, f"<@{user}> *Route {route.group(1)}*: {ans.answer}{as_of}"[:3900],
                           {"kind": "answer", "route": route.group(1)})
@@ -590,7 +599,7 @@ class Desk:
             ans = answer_lookup(self.claude, (parsed.summary or text) + "\n(Covers every account listed: give the combined "
                                 "totals first, by SKU, from the TOTALS lines, then a short per-location list only if asked.)",
                                 group_facts(self.alliant, group, text + " " + (parsed.summary or "")),
-                                asker="office staff member")
+                                asker=self.asker(user))
             as_of = f" _(Alliant as of {self.alliant.as_of})_" if self.alliant.as_of else ""
             self.post(here, f"<@{user}> *{len(group)} accounts*: {ans.answer}{as_of}"[:3900],
                       {"kind": "answer", "accounts": len(group)})
@@ -615,7 +624,7 @@ class Desk:
         name = next((c.name for c in self.alliant.customers if c.account == acct), parsed.customer_as_written or acct)
         question = parsed.summary or text
         facts = "\n".join(x for x in (account_facts(self.alliant, acct), garment_facts(self.alliant, acct, text + " " + question)) if x)
-        ans = answer_lookup(self.claude, question, facts, asker="office staff member")
+        ans = answer_lookup(self.claude, question, facts, asker=self.asker(user))
         as_of = f" _(Alliant as of {self.alliant.as_of})_" if self.alliant.as_of else ""
         self.post(here, f"<@{user}> *{acct}* {name}: {ans.answer}{as_of}", {"kind": "answer", "account": acct})
         return True
@@ -629,10 +638,17 @@ class Desk:
             self.slack.reactions_add(channel=channel, timestamp=ev["ts"], name=SEEN)
         except Exception:
             pass
-        if self.is_office(user):
+        owner = self.is_owner(user)
+        if owner or self.is_office(user):
             top = list(reversed(list(_messages(self.slack, channel, time.time() - 900, include_all_metadata=True))))
             if self.office_lookup(ev, top, channel=channel):
                 return "lookup"
+        if owner and not (self.helper and HOW_TO.search(ev.get("text", ""))):
+            from .parser import owner_chat
+            reply = owner_chat(self.claude, self.owner_turns(channel, ev), self.briefing())
+            self.slack.chat_postMessage(channel=channel, text=reply[:3900] or "I'm here. What do you need?",
+                                        unfurl_links=False)
+            return "donna"
         if self.helper is None:
             self.slack.chat_postMessage(channel=channel, text="I can answer account, route and garment questions here. "
                                         "The Alliant how-to notes aren't set up on the Service Desk yet.")
@@ -642,6 +658,44 @@ class Desk:
             reply += "\n\n_I've logged this one for Scott._"
         self.slack.chat_postMessage(channel=channel, text=reply[:3900], unfurl_links=False)
         return "how-to"
+
+    def owner_turns(self, channel: str, ev: dict) -> list[dict]:
+        """The last couple of hours of Scott's private conversation with the bot, so Donna remembers what he just said."""
+        turns: list[dict] = []
+        try:
+            history = self.slack.conversations_history(channel=channel, oldest=str(time.time() - 7200), limit=30)
+            msgs = list(reversed(history.get("messages", [])))
+        except Exception:
+            msgs = []
+        for m in msgs[-20:]:
+            if m.get("ts") == ev.get("ts") or not m.get("text"):
+                continue
+            role = "assistant" if m.get("bot_id") or m.get("user") == self.me else "user"
+            if turns and turns[-1]["role"] == role:
+                turns[-1]["content"] += "\n\n" + m["text"]
+            else:
+                turns.append({"role": role, "content": m["text"]})
+        while turns and turns[0]["role"] == "assistant":
+            turns.pop(0)
+        if turns and turns[-1]["role"] == "user":
+            turns[-1]["content"] += "\n\n" + ev.get("text", "")
+        else:
+            turns.append({"role": "user", "content": ev.get("text", "")})
+        return turns
+
+    def briefing(self) -> str:
+        """A few lines about the business for Donna's talks with Scott: customers and routes per company, data age."""
+        cs = self.alliant.customers
+        out = []
+        for branch, company in (("1", "Snow White Linen"), ("2", "The Laundry Group")):
+            mine = [c for c in cs if c.account.split("-")[1:2] == [branch]]
+            if mine:
+                out.append(f"{company}: {len(mine)} customer locations on {len({c.route for c in mine})} routes")
+        if self.alliant.as_of:
+            out.append(f"Alliant data as of {self.alliant.as_of}")
+        out.append("Service Desk handles route-channel changes, customer texts (Twilio), service@ email (Bird), "
+                   "the website chat and /quote page, and the morning stockroom garment check.")
+        return "\n".join(out)
 
     def office_group(self, text: str, parsed) -> list[str]:
         """Every location under an account number ("4000", "all of 4000") or every customer whose name has all the

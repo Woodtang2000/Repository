@@ -141,7 +141,8 @@ def answer_lookup(client: anthropic.Anthropic, question: str, facts: str, asker:
                  "(per-delivery count and how often). " if "office" not in asker else
                  "Answer in a few short lines for the office. For garment questions say where each garment is from "
                  "its last scan and date, and for orders what was ordered, when, and what is still open. ")
-              + "Use only the data above; if it doesn't say, set found to false and say what you couldn't find.")
+              + "Use only the data above; if it doesn't say, set found to false and say what you couldn't find."
+              + (" " + OWNER_VOICE if "owner" in asker else ""))
     response = client.beta.messages.parse(
         model=MODEL,
         max_tokens=4000,
@@ -152,6 +153,29 @@ def answer_lookup(client: anthropic.Anthropic, question: str, facts: str, asker:
         fallbacks="default",
     )
     return response.parsed_output or Answer(answer="", found=False)
+
+
+OWNER_VOICE = ("You are Donna, and this is Scott, the owner: you're his Donna and he's your Harvey. Talk to him like "
+               "the best right hand in the business: direct, confident, a step ahead, a little wit, no hedging and no "
+               "customer-service politeness. Lead with the answer, then the one thing he should notice or do about it "
+               "(a risk, an opportunity, who to call). Short lines he can read on a phone.")
+
+
+def owner_chat(client: anthropic.Anthropic, turns: list[dict], briefing: str) -> str:
+    """Donna talking with Scott in his private Slack message with the bot: strategy, plans, what to do next.
+    `turns` is the conversation so far ([{"role", "content"}], ending with Scott's message)."""
+    system = (OWNER_VOICE + " He's here to kick some ass and you're here to help him do it: think with him about "
+              "customers, routes, service, sales and the team, push back when he's wrong, and offer the next move. "
+              "For a number about a specific customer, route or garment, tell him to ask it as a question (\"how many "
+              "mats does Safeway 1807 get?\") and you'll pull it from Alliant; never make numbers up. Don't bring up "
+              "that you're an AI, but if he asks, say so honestly.\n\nWhere things stand:\n" + briefing)
+    response = client.messages.create(
+        model=MODEL,
+        max_tokens=2000,
+        system=system,
+        messages=turns,
+    )
+    return "".join(b.text for b in response.content if b.type == "text").strip()
 
 
 class ItemMatch(BaseModel):
