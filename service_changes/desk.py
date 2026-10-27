@@ -569,6 +569,11 @@ class Desk:
             if t["ts"] in done:
                 self.send_readback(t, *done[t["ts"]])
                 counts["readback"] += 1
+        if os.environ.get("DONNA_ALLIANT", "off").lower() == "on":  # Donna's workstation is set up (alliant_jobs.py)
+            try:
+                self.jobs().offer(tickets, set(done))
+            except Exception as e:
+                print(time.strftime("%H:%M"), "alliant jobs: button not added:", e, flush=True)
         open_t: dict[tuple[str, str], list[str]] = {}
         for t in tickets:
             if t["ts"] not in done:
@@ -655,6 +660,13 @@ class Desk:
         say(f"<@{user}> *{acct}* {name}: {ans.answer}{as_of}", {"kind": "answer", "account": acct})
         return True
 
+    def jobs(self):
+        """Donna's Alliant work queue (alliant_jobs.py)."""
+        if "_jobs" not in self.__dict__:
+            from .alliant_jobs import Jobs
+            self._jobs = Jobs(self)
+        return self._jobs
+
     def ar_answer(self, user: str | None, text: str, parsed, here: str, say) -> bool:
         """What an account owes and when it last paid: for Scott and Bill only (AR_SLACK_IDS), and only in a private
         message with the bot or by voice, never in a channel. Everyone else is told it's not something Donna shares."""
@@ -692,6 +704,10 @@ class Desk:
         except Exception:
             pass
         owner = self.is_owner(user)
+        cmd = re.match(r"^\s*donna,?\s+(pause|stop|resume|start|go)\b", ev.get("text", ""), re.I)
+        if owner and cmd:  # Donna's Alliant work: "Donna pause" / "Donna resume"
+            self.slack.chat_postMessage(channel=channel, text=self.jobs().pause(cmd.group(1).lower() in ("pause", "stop")))
+            return "alliant pause" if cmd.group(1).lower() in ("pause", "stop") else "alliant resume"
         if owner or self.is_office(user):
             top = list(reversed(list(_messages(self.slack, channel, time.time() - 900, include_all_metadata=True))))
             if self.office_lookup(ev, top, channel=channel):
@@ -821,7 +837,34 @@ class Desk:
             def log_message(self, *a):
                 pass
 
+            def reply(self, code: int, data: bytes, ctype: str = "application/json"):
+                self.send_response(code)
+                self.send_header("Content-Type", ctype)
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+
+            def do_GET(self):  # Donna's workstation asking for the next Alliant job
+                if self.path != "/jobs/next":
+                    return self.reply(404, b"{}")
+                try:
+                    job = desk.jobs().next()
+                except Exception as e:
+                    print(time.strftime("%H:%M"), "alliant jobs error:", e, flush=True)
+                    return self.reply(500, b"{}")
+                self.reply(200, json.dumps({"job": job}).encode())
+
             def do_POST(self):
+                m = re.fullmatch(r"/jobs/([\d.]+)/result", self.path)
+                if m:  # Donna's workstation reporting a finished job
+                    try:
+                        body = json.loads(self.rfile.read(min(int(self.headers.get("Content-Length") or 0), 20000)) or b"{}")
+                        out = desk.jobs().result(m.group(1), str(body.get("status") or ""), str(body.get("note") or ""))
+                    except Exception as e:
+                        print(time.strftime("%H:%M"), "alliant jobs error:", e, flush=True)
+                        return self.reply(500, b"{}")
+                    print(time.strftime("%H:%M"), "alliant jobs:", m.group(1), out, flush=True)
+                    return self.reply(200, json.dumps({"ok": out}).encode())
                 try:
                     body = json.loads(self.rfile.read(min(int(self.headers.get("Content-Length") or 0), 200000)) or b"{}")
                     if self.path == "/chat":
@@ -1159,6 +1202,15 @@ class Desk:
                     except Exception as e:
                         print(time.strftime("%H:%M"), "todo error:", e, flush=True)
                 return
+            if req.type == "interactive" and req.payload.get("type") == "block_actions" and any(
+                    x.get("action_id") == "donna_enter" for x in req.payload.get("actions", [])):
+                def enter(p=req.payload):  # "🤖 Donna, enter it" on a ticket (alliant_jobs.py)
+                    try:
+                        print(time.strftime("%H:%M"), "alliant jobs:", self.jobs().queue(p), flush=True)
+                    except Exception as e:
+                        print(time.strftime("%H:%M"), "alliant jobs error:", e, flush=True)
+                threading.Thread(target=enter, daemon=True).start()
+                return
             if req.type == "interactive" and req.payload.get("type") == "block_actions":
                 # "Give to Bill/Jesse" on a website lead in #sales-desk: create the Salesforce Account and Opportunity (sales.py)
                 from . import sales
@@ -1359,7 +1411,7 @@ def main():
             desk.alliant, loaded[0] = Alliant.from_dir(args.data), time.time()
 
     if args.listen:
-        if os.environ.get("OWNER_VOICE_TOKEN"):
+        if os.environ.get("OWNER_VOICE_TOKEN") or os.environ.get("DONNA_WORKER_TOKEN"):
             desk.serve_voice()
         desk.listen(os.environ["SLACK_APP_TOKEN"], os.environ["SLACK_BOT_TOKEN"], args.since_minutes,
                     args.watch or 300, reload)

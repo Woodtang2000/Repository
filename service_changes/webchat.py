@@ -441,6 +441,10 @@ def make_handler(chat: Chat, public_url: str):
             base = self._base()
             if u.path == "/health":
                 return self._send(200, b"ok", "text/plain")
+            if u.path == "/api/donna/jobs/next":  # Donna's workstation: the next Alliant job
+                return self._worker("GET", "/jobs/next")
+            if u.path == "/api/donna/jobs/rules":  # her house rules for Alliant (deploy/donna_alliant_rules.md)
+                return self._worker("RULES", "")
             if u.path == "/api/donna":  # the simple shortcut: .../api/donna?key=...&text=what he said
                 return self._donna(q)
             m = re.fullmatch(r"/twilio/voice/audio/([0-9a-f]{20})\.mp3", u.path)
@@ -511,6 +515,9 @@ def make_handler(chat: Chat, public_url: str):
                 return self._agent_tool()
             if path == "/api/donna/agent":
                 return self._agent_link()
+            m = re.fullmatch(r"/api/donna/jobs/([\d.]+)/result", path)
+            if m:  # Donna's workstation: a finished Alliant job
+                return self._worker("POST", f"/jobs/{m.group(1)}/result")
             if path != "/api/chat":
                 return self._send(404, b"not found", "text/plain")
             try:
@@ -588,6 +595,31 @@ def make_handler(chat: Chat, public_url: str):
             self.send_header("Content-Length", str(len(out)))
             self.end_headers()
             self.wfile.write(out)
+
+        def _worker(self, method: str, local: str):
+            """Donna's Alliant workstation (alliant_jobs.py), with its own key (DONNA_WORKER_TOKEN), passed to the desk."""
+            import hmac
+            key = os.environ.get("DONNA_WORKER_TOKEN", "")
+            given = (self.headers.get("Authorization") or "").removeprefix("Bearer ").strip()
+            if len(key) < 24 or not hmac.compare_digest(given.encode(), key.encode()):
+                time.sleep(1)
+                return self._send(401, b'{"error":"bad key"}', "application/json")
+            if method == "RULES":
+                with open(os.path.join(REPO, "deploy", "donna_alliant_rules.md"), "rb") as f:
+                    return self._send(200, f.read(), "text/markdown; charset=utf-8")
+            data = None
+            if method == "POST":
+                n = min(int(self.headers.get("Content-Length") or 0), 20000)
+                data = self.rfile.read(n) or b"{}"
+            req = urllib.request.Request(f"http://127.0.0.1:{os.environ.get('DESK_VOICE_PORT', '8091')}{local}", data=data,
+                                         method=method, headers={"Content-Type": "application/json"})
+            try:
+                with urllib.request.urlopen(req, timeout=60) as r:
+                    out = r.read()
+            except Exception as e:
+                print(time.strftime("%H:%M"), "donna jobs error:", str(e)[:200], flush=True)
+                return self._send(502, b'{"error":"desk not reachable"}', "application/json")
+            self._send(200, out, "application/json")
 
         def _agent_link(self):
             """A one-time link into Scott's private ElevenLabs agent (ELEVENLABS_AGENT_ID) for the talk page, so it opens

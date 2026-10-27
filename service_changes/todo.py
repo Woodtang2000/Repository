@@ -73,7 +73,7 @@ def body(m: dict) -> str:
 def restyle(m: dict, color: str, status: str = "", button: bool = False, undo: bool = False) -> list[dict]:
     """The message's to-do attachment re-colored, with its status line and buttons replaced."""
     a = dict((m.get("attachments") or [{}])[0])
-    blocks = [b for b in a.get("blocks") or [] if b.get("block_id") not in ("status", "task")]
+    blocks = [b for b in a.get("blocks") or [] if b.get("block_id") not in ("status", "task", "donna")]
     if not blocks:
         blocks = _sections(body(m))
     if status:
