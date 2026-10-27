@@ -441,6 +441,9 @@ def make_handler(chat: Chat, public_url: str):
                 return self._send(200, b"ok", "text/plain")
             if u.path == "/api/donna":  # the simple shortcut: .../api/donna?key=...&text=what he said
                 return self._donna(q)
+            m = re.fullmatch(r"/twilio/voice/audio/([0-9a-f]{20})\.mp3", u.path)
+            if m and getattr(chat, "phone", None) and m.group(1) in chat.phone.audio:  # Donna's lines on a phone call
+                return self._send(200, chat.phone.audio[m.group(1)], "audio/mpeg", cache=3600)
             if u.path == "/donna-icon.png":  # Donna's home-screen icon (navy and gold, like Squirrel Tamer's acorn)
                 with open(os.path.join(REPO, "website_chat", "donna_icon.png"), "rb") as f:
                     return self._send(200, f.read(), "image/png", cache=86400)
@@ -498,6 +501,8 @@ def make_handler(chat: Chat, public_url: str):
                 return self._donna()
             if path == "/api/donna/voice":
                 return self._donna_voice()
+            if path.startswith("/twilio/voice"):
+                return self._phone(path)
             if path != "/api/chat":
                 return self._send(404, b"not found", "text/plain")
             try:
@@ -517,6 +522,31 @@ def make_handler(chat: Chat, public_url: str):
                 print(time.strftime("%H:%M"), "error:", e, flush=True)
                 self._send(200, json.dumps({"reply": "Sorry, something went wrong on our end. Please call us at "
                                                      "(907) 222-7738.", "events": []}).encode(), "application/json")
+        def _phone(self, path: str):
+            """A phone call (phone.py): Twilio's request, checked against its signature, answered with TwiML."""
+            from . import phone
+            n = min(int(self.headers.get("Content-Length") or 0), 20000)
+            form = {k: v[0] for k, v in parse_qs(self.rfile.read(n).decode("utf-8", "replace"), keep_blank_values=True).items()}
+            q = {k: v[0] for k, v in parse_qs(urlparse(self.path).query).items()}
+            url = public_url + self.path
+            if getattr(chat, "phone", None) is None or not phone.valid_signature(
+                    os.environ.get("TWILIO_AUTH_TOKEN", ""), url, form, self.headers.get("X-Twilio-Signature", "")):
+                return self._send(403, b"forbidden", "text/plain")
+            try:
+                if path == "/twilio/voice":
+                    xml = chat.phone.start(form)
+                elif path == "/twilio/voice/heard":
+                    xml = chat.phone.heard(q.get("call", ""), form)
+                elif path == "/twilio/voice/wait":
+                    xml = chat.phone.wait(q.get("call", ""), int(q.get("n", "0") or 0))
+                else:
+                    return self._send(404, b"not found", "text/plain")
+            except Exception as e:
+                print(time.strftime("%H:%M"), "phone error:", str(e)[:300], flush=True)
+                xml = (f'<Response><Say voice="{phone.TWILIO_VOICE}">Sorry, I\'m having trouble on my end. Let me put you '
+                       f'through to the office.</Say><Dial>{phone.OFFICE_PHONE}</Dial></Response>')
+            self._send(200, ('<?xml version="1.0" encoding="UTF-8"?>' + xml).encode(), "text/xml")
+
         def _owner(self, given: str) -> bool:
             """Is this Scott's key (OWNER_VOICE_TOKEN, 24+ characters)? A wrong one waits a second, to slow guessing."""
             import hmac
@@ -659,6 +689,8 @@ def main():
     slack = WebClient(token=os.environ["SLACK_BOT_TOKEN"])
     claude = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("SERVICE_DESK_API_KEY"))
     chat = Chat(claude, slack_poster(slack, args.data, args.sales, args.desk), args.data)
+    from .phone import Phone
+    chat.phone = Phone(claude, slack, args.data, slack_poster(slack, args.data, args.sales, args.desk), args.public_url)
     keep_pictures(args.data)
     keep_portal_awake()
     srv = ThreadingHTTPServer(("127.0.0.1", args.port), make_handler(chat, args.public_url.rstrip("/")))
