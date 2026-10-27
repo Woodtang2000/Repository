@@ -118,7 +118,7 @@ def test_unclear_then_answer_then_ticket(desk):
     assert "Customer: need more towels" in seen["text"] and "Customer: 200" in seen["text"]
     [t] = slack.posts
     assert t["meta"]["kind"] == "ticket" and "📱 Customer text from Jane at Midas (…1234)" in t["text"]
-    assert texts[-1][1].startswith("You got it")
+    assert texts[-1][1].startswith("Consider it done")
 
 
 def test_two_locations_asks_which(desk):
@@ -158,7 +158,7 @@ def test_new_number_signs_up_and_the_office_approves(desk, monkeypatch):
     assert td.office_pass() == 1
     assert "+15551110000,M8,Bob" in open(td.data_dir + "/customer_phones.csv").read()
     assert texts[2][0] == "+15551110000" and texts[2][1].startswith(sms.SET_UP.format(names="MIDAS #8 (PALMER)"))
-    assert len(texts) == 3 and texts[2][1].count("You got it") == 1  # welcome and answer in one text
+    assert len(texts) == 3 and texts[2][1].count("Consider it done") == 1  # welcome and answer in one text
     assert [c.account for c in seen["alliant"].customers] == ["M8"]  # the held request ran, for M8 only
     assert card["meta"]["kind"] == "sms_approved" and td.office_pass() == 0
 

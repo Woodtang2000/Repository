@@ -55,11 +55,12 @@ def who_are_you(body: str = "") -> str:
 
 WHO_ARE_YOU = who_are_you()  # the greeting without a request
 
-# Donna's voice in every customer text and email (Scott: "I want people to really like Donna"): warm, short, plain.
+# Donna's voice in every customer text and email (Scott: "I want people to really like Donna"; she's his Donna, the
+# confident, one-step-ahead assistant who makes things feel handled): warm, short, plain, a little wit.
 # She never claims to be a person; if asked, she's the company's automated assistant and the office follows up.
 WAITING = "Thank you! I'm getting your account confirmed with our office, and then I'll take care of your request."
 SET_UP = "You're all set! Text me here any time you need anything for {names}."
-GOT_IT = "You got it! I've passed that to our office, and I'll {how} you as soon as it's done."
+GOT_IT = "Consider it done! I've passed it to our office, and I'll {how} you the moment it's entered."
 DONE_REACTIONS = {"white_check_mark", "heavy_check_mark", "ballot_box_with_check"}
 PHONE = r"(\+?1?[\s.-]*\(?\d{3}\)?[\s.-]*\d{3}[\s.-]*\d{4})"
 # "add 907-555-1234 to Midas Fairbanks", "add (907) 555-1234 for 1205-1-00004", "remove 907 555 1234"
