@@ -145,6 +145,12 @@
     if (talking) setTimeout(() => listen(true), 250);
   }
 
+  let current = null;  // the microphone while it's listening: tapping the mic again stops it and sends what you said
+  function micTap() {
+    if (listening && current) { status("Got it…"); try { current.stop(); } catch (e) {} return; }
+    listen(false);
+  }
+
   function listen(auto) {
     if (!key) { showSetup(); return; }
     if (!Rec) { status("Voice isn't available in this browser. Type below."); $("typed").focus(); return; }
@@ -152,6 +158,7 @@
     if (!auto) { player.pause(); if ("speechSynthesis" in window) speechSynthesis.cancel(); unlock(); }  // a tap interrupts her
     if (!auto && "speechSynthesis" in window) speechSynthesis.speak(new SpeechSynthesisUtterance(""));  // unlocks speech on iPhone
     const rec = new Rec();
+    current = rec;
     rec.lang = "en-US"; rec.interimResults = true; rec.continuous = true;
     // The phone waits a long time to decide you've stopped talking: stop after a short pause instead, and give up
     // quietly if nothing is said at all.
@@ -159,15 +166,15 @@
     const stopSoon = ms => { clearTimeout(quiet); quiet = setTimeout(() => { try { rec.stop(); } catch (e) {} }, ms); };
     stopSoon(auto ? 7000 : 9000);
     let heard = "";
-    rec.onstart = () => { listening = true; $("mic").classList.add("on"); status("Listening…"); };
-    rec.onresult = e => { heard = Array.from(e.results).map(r => r[0].transcript).join(" "); status(heard); stopSoon(1100); };
+    rec.onstart = () => { listening = true; $("mic").classList.add("on"); status("Listening… tap the mic when you're done"); };
+    rec.onresult = e => { heard = Array.from(e.results).map(r => r[0].transcript).join(" "); status(heard + "  (tap the mic to send)"); stopSoon(1100); };
     rec.onerror = e => {
       if (auto) return;  // the phone wouldn't let her start listening on her own: onend asks for a tap
       if (e.error === "not-allowed" || e.error === "service-not-allowed")
         add("note", "Allow the microphone for this page: Settings → Apps → Safari → Microphone → Allow (and Speech Recognition).");
     };
     rec.onend = () => {
-      clearTimeout(quiet); listening = false; $("mic").classList.remove("on");
+      clearTimeout(quiet); listening = false; current = null; $("mic").classList.remove("on");
       if (heard.trim()) { status(""); ask(heard, true); }
       else status(auto ? "Tap the mic to keep talking." : "");
     };
@@ -181,7 +188,7 @@
     $("setup").style.display = "none"; add("note", "Saved. Tap the mic and talk.");
   };
   $("typeform").onsubmit = e => { e.preventDefault(); unlock(); const t = $("typed").value; $("typed").value = ""; ask(t, false); };
-  $("mic").onclick = () => listen(false);
+  $("mic").onclick = micTap;
 
   if (!key) showSetup(); else add("note", "Tap the mic and talk. Say goodbye when you're done.");
 })();
