@@ -714,7 +714,14 @@ class Desk:
              "text": f"{ask['q']}\nDonna asked: {ask['said']}\nAnswer: {text}" if ask else text}
         talk["ask"] = None
         reply, kind = "", "chat"
-        if (ask or self.sounds_like_lookup(text)) and not PULSE.search(text) \
+        route = re.search(r"\b(?:route|rte|rt)\s*#?\s*(\d{1,2})\b", text, re.I)
+        if route and not ask and not re.search(r"\b\d{4}-\d-\d{5}\b", text):  # "what stops are on route 1 Thursday": no parse
+            from .context import route_facts
+            from .parser import answer_lookup
+            facts = route_facts(self.alliant, route.group(1))
+            if facts:
+                reply, kind = spoken(answer_lookup(self.claude, text, facts, asker=self.asker(owner)).answer), "route"
+        if not reply and (ask or self.sounds_like_lookup(text)) and not PULSE.search(text) \
                 and self.office_lookup(h, [], channel="voice", say=lambda t, p: heard.append((t, p))) and heard:
             kind = "lookup"
             said, payload = heard[-1]

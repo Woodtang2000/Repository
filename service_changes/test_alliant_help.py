@@ -419,3 +419,19 @@ def test_talk_page_gets_a_link_into_the_private_agent(monkeypatch):
     assert asked[-1] == ("https://api.elevenlabs.io/v1/convai/conversation/get_signed_url?agent_id=agent_x", "el-test")
     monkeypatch.delenv("ELEVENLABS_API_KEY")
     assert post("Bearer " + "k" * 32)[0] == 503
+
+
+def test_route_questions_by_voice_skip_the_parse(monkeypatch):
+    from types import SimpleNamespace
+    from .desk import Desk
+    from .context import Alliant, Customer
+    import service_changes.parser as parser
+    from .parser import Answer
+    seen = {}
+    monkeypatch.setattr(parser, "answer_lookup", lambda c, q, facts, asker="": seen.update(q=q, facts=facts, asker=asker)
+                        or Answer(answer="*Thursday* on route 1: Carlile first, then Costco.", found=True))
+    data = Alliant(customers=[Customer("1000-1-00002", "CARLILE", "1", ["Thu"]), Customer("1300-1-00001", "COSTCO", "2", ["Thu"])])
+    d = SimpleNamespace(claude=None, alliant=data, asker=lambda u: "owner of the company, in the office",
+                        office_lookup=lambda *a, **k: (_ for _ in ()).throw(AssertionError("no parse for a route")))
+    assert Desk.voice(d, "what stops are on route 1 thursday", "r") == "Thursday on route 1: Carlile first, then Costco."
+    assert "CARLILE" in seen["facts"] and "COSTCO" not in seen["facts"] and "owner" in seen["asker"]
