@@ -82,12 +82,12 @@ def test_route_facts():
 
 def test_sku_details_without_prices(tmp_path):
     from .context import sku_facts
-    (tmp_path / "skus.csv").write_text("sku,description,weight_lbs,size,unit_price,replacement_cost\n"
-                                       "6-01-05,BATH BLANKET WHITE,1.8,27x52,4.10,12.00\n7-00-07,BAR MOP,0.12,16x19,0.30,1.00\n")
+    (tmp_path / "skus.csv").write_text("sku,description,weight_oz,size,unit_price,replacement_cost\n"
+                                       "6-01-05,BATH BLANKET WHITE,28,27x52,4.10,12.00\n7-00-07,BAR MOP,2,16x19,0.30,1.00\n")
     a = Alliant()
     a.load_skus(str(tmp_path / "skus.csv"))
     f = sku_facts(a, "how much does a bath blanket weigh?")
-    assert f == "SKU 6-01-05: description BATH BLANKET WHITE; weight_lbs 1.8; size 27x52"  # no price or cost
+    assert f == "SKU 6-01-05: description BATH BLANKET WHITE; weight 28 oz (= 1.75 lb); size 27x52"  # no price or cost
     assert sku_facts(a, "what is 7-00-07").startswith("SKU 7-00-07: description BAR MOP")
 
 

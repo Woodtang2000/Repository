@@ -482,7 +482,16 @@ def sku_facts(alliant: "Alliant", question: str, limit: int = 8) -> str:
             if hit:
                 scored.append((-hit, s))
         codes = [s for _, s in sorted(scored)[:limit]]
-    return "\n".join("SKU " + s + ": " + "; ".join(f"{k} {v}" for k, v in skus[s].items() if k != "sku") for s in codes)
+    def detail(k: str, v: str) -> str:
+        """Alliant keeps SKU weights in ounces: say so, with pounds worked out here."""
+        if re.search(r"weight|wt\b", k, re.I) and not re.search(r"lb|pound", k, re.I):
+            try:
+                oz = float(re.sub(r"[^\d.]", "", v))
+                return f"weight {oz:g} oz (= {oz / 16:.2f} lb)"
+            except ValueError:
+                pass
+        return f"{k} {v}"
+    return "\n".join("SKU " + s + ": " + "; ".join(detail(k, v) for k, v in skus[s].items() if k != "sku") for s in codes)
 
 
 def account_facts(alliant: "Alliant", account: str) -> str:
