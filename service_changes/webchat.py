@@ -730,7 +730,8 @@ def make_handler(chat: Chat, public_url: str):
                 if "_tools" not in chat.__dict__:
                     from .phone_agent import PhoneTools
                     chat._tools = PhoneTools(chat.phone)
-                out = chat._tools.handle(name, body if isinstance(body, dict) else {})
+                body = body if isinstance(body, dict) else {}
+                out = chat._tools.greeting(body) if name == "greeting" else chat._tools.handle(name, body)
             except ValueError:
                 return self._send(400, b'{"error":"bad request"}', "application/json")
             except Exception as e:

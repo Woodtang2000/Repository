@@ -131,3 +131,19 @@ def test_a_secret_phrase_works_too(monkeypatch):
     assert not phone_agent.secret_matches("mats in the rain", real) and not phone_agent.secret_matches("", real)
     monkeypatch.setenv("OWNER_PHONE_SECRET", "snow")
     assert phone_agent.secret() == ""  # one word is too easy to guess: Harvey mode stays off
+
+
+def test_she_greets_known_callers_by_name(desk, monkeypatch, tmp_path):
+    make, leads = desk
+    (tmp_path / "employee_phones.csv").write_text("phone,slack_id,name\n(907) 555-7777,UMIKE,Mike Driver\n")
+    tools = phone_agent.PhoneTools(make())
+    first = lambda caller, called: tools.greeting({"caller_id": caller, "called_number": called})[
+        "conversation_config_override"]["agent"]["first_message"]
+    assert first("+19075557777", "+18885197604") == "Hi Mike, it's Donna. What do you need?"
+    assert first("+19075551234", "+18668278398").startswith("Thanks for calling Snow White Linen")  # "Jane at Midas"
+    assert first("+19075550000", "+18885197604") == phone_agent.FIRST["employees"]
+    monkeypatch.setenv("OWNER_PHONES", "9075556513")
+    monkeypatch.setenv("OWNER_PHONE_SECRET", "bar mops in the snow")
+    out = tools.greeting({"caller_id": "+19075556513", "called_number": "+18668278398"})
+    assert out["conversation_config_override"]["agent"]["first_message"] == "Hi Scott, it's Donna. What's the phrase?"
+    assert out["type"] == "conversation_initiation_client_data" and out["dynamic_variables"]["caller_name"] == "Scott"

@@ -97,6 +97,35 @@ class PhoneTools:
         print(time.strftime("%H:%M"), f"phone agent: {name} ({c['line']}, …{digits(c['from'])[-4:]})", flush=True)
         return out
 
+    def greeting(self, body: dict) -> dict:
+        """ElevenLabs asks before it answers a call (its conversation initiation webhook: caller_id, called_number): her
+        opening line, by name when the number is known, plus dynamic variables for the agent's prompt."""
+        from .context import company_for
+        caller, called = str(body.get("caller_id") or ""), str(body.get("called_number") or "")
+        line = "employees" if digits(called) == EMPLOYEE_LINE else "customers"
+        boss = {u.strip() for u in os.environ.get("OWNER_SLACK_ID", "U4KFSQCDQ").split(",")}
+        staff = self.phone.staff(caller)
+        scott = digits(caller) in owner_phones() or (staff or {}).get("user") in boss
+        who = self.phone.caller(caller) if line == "customers" else staff
+        first = ((who or {}).get("name") or "").split()[0] if (who or {}).get("name") else ""
+        if first.lower().strip(",.") in ("donna", "snow", "the"):
+            first = ""
+        if scott and secret():
+            hello, first = "Hi Scott, it's Donna. What's the phrase?", "Scott"
+        elif line == "employees":
+            hello = f"Hi {first}, it's Donna. What do you need?" if first else FIRST["employees"]
+        elif who:
+            company = company_for(who["accounts"][0])
+            hello = (f"Hi {first}, this is Donna with {company}. What can I do for you?" if first and " at " not in
+                     who.get("name", "") else f"Thanks for calling {company}, this is Donna. What can I do for you?")
+        else:
+            hello = FIRST["customers"]
+        print(time.strftime("%H:%M"), f"phone agent: greeting {line} …{digits(caller)[-4:]}"
+              + (" (Scott)" if scott else " (known)" if who else ""), flush=True)
+        return {"type": "conversation_initiation_client_data",
+                "dynamic_variables": {"caller_name": first or "", "caller_known": "yes" if who or scott else "no"},
+                "conversation_config_override": {"agent": {"first_message": hello}}}
+
     # ---- the tools -------------------------------------------------------------------------------------------------
 
     def caller_info(self, c: dict, body: dict, said: str) -> dict:
