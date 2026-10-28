@@ -41,8 +41,11 @@ notes rather than guessing. The house rules below still win over the notes.
      which SKU). New Item only offers SKUs already in the customer's catalog, so when the SKU isn't there:
      a. **Go To Account** (the 4-digit account, e.g. 5045) → its **SKU Catalog** → add the SKU if it isn't there.
      b. **Go To Customer** → **Customer Catalog** → add the SKU from the account's available SKUs.
-     c. **Customer Items** → **New Item** → that SKU: quantity as both inventory and autocount, the ticket's frequency
-        (weekly if it says so) on the customer's delivery day.
+     c. **Customer Items**: once it's in the Customer Catalog the SKU is already on the Customer Items list, **unchecked**.
+        Check the **checkbox to the left of the SKU** (first column, "Assigned to customer") to put it in service; don't
+        use New Item for it. Then on that line: quantity as both inventory and autocount, the ticket's frequency (weekly
+        if it says so) on the customer's delivery day → **Save**.
+     If the SKU is already in the customer's catalog (on the list but unchecked), skip a and b and just do c.
      In both catalogs, keep the **suggested price Alliant fills in from the SKU** exactly as it is: never type, round or
      change a price. If no price is suggested and one is required, stop: `needs_person` ("SKU 5-01-01 has no suggested
      price in the account catalog"). In your note say "suggested price kept", never the amount.
