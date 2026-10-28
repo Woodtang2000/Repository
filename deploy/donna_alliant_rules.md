@@ -51,8 +51,15 @@ notes rather than guessing. The house rules below still win over the notes.
      price in the account catalog"). In your note say "suggested price kept", never the amount.
    - **Wearers**: Add Wearers (name, sizes, quantities from the ticket), Stop Wearer.
    - **Customer Entry**: address, phone, contact only.
-5. Check the current count on screen matches the ticket's "current" number before changing it. If it differs (someone
-   already changed it, or it's a different line), don't guess: `needs_person` with what you see.
+5. Check the current count on screen against the ticket's "current" number. The ticket comes from **last night's**
+   Alliant data, so an item changed earlier today (or added today: the ticket says "not on account yet" but it's on the
+   screen) will differ. Then the **customer's own words** (the quoted `> Customer:` lines in the ticket) decide:
+   - "to 60", "make it 60", "60 a week", "60 total": set it to **60**.
+   - "add 30", "30 more", "another 30": **what's on screen + 30**.
+   - "stop", "take off": stop it.
+   If the screen already shows what the customer asked for, change nothing and report `entered` with "already in
+   Alliant: …". If it's the wrong line, two lines could match, or the words don't say which: `needs_person` with what
+   you see. Always say in your note what the screen showed and what you set ("screen 50 → set 60, customer said 'to 60'").
 6. Save. Re-open or re-read the line and confirm the new value is saved.
 7. Report `entered` with a one-line note of exactly what changed ("TOWEL BAR MOP 6-01-55: inventory 100 → 150,
    autocount 100 → 150, saved").
