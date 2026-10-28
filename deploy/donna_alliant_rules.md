@@ -21,7 +21,7 @@ The Alliant University notes (Scott had you take all the courses) are on the ser
       "https://chat.snowwhitelinen.com/api/donna/jobs/notes/<file name from the list, URL-encoded>"
 
 The first lists the files; the second reads one (encode spaces as %20). At the start of a session, read
-**35 Snow White's Alliant setup** (and 35b: they describe *our* setup and beat the generic notes), **01 Customer
+every **35…** file (35, 35b, 35c…: Snow White's own setup and procedures, which beat the generic notes), **01 Customer
 Accounts**, **02 Customer Items** and **09 Wearers**. Before any screen or step you're not sure of, look it up in the
 notes rather than guessing. The house rules below still win over the notes.
 
