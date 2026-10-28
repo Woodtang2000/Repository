@@ -45,6 +45,9 @@ OFFICE_HOURS = os.environ.get("PHONE_OFFICE_HOURS", "Mon-Fri 8:00-17:00")
 EMPLOYEE_CHANNEL = os.environ.get("EMPLOYEE_CALLS_CHANNEL", "employee-calls")
 DESK_CHANNEL = os.environ.get("DESK_CHANNEL", "service-desk")
 MODEL = os.environ.get("PHONE_MODEL", "claude-sonnet-5-5")  # quick enough for a phone call
+# Checking a change heard on a call (account, item, more or total): quicker than the desk's own model, since the caller
+# is waiting; she reads it back for their yes. The Donna app, route channels, texts and email keep the desk's model.
+CHECK_MODEL = os.environ.get("PHONE_CHECK_MODEL", "claude-sonnet-5-5")
 TWILIO_VOICE = "Polly.Joanna-Neural"  # when ElevenLabs isn't set up
 MAX_TURNS = 40
 WAIT_SECONDS = 9  # Twilio gives up on a webhook after 15 seconds
@@ -380,7 +383,8 @@ class Phone:
         data = self.alliant()
         name = call["who"].get("name") or "Driver"
         now = time.time()
-        parsed = parse_message(self.claude, text, "employee-phone", f"{now:.6f}", data, author=f"{name} (driver, by phone)")
+        parsed = parse_message(self.claude, text, "employee-phone", f"{now:.6f}", data, author=f"{name} (driver, by phone)",
+                               model=CHECK_MODEL)
         if parsed.category not in ACTIONABLE:
             call["change"] = None
             return Turn(say="I'll pass that to the office for you. Anything else?", action="message", summary=text)
@@ -388,7 +392,7 @@ class Phone:
         parts = split_by_account(parsed)
         for part in parts:
             fix_department(part, data, None, service_day(now))
-            fill_item_matches(self.claude, part, data)
+            fill_item_matches(self.claude, part, data, model=CHECK_MODEL)
         results = [check(part, data) for part in parts]
         questions = list(dict.fromkeys(q for r in results for q in r.questions))
         if questions:
@@ -471,13 +475,13 @@ class Phone:
         mine = only(self.alliant(), accounts)
         acct = turn.account if turn.account in accounts else (accounts[0] if len(accounts) == 1 else None)
         parsed = parse_message(self.claude, f"Customer: {turn.summary}", "customer-phone", f"{time.time():.6f}", mine,
-                               author=f"{who.get('name') or 'Customer'} (the customer, by phone)")
+                               author=f"{who.get('name') or 'Customer'} (the customer, by phone)", model=CHECK_MODEL)
         parsed.account_number = acct if acct else (parsed.account_number if parsed.account_number in accounts else None)
         for c in parsed.changes:
             c.account_number = None
         if parsed.account_number is None or parsed.category not in ACTIONABLE:
             return self.office_note(call, turn, verified=True)
-        fill_item_matches(self.claude, parsed, mine)
+        fill_item_matches(self.claude, parsed, mine, model=CHECK_MODEL)
         result = check(parsed, mine)
         out = ticket(result, mine, with_readback=False).splitlines()
         if result.questions:

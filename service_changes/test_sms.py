@@ -75,7 +75,7 @@ def desk(tmp_path, monkeypatch):
     monkeypatch.setattr(parser, "parse_message", fake_parse)
     monkeypatch.setattr(parser, "answer_lookup",
                         lambda c, q, facts, asker="": (seen.__setitem__("facts", facts), Answer(answer="300 per delivery", found=True))[1])
-    monkeypatch.setattr(run, "fill_item_matches", lambda c, p, a: None)
+    monkeypatch.setattr(run, "fill_item_matches", lambda c, p, a, **kw: None)
     slack = FakeSlack()
     td = sms.TextDesk(slack, None, ALLIANT, "service-desk-test", str(tmp_path), send=lambda to, body: texts.append((to, body)))
     return td, slack, texts, seen

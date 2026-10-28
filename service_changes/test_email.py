@@ -28,7 +28,7 @@ def desk(tmp_path, monkeypatch):
     monkeypatch.setattr(parser, "parse_message", fake_parse)
     monkeypatch.setattr(parser, "answer_lookup", lambda c, q, facts, asker="": Answer(answer="300 per delivery", found=True))
     monkeypatch.setattr(parser, "identify_customer", lambda c, text, customers: Identified(person_name="Bob", accounts=["M8"]))
-    monkeypatch.setattr(run, "fill_item_matches", lambda c, p, a: None)
+    monkeypatch.setattr(run, "fill_item_matches", lambda c, p, a, **kw: None)
     slack = FakeSlack()
     ed = email_desk.EmailDesk(slack, None, ALLIANT, "service-desk-test", str(tmp_path),
                               send=lambda to, body: sent.append((to, body)), fetch=lambda since: list(inbox))

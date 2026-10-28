@@ -106,7 +106,7 @@ def other_route_account(parsed: ParsedMessage, alliant: Alliant) -> None:
                                        if not re.search(r"\b(which|what)\b.*\b(store|customer|location|account)\b", q, re.I)]
 
 
-def fill_item_matches(client, parsed: ParsedMessage, alliant: Alliant) -> None:
+def fill_item_matches(client, parsed: ParsedMessage, alliant: Alliant, **kw) -> None:
     """Ask Claude to place any item the word match couldn't find on the account."""
     from .checks import current_qty
     from .parser import match_items
@@ -116,7 +116,7 @@ def fill_item_matches(client, parsed: ParsedMessage, alliant: Alliant) -> None:
             if not c.wearer and account_items and current_qty(alliant, parsed.account_number, c.item) is None]
     if todo:
         from .checks import colors_agree
-        for c, name in zip(todo, match_items(client, [c.item for c in todo], account_items)):
+        for c, name in zip(todo, match_items(client, [c.item for c in todo], account_items, **kw)):
             c.alliant_item = name if name and colors_agree(c.item, name) else None
 
 

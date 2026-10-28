@@ -86,8 +86,9 @@ class PhoneTools:
         c["posted"] += 1
         if c["posted"] > 5:
             return {"result": "Already passed several requests from this call; don't send more."}
-        if c["line"] == "customers" and c["who"]:
-            self.phone.ticket(f"agent-{id(c)}", c, turn)
+        import threading
+        if c["line"] == "customers" and c["who"]:  # checked and posted in the background: the caller isn't kept waiting
+            threading.Thread(target=self.phone.record, args=(f"agent-{c['posted']}", c, turn), daemon=True).start()
             return {"result": "Sent to the office. They'll get a text the moment it's entered."}
         self.phone.office_note(c, turn, verified=False)
         return {"result": "Passed to the office; they'll call back to confirm before changing anything."}

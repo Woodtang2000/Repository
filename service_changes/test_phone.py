@@ -85,7 +85,7 @@ def test_known_customer_change_becomes_a_ticket_texted_back(desk, monkeypatch):
     monkeypatch.setattr(parser, "parse_message", lambda *a, **k: ParsedMessage(
         category=Category.item_change, account_number="1205-1-00004", summary="towels",
         changes=[Change(action=Action.add, item="shop towels", quantity=100)]))
-    monkeypatch.setattr(run, "fill_item_matches", lambda c, p, a: None)
+    monkeypatch.setattr(run, "fill_item_matches", lambda c, p, a, **kw: None)
     p = make(phone.Turn(say="Consider it done. Anything else?", action="request",
                         summary="Add 100 red shop towels to Midas Fairbanks", account="1205-1-00004"),
              phone.Turn(say="Thanks Jane, have a great day.", action="goodbye"))
@@ -212,7 +212,7 @@ def test_a_driver_calls_in_a_change_gloves_on(desk, monkeypatch, tmp_path):
     monkeypatch.setattr(parser, "parse_message", lambda *a, **k: ParsedMessage(
         category=Category.item_change, account_number="1205-1-00004", summary="towels",
         changes=[Change(action=Action.set, item="shop towels", quantity=400)]))
-    monkeypatch.setattr(run, "fill_item_matches", lambda c, p, a: None)
+    monkeypatch.setattr(run, "fill_item_matches", lambda c, p, a, **kw: None)
     p = make(phone.Turn(say="", action="change", summary="Midas wants shop towels to 400"),
              channels=("service-desk", "employee-calls", "route-12"))
     p.slack.chat_getPermalink = lambda channel, message_ts: {"permalink": "https://slack/x"}

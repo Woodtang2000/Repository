@@ -149,7 +149,7 @@ def answer_lookup(client: anthropic.Anthropic, question: str, facts: str, asker:
               + "Use only the data above; if it doesn't say, set found to false and say what you couldn't find."
               + (" " + OWNER_VOICE if "owner" in asker else ""))
     response = client.beta.messages.parse(
-        model=MODEL,
+        model=model or MODEL,
         max_tokens=4000,
         messages=[{"role": "user", "content": prompt}],
         output_format=Answer,
@@ -211,7 +211,8 @@ class ItemMatch(BaseModel):
         description="For each driver item, in order: the exact Alliant item name it refers to, or null if none clearly fits.")
 
 
-def match_items(client: anthropic.Anthropic, driver_items: list[str], account_items: list[str]) -> list[str | None]:
+def match_items(client: anthropic.Anthropic, driver_items: list[str], account_items: list[str],
+                model: str | None = None) -> list[str | None]:
     """Second pass, only for items the word match couldn't place: let Claude pick from the account's real list."""
     prompt = ("Alliant items on this customer's account:\n" + "\n".join(account_items)
               + "\n\nWhich Alliant item does each driver item mean? Drivers leave out colors and use slang "
@@ -256,10 +257,11 @@ def is_reply(client: anthropic.Anthropic, bot_said: str, request: str, message: 
 
 
 def parse_message(client: anthropic.Anthropic, text: str, channel: str, ts: str, alliant: Alliant,
-                  author: str = "", office: bool | str = False, previous: str = "") -> ParsedMessage:
+                  author: str = "", office: bool | str = False, previous: str = "", model: str | None = None) -> ParsedMessage:
+    """`model`: a faster one for phone calls (phone.CHECK_MODEL); everything else uses MODEL."""
     context, message = prompt_parts(text, channel, ts, alliant, author, office, previous)
     response = client.beta.messages.parse(
-        model=MODEL,
+        model=model or MODEL,
         max_tokens=16000,
         # Cache the instructions and the route's customer list: only the message itself changes between calls.
         system=[{"type": "text", "text": SYSTEM, "cache_control": {"type": "ephemeral"}}],

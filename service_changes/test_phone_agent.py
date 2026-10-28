@@ -30,7 +30,7 @@ def test_driver_change_by_agent(desk, monkeypatch, tmp_path):
     monkeypatch.setattr(parser, "parse_message", lambda *a, **k: ParsedMessage(
         category=Category.item_change, account_number="1205-1-00004", summary="towels",
         changes=[Change(action=Action.set, item="shop towels", quantity=400)]))
-    monkeypatch.setattr(run, "fill_item_matches", lambda c, p, a: None)
+    monkeypatch.setattr(run, "fill_item_matches", lambda c, p, a, **kw: None)
     p = make(channels=("service-desk", "employee-calls", "route-12"))
     p.slack.chat_getPermalink = lambda channel, message_ts: {"permalink": "https://slack/x"}
     post = p.slack.chat_postMessage
