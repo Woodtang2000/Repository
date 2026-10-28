@@ -78,6 +78,11 @@ class Jobs:
                 self.desk.slack.chat_postEphemeral(channel=self.desk.desk_id, user=user,
                                                    text="Only the office can send tickets to Donna for Alliant.")
             return f"ignored: {self.desk.name(user)} isn't on the office list"
+        return self.add(ts, user)
+
+    def add(self, ts: str, user: str) -> str:
+        """Put the ticket at `ts` in her queue for `user` (the button, or Scott telling her a change himself)."""
+        from .desk import KIND, meta
         r = self.desk.slack.conversations_history(channel=self.desk.desk_id, latest=ts, inclusive=True, limit=1,
                                                    include_all_metadata=True)
         t = next((m for m in r.get("messages", []) if m["ts"] == ts), None)

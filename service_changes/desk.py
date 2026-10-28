@@ -29,6 +29,7 @@ import argparse
 import json
 import os
 import re
+import string
 import sys
 import time
 from datetime import datetime
@@ -67,6 +68,12 @@ STOCKROOM_DAY, STOCKROOM_LEAD = 0, "Ana Faamita"  # Mondays, tagging the stockro
 STALE_HOURS = 36  # the Alliant feed runs nightly; older than this means it has stopped (e.g. the Mac restarted)
 MAX_LOOKUPS_PER_DAY = 15  # per person: past this the bot stops answering and tells the office
 ACTIONABLE = {Category.item_change, Category.wearer_change, Category.hold_or_closure, Category.special_order}
+# Scott telling Donna a change himself (owner_change): worth parsing as one; "yes" / "no" to her readback.
+CHANGE_Q = re.compile(r"\b(change|add|stop|cancel|take (?:off|away)|remove|increase|decrease|raise|lower|cut|bump|drop|"
+                      r"swap|switch|replace|set|make (?:it|that|them)|new wearer|put\b.{0,40}\bon|start|more|fewer|less)\b", re.I)
+YES = re.compile(r"^\W*(yes|yeah|yep|yup|sure|correct|right|do it|go ahead|go for it|please do|put it in|enter it|"
+                 r"sounds good|ok(?:ay)?|that's (?:it|right)|perfect)\b", re.I)
+NO = re.compile(r"^\W*(no|nope|cancel|never ?mind|don't|wait|hold on|scratch that)\b", re.I)
 DONE_ANY = re.compile(r"\b(done|entered|changed|complete[d]?|all set|finished)\b", re.I)
 ACCOUNT = re.compile(r"\b\d{4}-\d-\d{5}\b")
 LIVE_ROUTE = re.compile(r"route-\d+")
@@ -432,7 +439,8 @@ class Desk:
         done = ("Nothing to enter: the driver changed it on the handheld. React ✅ when seen"
                 if parsed.category == Category.today_only else "React ✅ or type done when it's in Alliant"
                 if parsed.category in ACTIONABLE or parsed.category == Category.service_code else "React ✅ when it's handled")
-        text = "\n".join(lines + ["", _quote(_short(src.get("text", ""), 300)), f"<{link}|#{route_name}> · {done}"])
+        where = f"#{route_name}" if route_name in self.channels else route_name  # "Scott, by voice"
+        text = "\n".join(lines + ["", _quote(_short(src.get("text", ""), 300)), f"<{link}|{where}> · {done}"])
         from .verify import expectations
         expect = expectations(result) if parsed.category in ACTIONABLE and not result.questions else []
         new = self.post(self.desk_id, text, {"kind": "ticket", "src_channel": channel, "src_ts": src["ts"],
@@ -714,6 +722,11 @@ class Desk:
         if owner and cmd:  # Donna's Alliant work: "Donna pause" / "Donna resume"
             self.slack.chat_postMessage(channel=channel, text=self.jobs().pause(cmd.group(1).lower() in ("pause", "stop")))
             return "alliant pause" if cmd.group(1).lower() in ("pause", "stop") else "alliant resume"
+        if owner and (channel in self.__dict__.get("changes", {}) or CHANGE_Q.search(ev.get("text", ""))):
+            said = self.owner_change(channel, ev.get("text", ""), channel, typed=ev)
+            if said:  # "change Chili's bar mops to 60": she reads it back, "yes" puts it in her Alliant queue
+                self.slack.chat_postMessage(channel=channel, text=said, unfurl_links=False)
+                return "change"
         if owner or self.is_office(user):
             top = list(reversed(list(_messages(self.slack, channel, time.time() - 900, include_all_metadata=True))))
             if self.office_lookup(ev, top, channel=channel):
@@ -775,6 +788,12 @@ class Desk:
         talk["ask"] = None
         reply, kind = "", "chat"
         if not ask:
+            said = self.owner_change("voice:" + (convo or "phone"), text, None)
+            if said:
+                reply, kind = spoken(said), "change"
+                if convo == "agent-tool" and reply.endswith("?"):  # ElevenLabs' agent: only ask_donna can make the change
+                    reply += " (Voice agent: pass Scott's answer to ask_donna word for word; nothing changes until it does.)"
+        if not reply and not ask:
             item = self.sku_answer(text, owner)
             if item:
                 reply, kind = spoken(item), "sku"
@@ -805,6 +824,76 @@ class Desk:
         talk["turns"] += [{"role": "user", "content": text}, {"role": "assistant", "content": reply or "I'm here."}]
         print(time.strftime("%H:%M"), f"voice: answered ({kind}) in {time.time() - now:.1f}s", flush=True)
         return reply or "I'm here. What do you need?"
+
+    def owner_change(self, key: str, text: str, channel: str | None, typed: dict | None = None) -> str | None:
+        """Scott tells Donna a change himself ("change Chili's bar mops to 60 a week"), by voice or in his private
+        messages, for any account. She reads it back the way she would to a driver, or asks what's unclear; his "yes"
+        puts a ticket in #service-desk (so the office sees it) straight into her Alliant queue, and her readback comes
+        to his private messages when it's entered. None when it isn't a change (a question, a chat)."""
+        from .parser import parse_message
+        from .run import fill_item_matches, fix_department, other_route_account
+        pending = self.__dict__.setdefault("changes", {})
+        now = time.time()
+        p = pending.get(key)
+        if p and now - p["at"] > (900 if p.get("confirm") else 7200):
+            p = pending.pop(key)
+            p = None
+        if p and p.get("confirm"):
+            if YES.match(text):
+                pending.pop(key)
+                return self.owner_enter(p, channel, typed)
+            if NO.match(text) and len(text.split()) <= 4:
+                pending.pop(key)
+                return "Okay, I won't change anything."
+            text = f"{p['text']}\nScott's correction: {text}"
+        elif p:  # the answer to her question
+            text = f"{p['text']}\nDonna asked: {p['asked']}\nScott's answer: {text}"
+        elif not CHANGE_Q.search(text):
+            return None
+        owner = os.environ.get("OWNER_SLACK_ID", "U4KFSQCDQ").split(",")[0].strip()
+        parsed = parse_message(self.claude, text, self.desk_name, f"{now:.6f}", self.alliant, author=self.name(owner),
+                               office=True)
+        if parsed.category not in ACTIONABLE:
+            pending.pop(key, None)
+            return None
+        other_route_account(parsed, self.alliant)
+        parts = split_by_account(parsed)
+        for part in parts:
+            fix_department(part, self.alliant, None, service_day(now))
+            fill_item_matches(self.claude, part, self.alliant)
+        results = [check(part, self.alliant) for part in parts]
+        questions = list(dict.fromkeys(q for r in results for q in r.questions))
+        if questions:
+            asked = " ".join(questions[:2])
+            pending[key] = {"text": text, "asked": asked, "at": now}
+            return asked
+        said = []
+        for r in results:
+            rb = re.sub(r"^✅\s*(\d{4}-\d-\d{5}\s*)?", "", readback(r)).strip()
+            name, _, what = rb.partition(" – ")
+            said.append(f"{string.capwords(name)}: {what}" if what else rb)
+        pending[key] = {"text": text, "parts": parts, "results": results, "confirm": True, "at": now}
+        return "; ".join(said) + ". Want me to put that in?"
+
+    def owner_enter(self, p: dict, channel: str | None, typed: dict | None) -> str:
+        """Scott said yes: the ticket(s) in #service-desk, queued for her workstation (unless DONNA_ALLIANT=off)."""
+        owner = os.environ.get("OWNER_SLACK_ID", "U4KFSQCDQ").split(",")[0].strip()
+        if not channel:  # by voice: his private messages with her keep the record and get her readback
+            channel = self.slack.conversations_open(users=owner)["channel"]["id"]
+        if typed:
+            src = {**typed, "user": owner, "text": p["text"].split("\n")[0]}
+            where = "Scott, in a private message"
+        else:
+            note = self.post(channel, f"🎙️ You asked me: _{_short(p['text'].splitlines()[0], 300)}_", {"kind": "voice_change"})
+            src = {**note, "user": owner, "text": p["text"].splitlines()[0]}
+            where = "Scott, by voice"
+        tickets = [self.post_ticket(where, channel, src, self.name(owner), part, r, [], False, [])
+                   for part, r in zip(p["parts"], p["results"])]
+        if os.environ.get("DONNA_ALLIANT", "off").strip().lower() == "off":
+            return "It's on the desk for the office to enter. You'll get the confirmation here when it's in."
+        for ts in tickets:
+            self.jobs().add(ts, owner)
+        return "Done. It's in my queue for Alliant, and I'll message you in Slack the moment it's entered."
 
     def sku_answer(self, text: str, user: str | None = None) -> str:
         """A question about an item itself ("how much does a bath blanket weigh?"), answered from skus.csv; empty if
@@ -1084,6 +1173,11 @@ class Desk:
                 json.dump(waiting, f)
             os.replace(path + ".tmp", path)
             return "customer"
+        if str(p.get("src_channel", "")).startswith("D"):  # Scott told her himself (owner_change): ask him there
+            self.post(p["src_channel"], f"Quick check from Donna: {q}", {"kind": "question", "src_ts": p.get("src_ts")})
+            self.__dict__.setdefault("changes", {})[p["src_channel"]] = {
+                "text": " ".join(said) or todo_bar.body(t), "asked": q, "at": time.time()}
+            return "owner"
         if p.get("src_channel") in self.routes.values() and p.get("src_ts"):
             who = f"<@{p['driver_id']}> " if p.get("driver_id") else ""
             self.post(p["src_channel"], f"{who}Quick check from Donna on _{_short(' '.join(said) or 'your request', 60)}_\n• {q}",

@@ -751,3 +751,36 @@ def test_change_email_to_the_invoice_contact(monkeypatch):
     monkeypatch.delenv("CHANGE_EMAILS")
     assert desk.Desk.change_email(d, {"src_channel": "email", "account": "5045-1-00000", "email_to": "ap@homergolf.com"},
                                   customer) == ["owner@homergolf.com"]  # the emailer already has the readback
+
+
+def test_scott_tells_donna_a_change_by_voice(setup, monkeypatch, tmp_path):
+    """Any account, by voice: she asks what's unclear, reads it back, and only his "yes" makes the ticket and queues
+    it for her workstation; her readback (or her question from the workstation) comes to his private messages."""
+    slack, d = setup
+    monkeypatch.setenv("DONNA_ALLIANT", "on")
+    slack.users["U4KFSQCDQ"] = "Scott Woodland"
+    slack.msgs["DS"] = []
+    slack.conversations_open = lambda users: {"channel": {"id": "DS"}}
+    queued = []
+    d._jobs = type("J", (), {"add": lambda self, ts, user: queued.append((ts, user))})()
+    assert d.voice("more mats at wendys", "c") == "How many 3x10 mats should Wendy's have in total?"
+    said = d.voice("6", "c")
+    assert "Wendy's #4412: " in said
+    assert "from 4 to 6" in said and said.endswith("Want me to put that in?") and not slack.bot_posts("D1", "ticket")
+    assert "put it in" not in d.voice("yes", "c") and len(queued) == 1
+    [t] = slack.bot_posts("D1", "ticket")
+    assert queued == [(t["ts"], "U4KFSQCDQ")] and "Scott, by voice" in t["text"] and "4 → *6*" in t["text"]
+    assert desk.meta(t)["src_channel"] == "DS" and desk.meta(t)["driver_id"] == "U4KFSQCDQ"
+    assert "You asked me" in slack.msgs["DS"][0]["text"]
+    d.send_readback(t, "UBOT", [])  # her workstation entered it
+    [rb] = slack.bot_posts("DS", "readback")
+    assert "from 4 to 6" in rb["text"]
+    # a "no" changes nothing; a question that isn't a change goes on to the usual answers
+    d.voice("more mats at wendys: 6", "c2")
+    assert d.voice("no", "c2") == "Okay, I won't change anything." and len(queued) == 1
+    assert d.owner_change("c3", "how is Bill doing today", None) is None
+    # her question from the workstation goes to his private messages, and his typed answer is read with the request
+    assert d.ask_requester(t, "6 in total, or 6 more?") == "owner"
+    assert slack.msgs["DS"][-1]["text"] == "Quick check from Donna: 6 in total, or 6 more?"
+    reply = d.owner_change("DS", "6", "DS", typed={"ts": "1.0", "user": "U4KFSQCDQ", "channel": "DS"})
+    assert reply.endswith("Want me to put that in?") and "Donna asked: 6 in total, or 6 more?" in CALLS[-1]

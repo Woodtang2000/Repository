@@ -203,7 +203,7 @@ def test_hey_donna_voice(monkeypatch):
         return False
     chats = []
     monkeypatch.setattr(parser, "owner_chat", lambda c, turns, about, spoken=False: chats.append((turns, spoken)) or "Leave it with me.")
-    d = SimpleNamespace(claude=None, office_lookup=lookup, briefing=lambda: "", pulse=lambda: "PULSE", sku_answer=lambda t, u=None: "",
+    d = SimpleNamespace(claude=None, office_lookup=lookup, briefing=lambda: "", pulse=lambda: "PULSE", sku_answer=lambda t, u=None: "", owner_change=lambda k, t, c: None,
                         sounds_like_lookup=lambda t: "mats" in t or "Safeway" in t)
     assert Desk.voice(d, "  ", "c1").startswith("I didn't catch anything") and not chats and not asked
     assert Desk.voice(d, "how many mats do they get", "c1") == "Which customer?"
@@ -431,7 +431,7 @@ def test_route_questions_by_voice_skip_the_parse(monkeypatch):
     monkeypatch.setattr(parser, "answer_lookup", lambda c, q, facts, asker="": seen.update(q=q, facts=facts, asker=asker)
                         or Answer(answer="*Thursday* on route 1: Carlile first, then Costco.", found=True))
     data = Alliant(customers=[Customer("1000-1-00002", "CARLILE", "1", ["Thu"]), Customer("1300-1-00001", "COSTCO", "2", ["Thu"])])
-    d = SimpleNamespace(claude=None, alliant=data, asker=lambda u: "owner of the company, in the office", sku_answer=lambda t, u=None: "",
+    d = SimpleNamespace(claude=None, alliant=data, asker=lambda u: "owner of the company, in the office", sku_answer=lambda t, u=None: "", owner_change=lambda k, t, c: None,
                         office_lookup=lambda *a, **k: (_ for _ in ()).throw(AssertionError("no parse for a route")))
     assert Desk.voice(d, "what stops are on route 1 thursday", "r") == "Thursday on route 1: Carlile first, then Costco."
     assert "CARLILE" in seen["facts"] and "COSTCO" not in seen["facts"] and "owner" in seen["asker"]
@@ -480,7 +480,7 @@ def test_drivers_and_customers_never_get_balances():
 def test_voice_answers_alliant_how_to_from_the_notes():
     from types import SimpleNamespace
     from .desk import Desk
-    d = SimpleNamespace(claude=None, sku_answer=lambda t, u=None: "",
+    d = SimpleNamespace(claude=None, sku_answer=lambda t, u=None: "", owner_change=lambda k, t, c: None,
                         helper=SimpleNamespace(answer=lambda turns, user: ("1. Open *Go To Account*.\n2. Add the SKU in the "
                                                "*SKU Catalog*.\n\n_Source: 02 Customer Items_", False)),
                         office_lookup=lambda *a, **k: (_ for _ in ()).throw(AssertionError("not a lookup")))
