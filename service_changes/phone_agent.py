@@ -34,6 +34,28 @@ def owner_phones() -> set[str]:
     return {digits(x) for x in os.environ.get("OWNER_PHONES", "").split(",") if len(digits(x)) == 10}
 
 
+def secret() -> str:
+    """Scott's phone secret: OWNER_PHONE_SECRET, a phrase of three words or more ("bar mops in the snow") or digits;
+    OWNER_PHONE_PIN works too. Empty when not set or too short to be safe."""
+    raw = (os.environ.get("OWNER_PHONE_SECRET") or os.environ.get("OWNER_PHONE_PIN") or "").strip()
+    if re.search(r"[a-z]", raw, re.I):
+        return raw if len(raw.split()) >= 3 else ""
+    return raw if len(spoken_digits(raw)) >= 4 else ""
+
+
+def secret_matches(said: str, real: str) -> bool:
+    """A phrase as speech-to-text writes it: case, punctuation and a slip of a letter or two don't matter."""
+    import difflib
+    import hmac
+    if not real:
+        return False
+    if not re.search(r"[a-z]", real, re.I):
+        return hmac.compare_digest(spoken_digits(said).encode(), spoken_digits(real).encode())
+    norm = lambda t: re.sub(r"[^a-z0-9]", "", t.lower())
+    a, b = norm(said), norm(real)
+    return hmac.compare_digest(a.encode(), b.encode()) or difflib.SequenceMatcher(None, a, b).ratio() >= 0.9
+
+
 def spoken_digits(said: str) -> str:
     """"one two three four", "12 34", "1-2-3-4" -> "1234"."""
     return "".join(WORDS.get(w, re.sub(r"\D", "", w)) for w in re.findall(r"[a-z]+|\d+", said.lower()))
@@ -80,8 +102,8 @@ class PhoneTools:
     def caller_info(self, c: dict, body: dict, said: str) -> dict:
         info = {"line": c["line"], "office_open": office_open(),
                 "office_hours": os.environ.get("PHONE_OFFICE_HOURS", "Mon-Fri 8:00-17:00") + " Alaska time"}
-        if c["scott"] and len(spoken_digits(os.environ.get("OWNER_PHONE_PIN", ""))) >= 4:
-            info.update(owner_candidate=True, name="Scott", note="This is Scott's number. Greet him, ask for his PIN, "
+        if c["scott"] and secret():
+            info.update(owner_candidate=True, name="Scott", note="This is Scott's number. Greet him, ask for his secret phrase, "
                         "and call verify_owner with what he says. Until it says verified, treat him like any caller.")
         who = c["who"]
         if c["line"] == "employees":
@@ -153,13 +175,13 @@ class PhoneTools:
         return {"status": status, "say": turn.say}
 
     def verify_owner(self, c: dict, body: dict, said: str) -> dict:
-        """Scott's PIN (OWNER_PHONE_PIN), only from his own number, three tries a call: caller ID alone can be faked."""
-        import hmac
-        pin = spoken_digits(os.environ.get("OWNER_PHONE_PIN", ""))
-        if not c["scott"] or len(pin) < 4 or c["tries"] >= 3:
+        """Scott's secret phrase or PIN (secret()), only from his own number, three tries a call: caller ID alone can be
+        faked."""
+        real = secret()
+        if not c["scott"] or not real or c["tries"] >= 3:
             return {"verified": False, "note": "Not available on this call. Carry on as a normal call."}
         c["tries"] += 1
-        if hmac.compare_digest(spoken_digits(str(body.get("pin") or said)).encode(), pin.encode()):
+        if secret_matches(str(body.get("pin") or said), real):
             c["owner"] = True
             print(time.strftime("%H:%M"), "phone agent: Scott verified (Harvey mode)", flush=True)
             return {"verified": True, "note": "Harvey mode: you're Scott's Donna now, exactly like his Donna app. For "
@@ -198,13 +220,13 @@ class PhoneTools:
 # ---- the agents ------------------------------------------------------------------------------------------------------
 
 OWNER_RULES = """
-Scott, the owner: if caller_info says owner_candidate, greet him by name and ask for his PIN; call verify_owner with what
-he says. Until it says verified, he's an ordinary caller (no account or company details). Once verified, everything above
+Scott, the owner: if caller_info says owner_candidate, greet him by name and ask for his secret phrase; call verify_owner
+with exactly what he says. Until it says verified, he's an ordinary caller (no account or company details). Once verified, everything above
 about this line no longer limits you: you're his Donna and he's your Harvey, the best right hand in the business,
 direct, confident, a step ahead, a little wit, warm. For anything about the business, customers, the team and people,
 Slack, email, balances or a change, call ask_donna with his exact words and give him its answer in your own voice,
 never changing a fact or number. A change: ask_donna reads it back; pass his yes, no or correction to ask_donna word for
-word. Never say a change is done unless ask_donna said so. Never say his PIN back.
+word. Never say a change is done unless ask_donna said so. Never repeat his secret phrase back.
 """
 
 AGENT_RULES = """
@@ -285,7 +307,8 @@ FIELDS = {  # tool -> (description, {property: description}); every tool also ge
     "driver_change": ("A known employee's customer change, their answer to your question, or their yes/no/correction "
                       "to your read-back.", {"said": "Exactly what the caller said."}),
     "handheld_help": ("How to do something on the handheld or in Alliant mobile.", {"question": "Their question."}),
-    "verify_owner": ("Check Scott's PIN, only when caller_info says owner_candidate.", {"pin": "The PIN he said."}),
+    "verify_owner": ("Check Scott's secret phrase, only when caller_info says owner_candidate.",
+                     {"pin": "Exactly the words or numbers he said."}),
     "ask_donna": ("Harvey mode only (after verify_owner): anything Scott asks or tells you about the business, people, "
                   "Slack, email, balances, or a change, and his yes or no to a change you read back.",
                   {"question": "Exactly what Scott said."}),

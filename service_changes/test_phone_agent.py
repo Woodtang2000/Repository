@@ -112,3 +112,13 @@ def test_scott_gets_harvey_mode_only_with_his_pin(desk, monkeypatch):
     for _ in range(3):
         tools.handle("verify_owner", {**s3, "pin": "0000"})
     assert tools.handle("verify_owner", {**s3, "pin": "4821"})["verified"] is False  # three tries a call
+
+
+def test_a_secret_phrase_works_too(monkeypatch):
+    monkeypatch.delenv("OWNER_PHONE_PIN", raising=False)
+    monkeypatch.setenv("OWNER_PHONE_SECRET", "Bar mops in the snow")
+    real = phone_agent.secret()
+    assert phone_agent.secret_matches("bar mops in the snow.", real) and phone_agent.secret_matches("Bar-mops in the sno", real)
+    assert not phone_agent.secret_matches("mats in the rain", real) and not phone_agent.secret_matches("", real)
+    monkeypatch.setenv("OWNER_PHONE_SECRET", "snow")
+    assert phone_agent.secret() == ""  # one word is too easy to guess: Harvey mode stays off
