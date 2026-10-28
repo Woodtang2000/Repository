@@ -29,6 +29,10 @@ Classify the message and extract every change in it. Rules:
   ambiguous (which customer, which mat, which size, which employee). Do not ask about things that are clear.
 - Alliant frequency codes: 1-4 = once a month in that week, 5 or 6 = every other week, 7 = weekly,
   8 = more than once a week, 9 = first delivery only, 0 = no delivery, A1-A3 = once every 8 weeks in that week. Write frequency in plain words ("frequency 7" -> "weekly"; "bi-weekly" -> "every other week").
+- When we asked "<customer> has N <item> now. Add N more (total T), or should they have N total?", read the answer:
+  "add N", "N more", "more", "add", "yes", "T", "total T" or "both" means N MORE: put T in stated_total. "N total",
+  "just N", "only N" or "keep N" means they should have N: action set with quantity N. Never ask it again after an
+  answer like these; if the answer also says how often ("weekly"), that's the frequency.
 - Pack sizes are quantities: "a 10 pack of black aprons" is 10 aprons. Replacing a 20 pack with a 10 pack is
   set to 10, not stop plus add 1.
 - When the driver gives a total and then a breakdown ("making a total of 10: 5 orange 24 oz and 5 blue 16 oz"),
