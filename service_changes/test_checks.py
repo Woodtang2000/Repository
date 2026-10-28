@@ -457,3 +457,14 @@ def test_ratio_check_lists_old_entry_mistakes():
                 autocount={"K1": {"MAT": 4, "BAR MOP": 20, "APRON": 4, "TOWEL": 10, "RAG": 0}})
     [m] = mismatches(a)
     assert (m["item"], m["auto_count"], m["inventory"], m["suggested_inventory"]) == ("APRON", 4, 7, 8)
+
+
+def test_new_item_ticket_names_the_usual_sku():
+    from .checks import usual_sku
+    from .context import Alliant
+    a = Alliant(sku={("A1", "TOWEL BAR MOP GOLD STRIPE"): "5-01-01", ("A2", "TOWEL BAR MOP GOLD STRIPE"): "5-01-01",
+                     ("A3", "TOWEL BAR MOP GOLD STRIPE"): "5-01-01", ("A1", "MAT BLACK 3X5"): "3-01-01",
+                     ("A2", "MAT CHARCOAL HEATHER 3X5"): "3-02-01"})
+    assert usual_sku(a, "bar mops") == ("5-01-01", "TOWEL BAR MOP GOLD STRIPE", 3)
+    assert usual_sku(a, "3x5 mat") is None  # two colors, one each: a person picks
+    assert usual_sku(a, "") is None

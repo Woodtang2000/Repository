@@ -421,6 +421,29 @@ def _do(ch: Change) -> str:
             Action.stop: "Stop", Action.restart: "Restart", Action.size_change: "Size change"}.get(ch.action, "Change")
 
 
+def usual_sku(alliant: Alliant, item: str | None) -> tuple[str, str, int] | None:
+    """(sku, Alliant item name, how many accounts have it) for the item most accounts use that matches every word of
+    `item` ("bar mops" -> 5-01-01 TOWEL BAR MOP GOLD STRIPE). None if nothing matches or it's a close call."""
+    words = [w.rstrip("s") for w in re.findall(r"[a-z0-9]{2,}", (item or "").lower()) if w not in ("the", "and", "more", "new")]
+    if not words:
+        return None
+    counts: dict[tuple[str, str], int] = {}
+    for key, sku in alliant.sku.items():
+        if len(key) != 2 or not sku:
+            continue
+        name = key[1]
+        low = name.lower()
+        if all(re.search(rf"\b{re.escape(w)}", low) for w in words):
+            counts[(sku, name)] = counts.get((sku, name), 0) + 1
+    if not counts:
+        return None
+    ranked = sorted(counts.items(), key=lambda kv: -kv[1])
+    (sku, name), n = ranked[0]
+    if len(ranked) > 1 and ranked[1][1] * 2 > n:  # two SKUs about as common: let a person pick
+        return None
+    return sku, name, n
+
+
 def ticket(result: Result, alliant: Alliant, with_readback: bool = True) -> str:
     """Work ticket for the office: account and name, then one line per thing to key into Alliant, verb first.
     The same fields are what an automated entry needs."""
@@ -450,6 +473,10 @@ def ticket(result: Result, alliant: Alliant, with_readback: bool = True) -> str:
         else:
             what = cc.alliant_item or f"{ch.item} _(not on account yet)_"
             sku = alliant.sku.get((acct, cc.alliant_item)) if cc.alliant_item else None
+            if not cc.alliant_item:  # a new item: the SKU most other accounts use for it, so nobody has to look it up
+                usual = usual_sku(alliant, ch.item)
+                if usual:
+                    what += f" · usual: *{usual[1]}* `{usual[0]}` ({usual[2]} accounts)"
         bits = [f"{ICONS.get(ch.action, '✏️')} *{_do(ch)}*  {what}" + (f" `{sku}`" if sku else "")]
         if cc.current is not None and cc.new_total is not None:
             bits.append(("inventory " if ch.inventory else "") + f"{cc.current} → *{cc.new_total}*")
