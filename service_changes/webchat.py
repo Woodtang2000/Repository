@@ -719,6 +719,9 @@ def make_handler(chat: Chat, public_url: str):
             key = os.environ.get("PHONE_AGENT_TOKEN", "")
             given = (self.headers.get("X-Donna-Key") or "").strip()
             if len(key) < 24 or not hmac.compare_digest(given.encode(), key.encode()) or not getattr(chat, "phone", None):
+                print(time.strftime("%H:%M"), f"phone tool {name}: refused ("
+                      + ("no PHONE_AGENT_TOKEN on the server" if len(key) < 24 else "phone lines not set up here"
+                         if not getattr(chat, "phone", None) else "wrong or missing X-Donna-Key from ElevenLabs") + ")", flush=True)
                 time.sleep(1)
                 return self._send(401, b'{"error":"bad key"}', "application/json")
             try:
