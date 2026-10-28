@@ -44,8 +44,11 @@ Account 1205-1-00004 = Account **1205**, Branch **1** (Snow White; 2 = The Laund
 - Never type passwords or MFA codes. Never close or sign out of Alliant or the remote desktop.
 - Never put prices, balances, invoice amounts or anything from A/R in your note: notes are read in Slack.
 - Work only in the Alliant tab in your Claude tab group; never open other sites or other browsers.
-- If a ticket has open questions (❓), a ⚠️ warning, or asks for something these rules don't cover (a hold, a special
-  order, a new customer, pricing): `needs_person` with why.
+- If a ticket has open questions (❓), a ⚠️ warning, or asks for something these rules don't cover (putting an account
+  or item on hold or taking it off, a special order, a new customer, pricing): `needs_person` with why.
+- A ⏸️ "on hold" note in a ticket comes from last night's Alliant data. Check the hold on Alliant's own screen: if the
+  account or item is no longer on hold, go ahead with the item change. If it is still on hold, `needs_person`. Never
+  change a hold yourself.
 
 ## Reporting
 
