@@ -14,8 +14,12 @@ Account 1205-1-00004 = Account **1205**, Branch **1** (Snow White; 2 = The Laund
 
 ## Steps
 
-1. Look at the Alliant window. If it shows a sign-in page, a disconnected session or anything but Alliant: stop,
-   report `needs_person` with "Alliant needs signing in" (never type a password or code).
+1. Find Alliant in your Claude tab group. If the group has no Alliant tab (a new session gets a new group), open
+   https://windows.cloud.microsoft/webclient/avd/34ca5fb7-c81d-4bbb-a924-fb52111f27e1/2ce75969-d825-4e1d-176c-08dda04aaf33
+   in a tab in your group: it reconnects to the Alliant session already running (click Connect / Reconnect if
+   asked, and choose to reconnect to the existing session). If it shows a sign-in page, a password or code prompt,
+   or anything but Alliant: stop, report `needs_person` with "Alliant needs signing in" (never type a password or
+   code).
 2. Customer Center → Go To Customer: Account, Branch, Customer from the job. Wearer changes: Go To Wearer.
 3. Check the header: the account number and the customer name must match the ticket. If not: `needs_person`.
 4. Make exactly the ticket's changes, nothing else:
