@@ -87,3 +87,28 @@ def test_tools_copy_the_donna_agents_webhook_shape():
     assert props["conversation_id"]["dynamic_variable"] == "system__conversation_id"
     assert hook["api_schema"]["url"] == "https://x/api/donna/tool"  # the Donna agent's own tool untouched
     assert "caller_info" in phone_agent.prompt("employees") and "NEVER ask why" in phone_agent.prompt("employees")
+
+
+def test_scott_gets_harvey_mode_only_with_his_pin(desk, monkeypatch):
+    make, leads = desk
+    import urllib.request
+    monkeypatch.setenv("OWNER_PHONES", "(907) 555-6513")
+    monkeypatch.setenv("OWNER_PHONE_PIN", "4821")
+    asked = []
+    monkeypatch.setattr(urllib.request, "urlopen",
+                        lambda req, timeout: asked.append(json.loads(req.data)) or io.BytesIO(b"Midas owes nothing, Harvey."))
+    tools = phone_agent.PhoneTools(make())
+    scott = {"conversation_id": "s1", "caller": "+19075556513", "called": "+18668278398"}
+    assert tools.handle("caller_info", scott)["owner_candidate"] is True
+    assert tools.handle("ask_donna", {**scott, "question": "what does Midas owe"})["answer"] == "" and not asked
+    assert tools.handle("verify_owner", {**scott, "pin": "1234"})["verified"] is False
+    assert tools.handle("verify_owner", {**scott, "pin": "four eight two one"})["verified"] is True
+    assert tools.handle("ask_donna", {**scott, "question": "what does Midas owe"})["answer"] == "Midas owes nothing, Harvey."
+    assert asked[-1] == {"text": "what does Midas owe", "convo": "phone-s1", "user": "U4KFSQCDQ"}
+    other = {"conversation_id": "s2", "caller": "+19075550000", "called": "+18668278398"}
+    assert "owner_candidate" not in tools.handle("caller_info", other)
+    assert tools.handle("verify_owner", {**other, "pin": "4821"})["verified"] is False  # the PIN alone isn't enough
+    s3 = {**scott, "conversation_id": "s3"}
+    for _ in range(3):
+        tools.handle("verify_owner", {**s3, "pin": "0000"})
+    assert tools.handle("verify_owner", {**s3, "pin": "4821"})["verified"] is False  # three tries a call

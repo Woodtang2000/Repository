@@ -23,7 +23,20 @@ import time
 from .phone import CUSTOMER_RULES, DRIVER_RULES, EMPLOYEE_LINE, EMPLOYEE_RULES, OFFICE_PHONE, PERSONALITY, Turn, digits, \
     office_open
 
-TOOLS = ("caller_info", "customer_request", "new_lead", "employee_message", "driver_change", "handheld_help")
+TOOLS = ("caller_info", "customer_request", "new_lead", "employee_message", "driver_change", "handheld_help",
+         "verify_owner", "ask_donna")
+WORDS = {"zero": "0", "oh": "0", "one": "1", "two": "2", "to": "2", "too": "2", "three": "3", "four": "4", "for": "4",
+         "five": "5", "six": "6", "seven": "7", "eight": "8", "ate": "8", "nine": "9"}
+
+
+def owner_phones() -> set[str]:
+    """Scott's own numbers (OWNER_PHONES, comma separated): calls from them are offered Harvey mode, after his PIN."""
+    return {digits(x) for x in os.environ.get("OWNER_PHONES", "").split(",") if len(digits(x)) == 10}
+
+
+def spoken_digits(said: str) -> str:
+    """"one two three four", "12 34", "1-2-3-4" -> "1234"."""
+    return "".join(WORDS.get(w, re.sub(r"\D", "", w)) for w in re.findall(r"[a-z]+|\d+", said.lower()))
 
 
 class PhoneTools:
@@ -43,7 +56,10 @@ class PhoneTools:
             caller, called = str(body.get("caller") or ""), str(body.get("called") or "")
             line = "employees" if digits(called) == EMPLOYEE_LINE or body.get("line") == "employees" else "customers"
             who = self.phone.caller(caller) if line == "customers" else self.phone.staff(caller)
-            self.calls[conv] = {"line": line, "from": caller, "who": who, "turns": [], "change": None, "posted": 0, "at": now}
+            boss = {u.strip() for u in os.environ.get("OWNER_SLACK_ID", "U4KFSQCDQ").split(",")}
+            scott = digits(caller) in owner_phones() or (self.phone.staff(caller) or {}).get("user") in boss
+            self.calls[conv] = {"line": line, "from": caller, "who": who, "turns": [], "change": None, "posted": 0, "at": now,
+                                "scott": scott, "owner": False, "tries": 0, "conv": conv}
         c = self.calls[conv]
         c["at"] = now
         return c
@@ -64,6 +80,9 @@ class PhoneTools:
     def caller_info(self, c: dict, body: dict, said: str) -> dict:
         info = {"line": c["line"], "office_open": office_open(),
                 "office_hours": os.environ.get("PHONE_OFFICE_HOURS", "Mon-Fri 8:00-17:00") + " Alaska time"}
+        if c["scott"] and len(spoken_digits(os.environ.get("OWNER_PHONE_PIN", ""))) >= 4:
+            info.update(owner_candidate=True, name="Scott", note="This is Scott's number. Greet him, ask for his PIN, "
+                        "and call verify_owner with what he says. Until it says verified, treat him like any caller.")
         who = c["who"]
         if c["line"] == "employees":
             info.update(known=bool(who), name=(who or {}).get("name", ""),
@@ -133,6 +152,39 @@ class PhoneTools:
                                                 caller_name=c["who"].get("name", "")))
         return {"status": status, "say": turn.say}
 
+    def verify_owner(self, c: dict, body: dict, said: str) -> dict:
+        """Scott's PIN (OWNER_PHONE_PIN), only from his own number, three tries a call: caller ID alone can be faked."""
+        import hmac
+        pin = spoken_digits(os.environ.get("OWNER_PHONE_PIN", ""))
+        if not c["scott"] or len(pin) < 4 or c["tries"] >= 3:
+            return {"verified": False, "note": "Not available on this call. Carry on as a normal call."}
+        c["tries"] += 1
+        if hmac.compare_digest(spoken_digits(str(body.get("pin") or said)).encode(), pin.encode()):
+            c["owner"] = True
+            print(time.strftime("%H:%M"), "phone agent: Scott verified (Harvey mode)", flush=True)
+            return {"verified": True, "note": "Harvey mode: you're Scott's Donna now, exactly like his Donna app. For "
+                    "anything about the business, customers, the team and people, Slack, email, balances or a change, "
+                    "call ask_donna with his words and tell him the answer in your own voice."}
+        return {"verified": False, "note": "That's not it." + (" One more try." if c["tries"] == 2 else
+                                                                  " No more tries on this call." if c["tries"] >= 3 else "")}
+
+    def ask_donna(self, c: dict, body: dict, said: str) -> dict:
+        """Harvey mode on the phone: the same desk.voice his Donna app uses (lookups, balances, his read on the team,
+        changes with her read-back and his yes)."""
+        if not c["owner"]:
+            return {"answer": "", "note": "Only after verify_owner."}
+        import urllib.request
+        owner = os.environ.get("OWNER_SLACK_ID", "U4KFSQCDQ").split(",")[0].strip()
+        req = urllib.request.Request(f"http://127.0.0.1:{os.environ.get('DESK_VOICE_PORT', '8091')}/voice",
+                                     data=json.dumps({"text": said, "convo": "phone-" + c["conv"], "user": owner}).encode(),
+                                     headers={"Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=110) as r:
+                return {"answer": r.read().decode("utf-8", "replace")}
+        except Exception as e:
+            print(time.strftime("%H:%M"), "phone agent: ask_donna failed:", str(e)[:200], flush=True)
+            return {"answer": "I can't reach the office data right now. Try me again in a minute."}
+
     def handheld_help(self, c: dict, body: dict, said: str) -> dict:
         helper = getattr(self.phone, "helper", None)
         if c["line"] != "employees" or not helper:
@@ -144,6 +196,16 @@ class PhoneTools:
 
 
 # ---- the agents ------------------------------------------------------------------------------------------------------
+
+OWNER_RULES = """
+Scott, the owner: if caller_info says owner_candidate, greet him by name and ask for his PIN; call verify_owner with what
+he says. Until it says verified, he's an ordinary caller (no account or company details). Once verified, everything above
+about this line no longer limits you: you're his Donna and he's your Harvey, the best right hand in the business,
+direct, confident, a step ahead, a little wit, warm. For anything about the business, customers, the team and people,
+Slack, email, balances or a change, call ask_donna with his exact words and give him its answer in your own voice,
+never changing a fact or number. A change: ask_donna reads it back; pass his yes, no or correction to ask_donna word for
+word. Never say a change is done unless ask_donna said so. Never say his PIN back.
+"""
 
 AGENT_RULES = """
 How to work on the phone (you are speaking, not writing):
@@ -179,14 +241,14 @@ def prompt(line: str) -> str:
         rules = EMPLOYEE_RULES.format(office=office) + DRIVER_RULES.format(name="the caller (if caller_info says they're "
                                                                                  "known)").replace("set action change",
                                                                                                    "call driver_change")
-        return PERSONALITY + "\n\n" + rules + "\n" + EMPLOYEE_TOOLS_NOTE + AGENT_RULES
+        return PERSONALITY + "\n\n" + rules + "\n" + EMPLOYEE_TOOLS_NOTE + OWNER_RULES + AGENT_RULES
     who = ("If caller_info says they're a verified customer, help them with their own accounts using only its account "
            "facts. If not, you can't see or discuss any account: take their name, business, location and request and say "
            "the office will call back to confirm; if they'd like texting, they can text (866) 827-8398 to get verified.")
     rules = CUSTOMER_RULES.format(who=who, confirm="(customer_request tells you how they'll hear back)", office=office)
     rules = re.sub(r"Actions \(set `action`\):.*", "", rules, flags=re.S)
     rules = rules.replace("account facts given below", "account facts caller_info gives you")
-    return PERSONALITY + "\n\n" + rules + "\n" + CUSTOMER_TOOLS_NOTE + AGENT_RULES
+    return PERSONALITY + "\n\n" + rules + "\n" + CUSTOMER_TOOLS_NOTE + OWNER_RULES + AGENT_RULES
 
 
 def _api(method: str, path: str, body: dict | None = None) -> dict:
@@ -223,9 +285,13 @@ FIELDS = {  # tool -> (description, {property: description}); every tool also ge
     "driver_change": ("A known employee's customer change, their answer to your question, or their yes/no/correction "
                       "to your read-back.", {"said": "Exactly what the caller said."}),
     "handheld_help": ("How to do something on the handheld or in Alliant mobile.", {"question": "Their question."}),
+    "verify_owner": ("Check Scott's PIN, only when caller_info says owner_candidate.", {"pin": "The PIN he said."}),
+    "ask_donna": ("Harvey mode only (after verify_owner): anything Scott asks or tells you about the business, people, "
+                  "Slack, email, balances, or a change, and his yes or no to a change you read back.",
+                  {"question": "Exactly what Scott said."}),
 }
-LINE_TOOLS = {"customers": ("caller_info", "customer_request", "new_lead"),
-              "employees": ("caller_info", "employee_message", "driver_change", "handheld_help")}
+LINE_TOOLS = {"customers": ("caller_info", "customer_request", "new_lead", "verify_owner", "ask_donna"),
+              "employees": ("caller_info", "employee_message", "driver_change", "handheld_help", "verify_owner", "ask_donna")}
 SYSTEM = {"caller": "system__caller_id", "called": "system__called_number", "conversation_id": "system__conversation_id"}
 
 
