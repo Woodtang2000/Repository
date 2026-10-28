@@ -23,10 +23,15 @@ Account 1205-1-00004 = Account **1205**, Branch **1** (Snow White; 2 = The Laund
 2. Customer Center → Go To Customer: Account, Branch, Customer from the job. Wearer changes: Go To Wearer.
 3. Check the header: the account number and the customer name must match the ticket. If not: `needs_person`.
 4. Make exactly the ticket's changes, nothing else:
-   - **Customer Items**: inventory, autocount, delivery frequency/days, New Item, Stop Item. A new item ("not on
-     account yet") with a **usual:** SKU in the ticket: add that SKU with New Item, quantity as both inventory and
-     autocount, the ticket's frequency (weekly if it says so) on the customer's delivery day. No usual SKU: `needs_person`
-     asking which SKU.
+   - **Customer Items**: inventory, autocount, delivery frequency/days, New Item, Stop Item.
+   - **A new item** ("not on account yet") with a **usual:** SKU in the ticket (no usual SKU: `needs_person` asking
+     which SKU). New Item only offers SKUs already in the customer's catalog, so when the SKU isn't there:
+     a. **Go To Account** (the 4-digit account, e.g. 5045) → its **SKU Catalog** → add the SKU if it isn't there.
+     b. **Go To Customer** → **Customer Catalog** → add the SKU from the account's available SKUs.
+     c. **Customer Items** → **New Item** → that SKU: quantity as both inventory and autocount, the ticket's frequency
+        (weekly if it says so) on the customer's delivery day.
+     In both catalogs, never type or change a price: leave whatever Alliant fills in. If a catalog won't take the SKU
+     without a price typed in, stop: `needs_person` ("SKU 5-01-01 needs a price in the account catalog").
    - **Wearers**: Add Wearers (name, sizes, quantities from the ticket), Stop Wearer.
    - **Customer Entry**: address, phone, contact only.
 5. Check the current count on screen matches the ticket's "current" number before changing it. If it differs (someone
