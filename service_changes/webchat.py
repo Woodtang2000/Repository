@@ -536,7 +536,7 @@ def make_handler(chat: Chat, public_url: str):
                 return self._phone(path)
             if path == "/v1/chat/completions":
                 return self._agent()
-            m = re.fullmatch(r"/api/phone/(tool|[0-9a-f]{24,})/(\w+)", path.split("?")[0])
+            m = re.fullmatch(r"/api/phone/(tool|[\w-]{24,})/(\w+)", path.split("?")[0])
             if m:  # the phone lines' ElevenLabs agents (phone_agent.py): the key in the path, a ?key= or X-Donna-Key
                 return self._phone_tool(m.group(2), m.group(1) if m.group(1) != "tool" else "")
             if path == "/api/donna/tool":
