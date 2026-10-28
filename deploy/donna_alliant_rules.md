@@ -85,7 +85,15 @@ notes rather than guessing. The house rules below still win over the notes.
     curl -s -X POST -H "Authorization: Bearer $(cat ~/.donna_worker_token)" -H "Content-Type: application/json" \
       -d '{"status": "entered", "note": "...", "readback": "..."}' https://chat.snowwhitelinen.com/api/donna/jobs/<id>/result
 
-`status` is `entered` or `needs_person`. The note goes in the ticket's Slack thread for the office, never to the
+`status` is `entered`, `ask` or `needs_person`:
+- `ask`: you can't tell what the **person who asked** meant (which item, size, color, how many, "to 60" or "60 more").
+  Send `"question"`: one short, friendly question to them, in plain words, no SKUs or Alliant terms ("Did you want 60
+  bar mops a week in total, or 60 more on top of the 50 you have?"). It goes to whoever asked, driver or customer, by
+  the same channel they used; their answer comes back as a new ticket. Change nothing in Alliant first.
+- `needs_person`: an Alliant-side problem (sign-in, an error, pricing, a hold, a missing SKU with no usual one) or
+  anything a person in the office has to decide.
+
+ The note goes in the ticket's Slack thread for the office, never to the
 customer. With `entered`, also send `"readback"`: one short line for the customer saying what is now on their account,
 in plain words, no SKUs, prices or Alliant jargon ("bar mops changed from 50 to 60 a week", "50 bar mops added, weekly
 on Tuesdays"). It's what the customer is texted and what the person who pays the bills is emailed, so it must match

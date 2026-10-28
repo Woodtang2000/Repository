@@ -17,7 +17,7 @@ import re
 import threading
 import time
 
-from .todo import GOLD, body, restyle, stamp
+from .todo import GOLD, GREY, body, restyle, stamp
 
 FILE = "alliant_jobs.json"
 ACTION = "donna_enter"
@@ -122,7 +122,7 @@ class Jobs:
             self.save(data)
             return job
 
-    def result(self, job_id: str, status: str, note: str, readback: str = "") -> str:
+    def result(self, job_id: str, status: str, note: str, readback: str = "", question: str = "") -> str:
         """She's finished a job: entered (readback goes out, as if the office ✅'d it) or needs_person (back to the
         office with her reason). Her note goes in the ticket's thread, never to the customer."""
         from .desk import KIND, meta
@@ -131,8 +131,10 @@ class Jobs:
             job = data["jobs"].get(job_id)
             if not job or job["status"] != "working":
                 return "unknown job"
-            job.update(status=status if status in ("entered", "needs_person") else "needs_person", note=note[:1500],
+            job.update(status=status if status in ("entered", "needs_person", "ask") else "needs_person", note=note[:1500],
                        finished=time.time())
+            if job["status"] == "ask" and not question.strip():
+                job["status"] = "needs_person"
             data["jobs"] = {k: v for k, v in data["jobs"].items() if v["status"] in ("queued", "working")
                             or time.time() - v.get("finished", 0) < 14 * 86400}
             self.save(data)
@@ -153,6 +155,14 @@ class Jobs:
             self.desk.send_readback(t, self.desk.me, [])
             return "entered"
         p = meta(t)
+        if job["status"] == "ask":  # unclear what they meant: ask them, the same way she asks a driver
+            who = self.desk.ask_requester(t, question)
+            if who:
+                self.desk.slack.chat_update(channel=self.desk.desk_id, ts=job_id, text="",
+                                            attachments=restyle(t, GREY, status=f"❓ Donna asked the {who}: {question.strip()[:200]} "
+                                                                f"· their answer makes a new ticket"),
+                                            metadata={"event_type": KIND, "event_payload": {**p, "kind": "asked", "donna": "asked"}})
+                return f"asked the {who}"
         self.desk.slack.chat_update(channel=self.desk.desk_id, ts=job_id, text="",
                                     attachments=restyle(t, GOLD, status="🙋 Donna needs a person for this one (see thread)"),
                                     metadata={"event_type": KIND, "event_payload": {**p, "donna": "needs_person"}})

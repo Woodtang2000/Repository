@@ -332,6 +332,19 @@ class TextDesk:
         self.state.setdefault("convos", {})
         self.state.setdefault("counts", {})
 
+    def take_asks(self) -> None:
+        """Questions Donna asked from her Alliant workstation (desk.ask_requester): the answer is read together with
+        the request, like the answer to one of our own questions."""
+        path = os.path.join(self.data_dir, f"{self.word}_asks.json")
+        try:
+            waiting = json.load(open(path))
+            os.remove(path)
+        except (OSError, ValueError):
+            return
+        for w in waiting:
+            self.state["convos"][self.key(w["to"])] = {"lines": w["lines"], "asks": 1, "at": w["at"]}
+        self.save()
+
     def log(self, addr: str, what: str) -> None:
         print(time.strftime("%H:%M"), f"{self.word} from {self.masked(addr)}: {what}", flush=True)
 
@@ -354,6 +367,7 @@ class TextDesk:
         new = [m for m in self.inbound(since) if m["id"] not in self.state["seen"]]
         handled = self.office_pass() if not first else 0
         self.demo_pass()
+        self.take_asks()
         for m in new:
             self.state["seen"].append(m["id"])
             if not first:

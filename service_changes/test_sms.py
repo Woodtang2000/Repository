@@ -253,3 +253,23 @@ def test_slack_phone_links_in_office_commands(desk):
     assert td.office_pass() == 2
     phones = sms.load_phones(td.data_dir + "/customer_phones.csv")
     assert phones["9075557777"]["accounts"] == ["M4"] and phones["9075558888"]["accounts"] == ["M4"]
+
+
+def test_donnas_workstation_question_and_the_customers_answer(desk, tmp_path, monkeypatch):
+    import json
+    from types import SimpleNamespace
+    from .desk import Desk
+    td, slack, texts, seen = desk
+    sent = []
+    monkeypatch.setattr(sms, "send_sms", lambda to, body: sent.append((to, body)))
+    d = SimpleNamespace(data_dir=td.data_dir, routes={}, post=None)
+    t = {"ts": "9.1", "text": "*M4* MIDAS\n> Customer: change the shop towels to 60\n",
+         "metadata": {"event_type": "service_desk",
+                      "event_payload": {"kind": "ticket", "account": "1205-1-00004", "sms_to": "+19075551234"}}}
+    assert Desk.ask_requester(d, t, "60 in total, or 60 more?") == "customer"
+    assert sent == [("+19075551234", "Snow White Linen: Happy to! Just one quick question on your request: 60 in total, or 60 more?")]
+    td.take_asks()
+    convo = td.state["convos"]["9075551234"]
+    assert convo["lines"] == ["Customer: change the shop towels to 60", "Snow White asked: 60 in total, or 60 more?"]
+    td.handle("+19075551234", "60 total", "S9")  # read together with the request
+    assert "Customer: change the shop towels to 60" in seen["text"] and "Customer: 60 total" in seen["text"]

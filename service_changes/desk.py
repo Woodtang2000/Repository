@@ -870,7 +870,7 @@ class Desk:
                     try:
                         body = json.loads(self.rfile.read(min(int(self.headers.get("Content-Length") or 0), 20000)) or b"{}")
                         out = desk.jobs().result(m.group(1), str(body.get("status") or ""), str(body.get("note") or ""),
-                                                 str(body.get("readback") or ""))
+                                                 str(body.get("readback") or ""), str(body.get("question") or ""))
                     except Exception as e:
                         print(time.strftime("%H:%M"), "alliant jobs error:", e, flush=True)
                         return self.reply(500, b"{}")
@@ -1050,6 +1050,46 @@ class Desk:
                                attachments=shrink(self.slack, self.desk_id, t, GREEN, stamp(who, "Entered") + " · readback sent"),
                                metadata={"event_type": KIND, "event_payload": {**p, "kind": "done", "done_at": time.time(),
                                                                                "entered_by": who}})
+
+    def ask_requester(self, t: dict, question: str) -> str | None:
+        """Donna (at her Alliant workstation) can't tell what was meant: ask whoever asked, the same way she asks a
+        driver. A driver gets a Quick check in the route channel; a customer a text or an email whose answer the text
+        or email desk reads together with the request (<word>_asks.json). Their answer makes the updated ticket.
+        Returns "driver" or "customer", or None when there's nobody to ask."""
+        p = meta(t) or {}
+        q = re.sub(r"\s+", " ", question).strip()[:400]
+        said = [re.sub(r"^(&gt;|>)\s*", "", ln).strip() for ln in todo_bar.body(t).splitlines()
+                if re.match(r"^(&gt;|>)\s*", ln.strip())]
+        if p.get("sms_to") or p.get("email_to"):
+            from .context import company_for
+            word, to = ("text", p["sms_to"]) if p.get("sms_to") else ("email", p["email_to"])
+            company = company_for(p.get("account"))
+            if word == "text":
+                from .sms import send_sms
+                send_sms(to, f"{company}: Happy to! Just one quick question on your request: {q}")
+            else:
+                from . import bird
+                subject = p.get("email_subject") or f"Your {company} request"
+                bird.send(to, subject if subject.lower().startswith("re:") else "Re: " + subject,
+                          f"Happy to! Just one quick question on your request: {q}\n\nDonna\n{company}\n(907) 222-7738",
+                          in_reply_to=p.get("email_msgid", ""))
+            path = os.path.join(self.data_dir, f"{word}_asks.json")
+            try:
+                waiting = json.load(open(path))
+            except (OSError, ValueError):
+                waiting = []
+            lines = [ln if re.match(r"^(Customer|Snow White asked):", ln) else f"Customer: {ln}" for ln in said]
+            waiting.append({"to": to, "lines": lines + [f"Snow White asked: {q}"], "at": time.time()})
+            with open(path + ".tmp", "w") as f:
+                json.dump(waiting, f)
+            os.replace(path + ".tmp", path)
+            return "customer"
+        if p.get("src_channel") in self.routes.values() and p.get("src_ts"):
+            who = f"<@{p['driver_id']}> " if p.get("driver_id") else ""
+            self.post(p["src_channel"], f"{who}Quick check from Donna on _{_short(' '.join(said) or 'your request', 60)}_\n• {q}",
+                      {"kind": "question", "src_ts": p["src_ts"], "driver_id": p.get("driver_id"), "msgs": p.get("msgs", [])})
+            return "driver"
+        return None
 
     def change_email(self, p: dict, customer: str) -> list[str]:
         """The account's invoice contact (who pays the bills; the Alliant card's email) gets an email confirming the

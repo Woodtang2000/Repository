@@ -147,3 +147,21 @@ def test_her_readback_is_what_she_actually_did(tmp_path):
     jobs.next()
     jobs.result("100.1", "entered", "screen 120, set 150", readback="bar mops changed from 120 to 150 a week")
     assert readbacks == ["✅ 1205-1-00004 MIDAS #4 – bar mops changed from 120 to 150 a week"]
+
+
+def test_unclear_she_asks_whoever_asked(tmp_path):
+    jobs, slack, t, readbacks = setup(tmp_path)
+    asked = []
+    jobs.desk.ask_requester = lambda t, q: asked.append(q) or "customer"
+    jobs.queue(tap("UANA"))
+    jobs.next()
+    assert jobs.result("100.1", "ask", "screen shows 50", question="60 in total, or 60 more?") == "asked the customer"
+    assert asked == ["60 in total, or 60 more?"] and not readbacks
+    assert "Donna asked the customer: 60 in total, or 60 more?" in str(t["attachments"])
+    assert t["metadata"]["event_payload"]["kind"] == "asked"  # no longer an open ticket; the answer makes a new one
+    (tmp_path / "b").mkdir()
+    jobs2, slack2, t2, _ = setup(tmp_path / "b")
+    jobs2.desk.ask_requester = lambda t, q: None  # nobody to ask: the office
+    jobs2.queue(tap("UANA"))
+    jobs2.next()
+    assert jobs2.result("100.1", "ask", "?", question="which mat?") == "back to the office"
