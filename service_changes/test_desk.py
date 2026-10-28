@@ -813,9 +813,11 @@ def test_a_voice_message_is_read_like_a_typed_one(setup, tmp_path):
     d.data_dir = str(tmp_path)
     said = {"F1": "more mats at wendys", "F2": "6"}
     heard = []
-    d.transcribe_clip = lambda f: heard.append(f["id"]) or said[f["id"]]
     clip = lambda fid: [{"id": fid, "subtype": "slack_audio", "mimetype": "audio/mp4", "url_private_download": "https://x"}]
     slack.say("C1", "U1", "", files=clip("F1"), subtype="file_share")
+    d.transcribe_clip = lambda f: None  # ElevenLabs refused (no permission yet): left for the next pass
+    assert d.run_once() == NOTHING and not CALLS
+    d.transcribe_clip = lambda f: heard.append(f["id"]) or said[f["id"]]
     assert d.run_once()["asked"] == 1
     [h] = slack.bot_posts("C1", "heard")
     assert h["text"] == "<@U1> 🎙️ Heard: _more mats at wendys_" and "more mats at wendys" in CALLS[-1]

@@ -208,11 +208,13 @@ class Desk:
             heard = {}
         new = False
         for m, f in clips:
+            m.pop("unheard", None)
             words = heard.get(f.get("id", ""))
             if words is None and f.get("id") and not _seen(m, self.me):
                 words = self.transcribe_clip(f)
                 if words is None:
-                    continue  # not reachable now: the next pass tries again
+                    m["unheard"] = True  # not reachable now: left unread, so the next pass tries again
+                    continue
                 heard[f["id"]], new = words, True
                 self.post(channel, f"<@{m.get('user')}> 🎙️ Heard: _{words or '(nothing I could make out: type it, or try again)'}_",
                           {"kind": "heard", "src_ts": m["ts"], "driver_id": m.get("user")},
@@ -531,7 +533,7 @@ class Desk:
         bot_posts = [m for m in top if _is_bot(m, self.me) and meta(m)]
         self.hear(cid, top)
         for m in top:
-            if m.get("subtype") not in (None, "file_share") or _is_bot(m, self.me):
+            if m.get("subtype") not in (None, "file_share") or _is_bot(m, self.me) or m.get("unheard"):
                 continue
             key = (cid, m["ts"])
             if not _seen(m, self.me) and self.phone_add(name, cid, m):
@@ -589,6 +591,7 @@ class Desk:
     def _answers(self, t: dict, src: dict) -> bool:
         """A thread reply the bot should read: from whoever posted, or anyone not in the office, not yet 👀."""
         return (not _is_bot(t, self.me) and t.get("subtype") in (None, "thread_broadcast", "file_share") and not _seen(t, self.me)
+                and not t.get("unheard")
                 and (t.get("user") == src.get("user") or not self.is_staff(t.get("user"))))
 
     # ---- office side ----------------------------------------------------------------------------------------
