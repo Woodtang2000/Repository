@@ -59,6 +59,9 @@
   @keyframes breathe{0%,100%{transform:scaleY(.7)}50%{transform:scaleY(1.15)}}
   @keyframes talk{0%,100%{height:8px}25%{height:34px}50%{height:16px}75%{height:40px}}
   #status{color:var(--dim);font-size:11px;letter-spacing:.2em;text-transform:uppercase;min-height:16px;text-align:center}
+  #muteBtn{display:none;font:600 14px Inter,sans-serif;padding:8px 16px;border-radius:999px;border:1px solid var(--line);background:none;color:var(--ink)}
+  body.live #muteBtn{display:inline-block}
+  body.muted #muteBtn{background:var(--gold);color:#1b1400;border-color:var(--gold)}
   #typeToggle{background:none;border:0;color:var(--dim);font:500 13px Inter,sans-serif;letter-spacing:.04em;padding:4px 8px}
   form{display:flex;gap:8px;width:100%}
   #typeform{display:none}
@@ -83,6 +86,7 @@
 <div id="controls">
   <button id="mic" aria-label="Talk to Donna"><span class="bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span></button>
   <div id="status">Tap to talk</div>
+  <button id="muteBtn" type="button">Mute me</button>
   <button id="typeToggle" type="button">Type instead</button>
   <form id="typeform"><input id="typed" placeholder="Ask Donna…" autocomplete="off"><button class="small">Send</button></form>
 </div>
@@ -187,6 +191,17 @@
   // interrupt and answers in her voice (asking the server for anything about the business). The server hands out a
   // short-lived link to it. If that isn't set up or doesn't work, the mic falls back to tap-to-talk below.
   let agent = null, agentOK = true, connecting = false, why = "";
+  // Background noise: while Donna is talking the microphone is off, so a whisper across the room can't cut her off
+  // ("Let me cut in" turns it on for the rest of her turn). "Mute me" keeps it off until tapped again.
+  let muted = false, speaking = false, cutIn = false;
+  function mic() {
+    if (!agent) return;
+    const off = muted || (speaking && !cutIn);
+    try { if (typeof agent.setMicMuted === "function") agent.setMicMuted(off); } catch (e) {}
+    document.body.classList.toggle("muted", muted);
+    $("muteBtn").textContent = muted ? "Unmute me" : speaking && !cutIn ? "Let me cut in" : "Mute me";
+    status(muted ? "Muted · she can't hear you" : speaking ? "Donna" : "Listening · tap to hang up");
+  }
   async function loadSDK() {
     for (const url of ["https://cdn.jsdelivr.net/npm/@elevenlabs/client/+esm", "https://cdn.jsdelivr.net/npm/@11labs/client/+esm"]) {
       try { const m = await import(url); if (m.Conversation) return m.Conversation; } catch (e) {}
@@ -207,10 +222,11 @@
       agent = await Conversation.startSession({
         signedUrl: signed_url, connectionType: "websocket",
         dynamicVariables: { donna_session: session || "", caller_name: name || "Scott" },
-        onConnect: () => { mode("listening"); status("Listening · tap to hang up"); },
-        onDisconnect: () => { agent = null; mode(""); status(""); },
-        onModeChange: m => { if (agent) { mode(m.mode === "speaking" ? "speaking" : "listening");
-                                          status(m.mode === "speaking" ? "Donna" : "Listening · tap to hang up"); } },
+        onConnect: () => { document.body.classList.add("live"); mode("listening"); status("Listening · tap to hang up"); },
+        onDisconnect: () => { agent = null; muted = false; cutIn = false; document.body.classList.remove("live", "muted");
+                              mode(""); status(""); },
+        onModeChange: m => { if (agent) { speaking = m.mode === "speaking"; cutIn = false; mic();
+                                          mode(speaking ? "speaking" : "listening"); } },
         onMessage: m => { if (m && m.message) add(m.source === "user" ? "me" : "her", m.message); },
         onError: e => { add("note", "Connection trouble: " + (e && e.message ? e.message : e)); },
       });
@@ -275,6 +291,7 @@
   };
   $("typeform").onsubmit = e => { e.preventDefault(); unlock(); const t = $("typed").value; $("typed").value = ""; ask(t, false); };
   $("mic").onclick = micTap;
+  $("muteBtn").onclick = () => { if (!agent) return; if (speaking && !cutIn && !muted) cutIn = true; else muted = !muted; mic(); };
   $("typeToggle").onclick = () => { document.body.classList.toggle("typing");
     $("typeToggle").textContent = document.body.classList.contains("typing") ? "Hide keyboard" : "Type instead";
     if (document.body.classList.contains("typing")) $("typed").focus(); };
