@@ -12,7 +12,8 @@ GUIDE = [
                  "<b>She reacts with the eyes emoji</b> so you know she has it.",
                  "<b>If something's unclear,</b> she asks you right there, and your phone buzzes.",
                  "<b>She sends the office a ticket</b> with the account, the item and the new count.",
-                 "<b>When it's entered,</b> she posts a {CHECK} readback to you in the channel."]),
+                 "<b>When it's entered,</b> she posts a {CHECK} readback to you in the channel.",
+                 "<b>Stuck on the handheld?</b> Ask her how to do it, any time. See <i>Help with your handheld</i>."]),
     ("section", "Report a change"),
     ("p", "Say <b>who</b>, <b>what</b> and <b>how many</b>."),
     ("table", ["What happened", "Type or say something like"], [
@@ -43,6 +44,7 @@ GUIDE = [
                  "to send that in?\"</i>",
                  "Say <b>yes</b>. The office gets the ticket, and your {CHECK} readback shows up in the route channel "
                  "when it's entered.",
+                 "Ask her how to do something on the handheld: <i>\"How do I skip a stop?\"</i>",
                  "Same number for calling in sick or late, or for a problem on route."]),
     ("note", "Phone hands-free only while driving. If Donna doesn't greet you by name, add your cell to your Slack "
              "profile (Profile \u2192 Edit \u2192 Phone) or tell the office."),
@@ -81,12 +83,20 @@ GUIDE = [
                  "She answers about <b>customers on your route</b>; anything else goes to the office.",
                  "If Alliant doesn't say, she asks the office and they answer you in the channel.",
                  "The office can see her answers. After 15 questions in a day she hands the rest to the office."]),
-    ("section", "Handheld help, in private"),
-    ("p", "Stuck on the handheld? Ask Donna how. She learned Alliant from the Alliant University training."),
-    ("bullets", ["<b>In your route channel:</b> \"How do I start my route on the handheld?\" She answers in the "
-                 "message's thread.",
+    ("section", "Help with your handheld"),
+    ("p", "Stuck on the handheld or Alliant mobile? Ask Donna how. She took the Alliant University training and walks "
+          "you through it step by step, any way you like:"),
+    ("bullets", ["<b>In your route channel:</b> type it or hold the mic. She answers in the message's thread.",
                  "<b>In private:</b> in Slack, search for <b>Donna</b> and message her. Nobody else sees it.",
-                 "If the training doesn't cover it, she asks the office to follow up with you."]),
+                 "<b>By phone:</b> call <b>(888) 519-7604</b> and ask. Handy with gloves on."]),
+    ("table", ["You're stuck on", "Ask"], [
+        ("Starting the day", "How do I start my route on the handheld?"),
+        ("A closed stop", "How do I mark a stop closed?"),
+        ("Skipping a stop", "How do I skip a stop?"),
+        ("A today-only change", "How do I change a quantity just for today?"),
+        ("Garments", "How do I scan in a new wearer's garments?"),
+        ("Signatures", "How do I get the customer's signature?")]),
+    ("p", "If the training doesn't cover it, she says so and asks the office to follow up with you."),
     ("section", "What Donna won't do"),
     ("bullets", ["<b>No prices or balances.</b> Pricing questions go to the office.",
                  "<b>Nothing is changed until the {CHECK} readback.</b> The eyes emoji means \"got it\", not \"done\". "
@@ -98,7 +108,7 @@ GUIDE = [
                  "she doesn't replace them."]),
 ]
 INTRO = ("Post a customer change in your route channel, by typing or by voice, and Donna turns it into a clean ticket "
-         "for the office, then tells you when it's in Alliant.",
+         "for the office, then tells you when it's in Alliant. Stuck on your handheld? Ask her how.",
          "You talk the way you'd tell the office. Customer names, nicknames and store numbers all work. No forms, no "
          "account numbers, no threads needed.")
 CHEAT = [("Change", "customer + item + \"more\" or \"total\" + how many. <i>Humpy's bar mops to 150.</i>"),
@@ -108,11 +118,12 @@ CHEAT = [("Change", "customer + item + \"more\" or \"total\" + how many. <i>Hump
          ("Repair or count", "customer + whose garments + why. <i>Pull Karissa's shirts for repair.</i>"),
          ("Question", "just ask. <i>How many mats does Midas get?</i>"),
          ("Stops", "<i>What are my stops today?</i>"),
-         ("Handheld help", "message Donna privately. <i>How do I add a wearer on the handheld?</i>"),
+         ("Handheld help", "ask Donna: in your channel, in private, or by phone. <i>How do I skip a stop?</i>"),
          ("Gloves on", "hold the mic in Slack, or call Donna at <b>(888) 519-7604</b>."),
          ("Readback wrong", "<i>\"No, I meant 3.\"</i>")]
 CHEAT_FOOT = "Eyes emoji = she has it. {CHECK} = it's in Alliant. Prices, balances and emergencies: <b>(907) 222-7738</b>."
-WHATS_NEW = [("Oct 29, 2026", "Call Donna at (888) 519-7604 to report a change, hands-free"),
+WHATS_NEW = [("Oct 29, 2026", "Handheld help by phone and voice message, too"),
+             ("Oct 29, 2026", "Call Donna at (888) 519-7604 to report a change, hands-free"),
              ("Oct 29, 2026", "Voice messages: hold the mic in Slack instead of typing"),
              ("Oct 29, 2026", "This field guide"),
              ("Oct 2026", "Donna's new name and picture (she was the Service Desk)"),
