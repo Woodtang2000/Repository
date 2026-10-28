@@ -251,6 +251,8 @@ class Phone:
         else:
             company = company_for(who["accounts"][0]) if who else "Snow White Linen"
             first = (who.get("name") or "").split()[0] if who and who.get("name") else ""
+            if first.lower().strip(",.") in ("donna", "snow", "the"):  # a placeholder, not the caller's name
+                first = ""
             hello = (f"Hi{' ' + first if first and ' at ' not in who.get('name', '') else ''}, this is Donna with {company}. "
                      "What can I do for you?") if who else f"Thanks for calling {company}, this is Donna. How can I help you today?"
         call["turns"].append({"role": "assistant", "content": hello})
