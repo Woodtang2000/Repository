@@ -165,3 +165,16 @@ def test_unclear_she_asks_whoever_asked(tmp_path):
     jobs2.queue(tap("UANA"))
     jobs2.next()
     assert jobs2.result("100.1", "ask", "?", question="which mat?") == "back to the office"
+
+
+def test_signed_out_is_announced_once(tmp_path):
+    jobs, slack, t, readbacks = setup(tmp_path)
+    posted = []
+    slack.chat_postMessage = lambda channel, text, thread_ts=None, **kw: posted.append((channel, thread_ts, text))
+    jobs.queue(tap("UANA"))
+    jobs.next()
+    jobs.result("100.1", "needs_person", "Alliant needs signing in")
+    alerts = [p for p in posted if p[1] is None]
+    assert [c for c, _, _ in alerts] == ["CDESK", "U4KFSQCDQ"] and "Alliant signed Donna out" in alerts[0][2]
+    jobs.signed_out()
+    assert len([p for p in posted if p[1] is None]) == 2  # at most once an hour

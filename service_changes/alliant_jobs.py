@@ -166,4 +166,22 @@ class Jobs:
         self.desk.slack.chat_update(channel=self.desk.desk_id, ts=job_id, text="",
                                     attachments=restyle(t, GOLD, status="🙋 Donna needs a person for this one (see thread)"),
                                     metadata={"event_type": KIND, "event_payload": {**p, "donna": "needs_person"}})
+        if re.search(r"sign(ing|ed)? ?in|log(ged)? ?(in|out)|password|disconnected|session", note, re.I):
+            self.signed_out()
         return "back to the office"
+
+    def signed_out(self) -> None:
+        """Alliant signed her out: say so where people will see it (the office channel, and Scott directly), at most once
+        an hour; a ticket thread alone is easy to miss. She never signs in herself."""
+        if time.time() - getattr(self, "warned", 0) < 3600:
+            return
+        self.warned = time.time()
+        text = ("⚠️ *Alliant signed Donna out* on her workstation, so she can't enter tickets. Please sign her back in "
+                "(Chrome Remote Desktop → the Alliant tab in her Claude group → sign in → \"Stay signed in? Yes\"). Tickets "
+                "she sends back meanwhile are marked for a person.")
+        self.desk.slack.chat_postMessage(channel=self.desk.desk_id, text=text)
+        owner = os.environ.get("OWNER_SLACK_ID", "U4KFSQCDQ").split(",")[0].strip()
+        try:
+            self.desk.slack.chat_postMessage(channel=owner, text=text)
+        except Exception:
+            pass
