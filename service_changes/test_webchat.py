@@ -378,3 +378,25 @@ def test_missing_pictures_borrow_a_close_match(tmp_path):
     got = catalog.borrow_pictures(d, catalog.load(), ["1-02-06", "6-01-55", "9-99-99"])
     assert got == {"1-02-06": "1-02-02", "6-01-55": "6-01-05"}
     assert open(catalog.pic_path(d, "6-01-55"), "rb").read().endswith(b"screen")
+
+
+def test_drivers_field_guide_needs_its_link(monkeypatch):
+    from .webchat import make_handler
+    monkeypatch.setenv("DRIVER_GUIDE_KEY", "route-guide-2026x")
+    H = make_handler(None, "https://chat.example.com")
+    sent = []
+
+    def get(path):
+        h = H.__new__(H)
+        h.path, h.headers = path, {}
+        h._send = lambda code, b, ctype, cache=0: sent.append((code, b, ctype))
+        h.send_response = lambda code: sent.append((code, b"", ""))
+        h.send_header = h.end_headers = lambda *a: None
+        h.do_GET()
+        return sent[-1]
+    assert get("/drivers/wrong-guess-12345")[0] == 404
+    assert get("/drivers/route-guide-2026x")[0] == 301
+    code, body, ctype = get("/drivers/route-guide-2026x/")
+    assert code == 200 and b"Donna Field Guide" in body and b"(888) 519-7604" in body and b"noindex" in body
+    assert get("/drivers/route-guide-2026x/guide.pdf")[2] == "application/pdf"
+    assert get("/drivers/route-guide-2026x/donna.png")[2] == "image/png"

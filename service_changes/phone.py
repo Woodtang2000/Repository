@@ -205,7 +205,7 @@ class Phone:
     def channel_id(self, name: str) -> str | None:
         for page in self.slack.conversations_list(types="public_channel,private_channel", exclude_archived=True, limit=1000):
             for c in page["channels"]:
-                if c["name"] == name and c.get("is_member"):
+                if c["name"].replace("_", "-") == name.replace("_", "-") and c.get("is_member"):  # employee_calls too
                     return c["id"]
         return None
 

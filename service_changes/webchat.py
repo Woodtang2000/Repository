@@ -455,6 +455,29 @@ def make_handler(chat: Chat, public_url: str):
             if u.path == "/donna-icon.png":  # Donna's home-screen icon (navy and gold, like Squirrel Tamer's acorn)
                 with open(os.path.join(REPO, "website_chat", "donna_icon.png"), "rb") as f:
                     return self._send(200, f.read(), "image/png", cache=86400)
+            m = re.fullmatch(r"/drivers/([\w-]{12,})(/(?:donna\.png|guide\.pdf)?)?", u.path)
+            if m:  # the drivers' field guide (flyer/driver_guide.py), at a link only drivers are given
+                import hmac
+                key = os.environ.get("DRIVER_GUIDE_KEY", "")
+                if len(key) < 12 or not hmac.compare_digest(m.group(1).encode(), key.encode()):
+                    return self._send(404, b"not found", "text/plain")
+                if not m.group(2):
+                    self.send_response(301)
+                    self.send_header("Location", u.path + "/")
+                    self.send_header("Content-Length", "0")
+                    self.end_headers()
+                    return
+                if m.group(2) == "/donna.png":
+                    with open(os.path.join(REPO, "brand", "donna_google_profile.png"), "rb") as f:
+                        return self._send(200, f.read(), "image/png", cache=86400)
+                if m.group(2) == "/guide.pdf":
+                    with open(os.path.join(REPO, "flyer", "Donna-Field-Guide-Snow-White-Drivers.pdf"), "rb") as f:
+                        return self._send(200, f.read(), "application/pdf", cache=300)
+                import importlib.util
+                spec = importlib.util.spec_from_file_location("driver_guide", os.path.join(REPO, "flyer", "driver_guide.py"))
+                guide = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(guide)  # read fresh each time: a deploy updates the page with no restart
+                return self._send(200, guide.html(base).encode(), "text/html; charset=utf-8")
             if u.path == "/donna":  # Scott's "talk to Donna" page for his iPhone home screen; the key is typed in on the phone
                 with open(DONNA_PAGE, "rb") as f:
                     return self._send(200, f.read(), "text/html; charset=utf-8")
