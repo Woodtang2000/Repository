@@ -780,7 +780,27 @@ def test_scott_tells_donna_a_change_by_voice(setup, monkeypatch, tmp_path):
     assert d.voice("no", "c2") == "Okay, I won't change anything." and len(queued) == 1
     assert d.owner_change("c3", "how is Bill doing today", None) is None
     # her question from the workstation goes to his private messages, and his typed answer is read with the request
-    assert d.ask_requester(t, "6 in total, or 6 more?") == "owner"
+    assert d.ask_requester(t, "6 in total, or 6 more?") == "Scott"
     assert slack.msgs["DS"][-1]["text"] == "Quick check from Donna: 6 in total, or 6 more?"
     reply = d.owner_change("DS", "6", "DS", typed={"ts": "1.0", "user": "U4KFSQCDQ", "channel": "DS"})
     assert reply.endswith("Want me to put that in?") and "Donna asked: 6 in total, or 6 more?" in CALLS[-1]
+
+
+def test_bill_by_voice_gets_the_business_not_scotts_briefing(setup, monkeypatch):
+    import service_changes.parser as parser
+    slack, d = setup
+    monkeypatch.setenv("DONNA_ALLIANT", "on")
+    slack.users.update({"U4KFSQCDQ": "Scott Woodland", "U9SGPJP0C": "Bill Dubinsky"})
+    slack.msgs["DB"] = []
+    slack.conversations_open = lambda users: {"channel": {"id": "DB" if users == "U9SGPJP0C" else "DS"}}
+    queued, chats = [], []
+    d._jobs = type("J", (), {"add": lambda self, ts, user: queued.append((ts, user))})()
+    d.pulse = lambda: (_ for _ in ()).throw(AssertionError("Bill never gets the read of Slack and email"))
+    d.briefing = lambda: "BRIEF"
+    monkeypatch.setattr(parser, "owner_chat", lambda c, turns, about, spoken=False, person="": chats.append(person) or "Sure.")
+    assert d.voice("what's the vibe on slack this week", "c", "U9SGPJP0C") == "Sure." and chats == ["Bill Dubinsky"]
+    d.voice("more mats at wendys: 6", "c", "U9SGPJP0C")
+    d.voice("yes", "c", "U9SGPJP0C")
+    [t] = slack.bot_posts("D1", "ticket")
+    assert "Bill, by voice" in t["text"] and desk.meta(t)["src_channel"] == "DB" and queued[0][1] == "U9SGPJP0C"
+    assert desk.meta(t)["driver_id"] == "U9SGPJP0C"

@@ -199,13 +199,14 @@
       const r = await fetch("/api/donna/agent", { method: "POST", headers: { "Authorization": "Bearer " + key } });
       if (r.status === 401) { add("note", "That key didn't work. Paste it again."); key = ""; store.set("donnaKey", ""); showSetup(); return true; }
       if (r.status !== 200) { why = "the server couldn't open your agent (" + r.status + ")"; return false; }
-      const { signed_url } = await r.json();
+      const { signed_url, session, name } = await r.json();
       const Conversation = await loadSDK();
       if (!Conversation) { why = "the ElevenLabs voice engine didn't load"; return false; }
       if (!signed_url) { why = "the server sent no link"; return false; }
       await navigator.mediaDevices.getUserMedia({ audio: true });
       agent = await Conversation.startSession({
         signedUrl: signed_url, connectionType: "websocket",
+        dynamicVariables: { donna_session: session || "", caller_name: name || "Scott" },
         onConnect: () => { mode("listening"); status("Listening · tap to hang up"); },
         onDisconnect: () => { agent = null; mode(""); status(""); },
         onModeChange: m => { if (agent) { mode(m.mode === "speaking" ? "speaking" : "listening");

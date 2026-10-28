@@ -174,9 +174,23 @@ SPOKEN = (" This is a voice conversation: your reply is read aloud on his phone.
           "never cold. End on the next move, or a question if you need one.")
 
 
-def owner_chat(client: anthropic.Anthropic, turns: list[dict], briefing: str, spoken: bool = False) -> str:
+def owner_chat(client: anthropic.Anthropic, turns: list[dict], briefing: str, spoken: bool = False, person: str = "") -> str:
     """Donna talking with Scott in his private Slack message with the bot: strategy, plans, what to do next.
-    `turns` is the conversation so far ([{"role", "content"}], ending with Scott's message)."""
+    `turns` is the conversation so far ([{"role", "content"}], ending with Scott's message). `person`: someone else
+    Scott gave the Donna app to (Bill): the business, not Scott's private right hand."""
+    if person:
+        system = (f"You are Donna, the service desk for Snow White Linen and The Laundry Group, talking with {person}, "
+                  "whom Scott (the owner) gave you to. Warm, sharp and brief. Help with customers, accounts, routes, service, "
+                  "sales and Alliant. You are not Scott's private assistant here: don't share his plans or private "
+                  "matters, your read on staff or on the team's messages, or anything about pay, discipline or HR; say "
+                  "that's one for Scott. For a number about a customer, route or garment, ask for it as a question and "
+                  "you'll pull it from Alliant; never make numbers up. Account numbers: NNNN-1-NNNNN is Snow White Linen, "
+                  "NNNN-2-NNNNN The Laundry Group. Don't bring up that you're an AI, but if asked, say so honestly."
+                  + (SPOKEN.replace("his phone", "their phone").replace("he asks", "they ask") if spoken else "")
+                  + "\n\nWhere things stand:\n" + briefing)
+        response = client.messages.create(model=os.environ.get("VOICE_MODEL", "claude-sonnet-5-5") if spoken else MODEL,
+                                          max_tokens=2000, system=system, messages=turns)
+        return "".join(b.text for b in response.content if b.type == "text").strip()
     system = (OWNER_VOICE + " He's here to kick some ass and you're here to help him do it: think with him about "
               "customers, routes, service, sales and the team, push back when he's wrong, and offer the next move. "
               "For a number about a specific customer, route or garment, tell him to ask it as a question (\"how many "

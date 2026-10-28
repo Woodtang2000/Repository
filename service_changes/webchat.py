@@ -637,12 +637,14 @@ def make_handler(chat: Chat, public_url: str):
         def _agent_link(self):
             """A one-time link into Scott's private ElevenLabs agent (ELEVENLABS_AGENT_ID) for the talk page, so it opens
             straight into a conversation. Needs his key; the ElevenLabs key itself never leaves the server."""
-            if not self._owner((self.headers.get("Authorization") or "").removeprefix("Bearer ").strip()):
+            who = self._who((self.headers.get("Authorization") or "").removeprefix("Bearer ").strip())
+            if not who:
                 return self._send(401, b'{"error":"bad key"}', "application/json")
             link = agent_link()
             if not link:
                 return self._send(503, b'{"error":"agent not available"}', "application/json")
-            self._send(200, json.dumps({"signed_url": link}).encode(), "application/json")
+            self._send(200, json.dumps({"signed_url": link, "session": agent_session(*who), "name": who[1]}).encode(),
+                       "application/json")
 
         def _agent_tool(self):
             """The ElevenLabs agent's "ask_donna" tool: {"question": ...} with Scott's key in, {"answer": ...} out, from the
@@ -653,7 +655,19 @@ def make_handler(chat: Chat, public_url: str):
                 n = min(int(self.headers.get("Content-Length") or 0), 20000)
                 body = json.loads(self.rfile.read(n) or b"{}")
                 question = str(body.get("question") or body.get("text") or "").strip()[:2000]
-                data = json.dumps({"text": question, "convo": "agent-tool"}).encode()
+                session = str(body.get("donna_session") or "").strip()
+                if session:
+                    who = VOICE_SESSIONS.get(session)
+                    if not who or time.time() - who[2] > SESSION_HOURS * 3600:
+                        return self._send(200, json.dumps({"answer": "This conversation has run too long for me. Hang up "
+                                                           "and tap me again."}).encode(), "application/json")
+                    user = who[0]
+                elif os.environ.get("VOICE_KEYS", "").strip():  # others have the app: never guess it's Scott
+                    return self._send(200, json.dumps({"answer": "I can't tell who's asking: the ask_donna tool in "
+                                                       "ElevenLabs needs its donna_session setting."}).encode(), "application/json")
+                else:
+                    user = ""
+                data = json.dumps({"text": question, "convo": "agent-tool:" + session[:12], "user": user}).encode()
                 req = urllib.request.Request(f"http://127.0.0.1:{os.environ.get('DESK_VOICE_PORT', '8091')}/voice", data=data,
                                              headers={"Content-Type": "application/json"})
                 with urllib.request.urlopen(req, timeout=110) as r:
@@ -665,6 +679,13 @@ def make_handler(chat: Chat, public_url: str):
                 answer = "The office data isn't reachable right now."
             print(time.strftime("%H:%M"), "donna tool: answered", flush=True)
             self._send(200, json.dumps({"answer": answer}).encode(), "application/json")
+
+        def _who(self, given: str) -> tuple[str, str] | None:
+            """Whose voice-app key this is (voice_person); a wrong one waits a second, to slow guessing."""
+            who = voice_person(given)
+            if not who:
+                time.sleep(1)
+            return who
 
         def _owner(self, given: str) -> bool:
             """Is this Scott's key (OWNER_VOICE_TOKEN, 24+ characters)? A wrong one waits a second, to slow guessing."""
@@ -678,7 +699,7 @@ def make_handler(chat: Chat, public_url: str):
         def _donna_voice(self):
             """Donna's answer as speech from ElevenLabs (ELEVENLABS_API_KEY, ELEVENLABS_VOICE_ID), for the talk page.
             204 when no voice service is set up or it fails, so the page falls back to the iPhone's own voice."""
-            if not self._owner((self.headers.get("Authorization") or "").removeprefix("Bearer ").strip()):
+            if not self._who((self.headers.get("Authorization") or "").removeprefix("Bearer ").strip()):
                 return self._send(404, b"not found", "text/plain")
             try:
                 n = min(int(self.headers.get("Content-Length") or 0), 8000)
@@ -698,15 +719,17 @@ def make_handler(chat: Chat, public_url: str):
                 given = (q.get("key") or [""])[0].strip()
             else:
                 given = (self.headers.get("Authorization") or "").removeprefix("Bearer ").strip()
-            if not self._owner(given):
+            who = self._who(given)
+            if not who:
                 return self._send(404, b"not found", "text/plain")
             try:
                 if q is not None:
-                    body = json.dumps({"text": (q.get("text") or [""])[0], "convo": (q.get("convo") or ["phone"])[0]}).encode()
+                    got = {"text": (q.get("text") or [""])[0], "convo": (q.get("convo") or ["phone"])[0]}
                 else:
                     n = min(int(self.headers.get("Content-Length") or 0), 8000)
-                    body = self.rfile.read(n) or b"{}"
-                    json.loads(body)
+                    got = json.loads(self.rfile.read(n) or b"{}")
+                body = json.dumps({"text": str(got.get("text") or ""), "convo": str(got.get("convo") or ""),
+                                   "user": who[0]}).encode()
                 req = urllib.request.Request(f"http://127.0.0.1:{os.environ.get('DESK_VOICE_PORT', '8091')}/voice", data=body,
                                              headers={"Content-Type": "application/json"})
                 with urllib.request.urlopen(req, timeout=110) as r:
@@ -778,6 +801,37 @@ def speak(text: str) -> bytes | None:
             print(time.strftime("%H:%M"), "donna voice (ElevenLabs) failed:", str(e)[:200], flush=True)
             return None
     return None
+
+
+VOICE_SESSIONS: dict[str, tuple[str, str, float]] = {}  # agent conversation token -> (Slack user, first name, issued)
+SESSION_HOURS = 6
+
+
+def voice_person(given: str) -> tuple[str, str] | None:
+    """Whose key this is: Scott's OWNER_VOICE_TOKEN, or one Scott gave out in VOICE_KEYS ("Bill:U9SGPJP0C:<key>", comma
+    separated, keys 24+ characters). (Slack user id, first name), or None."""
+    import hmac
+    owner = os.environ.get("OWNER_VOICE_TOKEN", "")
+    people = [("Scott", os.environ.get("OWNER_SLACK_ID", "U4KFSQCDQ").split(",")[0].strip(), owner)]
+    for entry in os.environ.get("VOICE_KEYS", "").split(","):
+        parts = [x.strip() for x in entry.split(":")]
+        if len(parts) == 3:
+            people.append((parts[0], parts[1], parts[2]))
+    for name, user, key in people:
+        if len(key) >= 24 and hmac.compare_digest(given.encode(), key.encode()):
+            return user, name
+    return None
+
+
+def agent_session(user: str, name: str) -> str:
+    """A token for one agent conversation, passed to ElevenLabs as {{donna_session}} and back on every ask_donna call,
+    so the server knows who is talking (the tool itself always carries Scott's key)."""
+    now = time.time()
+    for k in [k for k, v in VOICE_SESSIONS.items() if now - v[2] > SESSION_HOURS * 3600]:
+        VOICE_SESSIONS.pop(k, None)
+    token = secrets.token_urlsafe(24)
+    VOICE_SESSIONS[token] = (user, name, now)
+    return token
 
 
 def agent_link() -> str | None:
