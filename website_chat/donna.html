@@ -191,15 +191,14 @@
   // interrupt and answers in her voice (asking the server for anything about the business). The server hands out a
   // short-lived link to it. If that isn't set up or doesn't work, the mic falls back to tap-to-talk below.
   let agent = null, agentOK = true, connecting = false, why = "";
-  // Background noise: while Donna is talking the microphone is off, so a whisper across the room can't cut her off
-  // ("Let me cut in" turns it on for the rest of her turn). "Mute me" keeps it off until tapped again.
-  let muted = false, speaking = false, cutIn = false;
+  // You can talk over her any time, like a real conversation: she stops when you start. "Mute me" turns the
+  // microphone off (someone walks up, another call) until it's tapped again.
+  let muted = false, speaking = false;
   function mic() {
     if (!agent) return;
-    const off = muted || (speaking && !cutIn);
-    try { if (typeof agent.setMicMuted === "function") agent.setMicMuted(off); } catch (e) {}
+    try { if (typeof agent.setMicMuted === "function") agent.setMicMuted(muted); } catch (e) {}
     document.body.classList.toggle("muted", muted);
-    $("muteBtn").textContent = muted ? "Unmute me" : speaking && !cutIn ? "Let me cut in" : "Mute me";
+    $("muteBtn").textContent = muted ? "Unmute me" : "Mute me";
     status(muted ? "Muted · she can't hear you" : speaking ? "Donna" : "Listening · tap to hang up");
   }
   async function loadSDK() {
@@ -223,9 +222,9 @@
         signedUrl: signed_url, connectionType: "websocket",
         dynamicVariables: { donna_session: session || "", caller_name: name || "Scott" },
         onConnect: () => { document.body.classList.add("live"); mode("listening"); status("Listening · tap to hang up"); },
-        onDisconnect: () => { agent = null; muted = false; cutIn = false; document.body.classList.remove("live", "muted");
+        onDisconnect: () => { agent = null; muted = false; document.body.classList.remove("live", "muted");
                               mode(""); status(""); },
-        onModeChange: m => { if (agent) { speaking = m.mode === "speaking"; cutIn = false; mic();
+        onModeChange: m => { if (agent) { speaking = m.mode === "speaking"; mic();
                                           mode(speaking ? "speaking" : "listening"); } },
         onMessage: m => { if (m && m.message) add(m.source === "user" ? "me" : "her", m.message); },
         onError: e => { add("note", "Connection trouble: " + (e && e.message ? e.message : e)); },
@@ -291,7 +290,7 @@
   };
   $("typeform").onsubmit = e => { e.preventDefault(); unlock(); const t = $("typed").value; $("typed").value = ""; ask(t, false); };
   $("mic").onclick = micTap;
-  $("muteBtn").onclick = () => { if (!agent) return; if (speaking && !cutIn && !muted) cutIn = true; else muted = !muted; mic(); };
+  $("muteBtn").onclick = () => { if (!agent) return; muted = !muted; mic(); };
   $("typeToggle").onclick = () => { document.body.classList.toggle("typing");
     $("typeToggle").textContent = document.body.classList.contains("typing") ? "Hide keyboard" : "Type instead";
     if (document.body.classList.contains("typing")) $("typed").focus(); };
