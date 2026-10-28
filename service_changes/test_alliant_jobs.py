@@ -112,3 +112,28 @@ def test_workstation_key(monkeypatch):
 def test_owner_can_always_send_a_ticket(tmp_path):
     jobs, slack, t, readbacks = setup(tmp_path)
     assert jobs.queue(tap("U4KFSQCDQ")) == "queued 100.1"
+
+
+def test_workstation_reads_the_alliant_notes(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from .webchat import make_handler
+    monkeypatch.setenv("DONNA_WORKER_TOKEN", "w" * 32)
+    monkeypatch.setattr("time.sleep", lambda s: None)
+    notes = tmp_path / "alliant_university"
+    (notes / "Courses").mkdir(parents=True)
+    (notes / "02 Customer Items.md").write_text("New Item: pick the SKU")
+    (notes / "Courses" / "c1.md").write_text("course")
+    (tmp_path / "secret.md").write_text("not a note")
+    H = make_handler(SimpleNamespace(data_dir=str(tmp_path)), "https://x")
+    sent = []
+
+    def get(path, key="w" * 32):
+        h = H.__new__(H)
+        h.path, h.headers = path, {"Authorization": "Bearer " + key}
+        h._send = lambda code, b, ctype, cache=0: sent.append((code, b))
+        h.do_GET()
+        return sent[-1]
+    assert get("/api/donna/jobs/notes") == (200, b"02 Customer Items.md\nCourses/c1.md")
+    assert get("/api/donna/jobs/notes/02%20Customer%20Items.md") == (200, b"New Item: pick the SKU")
+    assert get("/api/donna/jobs/notes/../secret.md")[0] == 404
+    assert get("/api/donna/jobs/notes", key="nope")[0] == 401

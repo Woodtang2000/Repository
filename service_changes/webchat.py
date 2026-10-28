@@ -24,7 +24,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import urllib.error
 import urllib.parse
 import urllib.request
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 from . import catalog, sales, todo
 from .context import ALASKA
@@ -445,6 +445,8 @@ def make_handler(chat: Chat, public_url: str):
                 return self._worker("GET", "/jobs/next")
             if u.path == "/api/donna/jobs/rules":  # her house rules for Alliant (deploy/donna_alliant_rules.md)
                 return self._worker("RULES", "")
+            if u.path == "/api/donna/jobs/notes" or u.path.startswith("/api/donna/jobs/notes/"):  # Alliant University
+                return self._worker("NOTES", unquote(u.path[len("/api/donna/jobs/notes"):].lstrip("/")))
             if u.path == "/api/donna":  # the simple shortcut: .../api/donna?key=...&text=what he said
                 return self._donna(q)
             m = re.fullmatch(r"/twilio/voice/audio/([0-9a-f]{20})\.mp3", u.path)
@@ -606,6 +608,17 @@ def make_handler(chat: Chat, public_url: str):
                 return self._send(401, b'{"error":"bad key"}', "application/json")
             if method == "RULES":
                 with open(os.path.join(REPO, "deploy", "donna_alliant_rules.md"), "rb") as f:
+                    return self._send(200, f.read(), "text/markdown; charset=utf-8")
+            if method == "NOTES":  # the Alliant University notes the server keeps (dropbox_sync.py): a list, or one file
+                root = os.path.realpath(os.path.join(chat.data_dir, "alliant_university"))
+                names = sorted(os.path.relpath(os.path.join(d, f), root) for d, _, fs in os.walk(root) for f in fs
+                               if f.endswith(".md"))
+                if not local:
+                    return self._send(200, ("\n".join(names) or "(no notes on the server yet)").encode(),
+                                      "text/plain; charset=utf-8")
+                if local not in names:  # only a file from the list: nothing else on the server can be read
+                    return self._send(404, b"not one of the notes", "text/plain")
+                with open(os.path.join(root, local), "rb") as f:
                     return self._send(200, f.read(), "text/markdown; charset=utf-8")
             data = None
             if method == "POST":
