@@ -276,6 +276,17 @@ class Phone:
         return PERSONALITY + "\n\n" + CUSTOMER_RULES.format(who=whom, confirm=confirm, office=office)
 
     def ask(self, call: dict) -> Turn:
+        said = call["turns"][-1]["content"] if call["turns"] else ""
+        helper = getattr(self, "helper", None)
+        if call["line"] == "employees" and helper:  # "how do I…" in Alliant or on the handheld: from the training notes
+            from .desk import ALLIANT_Q
+            if ALLIANT_Q.search(said):
+                how, _ = helper.answer([{"role": "user", "content": said + "\n\n(Answered on a phone call: a few short "
+                                         "spoken sentences, steps in order, no lists or formatting, no source line.)"}], None)
+                how = re.sub(r"\n*_?Source:.*$", "", how, flags=re.S)
+                how = re.sub(r"[*_`#>]", "", how).strip()
+                return Turn(say=(how[:700] + " Anything else?") if how else "Let me have your supervisor call you on that.",
+                            action="listen")
         turns = [t for t in call["turns"]]
         if turns and turns[0]["role"] == "assistant":
             turns = [{"role": "user", "content": "(The call connects.)"}] + turns

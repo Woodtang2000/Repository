@@ -57,6 +57,9 @@ SKU_Q = re.compile(r"\b(weigh\w*|pounds?|lbs?|dimensions?|materials?|fabric|made
 AR_Q = re.compile(r"\b(owes?|owing|balance|past due|overdue|paid us|last paid|last payment|pay(s|ing)? us|"
                   r"credit hold|collections?|receivables?|a/?r)\b", re.I)
 AR_USERS = {u.strip() for u in os.environ.get("AR_SLACK_IDS", "U4KFSQCDQ,U9SGPJP0C").split(",") if u.strip()}  # Scott, Bill
+ALLIANT_Q = re.compile(r"\b(alliant|catalog|customer items|customer entry|new item|stop item|add wearers?|stop wearer|"
+                       r"work orders?|pull list|system create|handheld|route mobile|special order|ancillary|"
+                       r"how (do|can|would|should) (i|you|we|she|they)\b.*\b(enter|set up|add|change|stop|print|run|find))\b", re.I)
 HOW_TO = re.compile(r"\bhow (do|can|would|should) (i|you|we)\b.*\b(alliant|handheld|enter|make|set up|print|run)\b", re.I)  # Alliant how-to notes
 VERIFY_HOUR = 7  # entry check posts once the morning's Alliant data is in, from this hour (Alaska)
 STOCKROOM = os.environ.get("STOCKROOM_CHANNEL", "stockroom")  # Ana's channel: weekly garment data checks
@@ -715,7 +718,7 @@ class Desk:
             top = list(reversed(list(_messages(self.slack, channel, time.time() - 900, include_all_metadata=True))))
             if self.office_lookup(ev, top, channel=channel):
                 return "lookup"
-        if owner and not (self.helper and HOW_TO.search(ev.get("text", ""))):
+        if owner and not (self.helper and (HOW_TO.search(ev.get("text", "")) or ALLIANT_Q.search(ev.get("text", "")))):
             from .parser import owner_chat
             about = self.briefing()
             if PULSE.search(ev.get("text", "")):
@@ -775,6 +778,10 @@ class Desk:
             item = self.sku_answer(text, owner)
             if item:
                 reply, kind = spoken(item), "sku"
+        if not reply and not ask and getattr(self, "helper", None) and ALLIANT_Q.search(text):  # how to do it in Alliant
+            how, _ = self.helper.answer([{"role": "user", "content": text + "\n\n(Spoken aloud: say it in a few short "
+                                          "sentences, steps in order, no lists or formatting, skip the source line.)"}], owner)
+            reply, kind = spoken(re.sub(r"\n*_?Source:.*$", "", how, flags=re.S)), "alliant how-to"
         route = None if reply else re.search(r"\b(?:route|rte|rt)\s*#?\s*(\d{1,2})\b", text, re.I)
         if route and not ask and not re.search(r"\b\d{4}-\d-\d{5}\b", text) \
                 and re.search(r"\b(stops?|customers?|accounts?|order|deliver\w*|first|last|next|who|which|list)\b", text, re.I):
@@ -1406,9 +1413,9 @@ def main():
     desk.data_dir = args.data
     from . import alliant_help
     # Set up even before the bot is invited: Slack starts sending the channel's messages the moment it joins.
-    if alliant_help.CHANNEL in desk.all_channels:
-        desk.helper = alliant_help.Helper(slack, claude, args.data, desk.all_channels[alliant_help.CHANNEL], desk.me,
-                                          alliant_help.find_user(slack, alliant_help.ESCALATE))
+    # The notes answer how-to questions in #alliant-help (when the bot is in it), in private messages and by voice.
+    desk.helper = alliant_help.Helper(slack, claude, args.data, desk.all_channels.get(alliant_help.CHANNEL), desk.me,
+                                      alliant_help.find_user(slack, alliant_help.ESCALATE))
     loaded = [time.time()]
 
     def reload():  # pick up a fresh export without restarting

@@ -857,6 +857,8 @@ def main():
     chat = Chat(claude, slack_poster(slack, args.data, args.sales, args.desk), args.data)
     from .phone import Phone
     chat.phone = Phone(claude, slack, args.data, slack_poster(slack, args.data, args.sales, args.desk), args.public_url)
+    from .alliant_help import Helper  # the Alliant training notes, for employees' how-to questions on the 888 line
+    chat.phone.helper = Helper(slack, claude, args.data, None, None)
     keep_pictures(args.data)
     keep_portal_awake()
     srv = ThreadingHTTPServer(("127.0.0.1", args.port), make_handler(chat, args.public_url.rstrip("/")))

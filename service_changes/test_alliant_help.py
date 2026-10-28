@@ -475,3 +475,14 @@ def test_drivers_and_customers_never_get_balances():
                    ar={"1205-1-00004": {"balance": "1240.50", "last_payment_date": "2026-09-30"}})
     for facts in (account_facts(data, "1205-1-00004"), customer_facts(data, "1205-1-00004")):
         assert "1240" not in facts and "2026-09-30" not in facts
+
+
+def test_voice_answers_alliant_how_to_from_the_notes():
+    from types import SimpleNamespace
+    from .desk import Desk
+    d = SimpleNamespace(claude=None, sku_answer=lambda t, u=None: "",
+                        helper=SimpleNamespace(answer=lambda turns, user: ("1. Open *Go To Account*.\n2. Add the SKU in the "
+                                               "*SKU Catalog*.\n\n_Source: 02 Customer Items_", False)),
+                        office_lookup=lambda *a, **k: (_ for _ in ()).throw(AssertionError("not a lookup")))
+    out = Desk.voice(d, "how do I add a new SKU to an account's catalog in Alliant", "v")
+    assert "Go To Account" in out and "SKU Catalog" in out and "Source" not in out and "*" not in out

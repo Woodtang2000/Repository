@@ -185,3 +185,18 @@ def test_website_server_rejects_unsigned_calls(monkeypatch):
                                      hashlib.sha1).digest()).decode()
     code, body = post(good)
     assert code == 200 and body.endswith(b"<Response/>")
+
+
+def test_employee_how_to_comes_from_the_alliant_notes(desk):
+    make, leads = desk
+    p = make()
+    asked = []
+    p.helper = SimpleNamespace(answer=lambda turns, user: asked.append(turns) or
+                               ("Tap *Start Route*, then pick your route.\n\n_Source: 06 Handheld_", False))
+    xml = call(p, "+19075557777", "+18885197604", "how do I start my route on the handheld")
+    assert "Tap Start Route, then pick your route. Anything else?" in xml[-1] and "Source" not in xml[-1]
+    assert not p.claude.systems  # the notes answered; no general reply needed
+    p2 = make(phone.Turn(say="Hi.", action="listen"))
+    p2.helper = p.helper
+    call(p2, "+19075550000", "+18668278398", "how do I add a new item in alliant")
+    assert len(asked) == 1  # customers never get the internal notes
