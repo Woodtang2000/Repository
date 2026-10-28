@@ -70,6 +70,15 @@ def test_webhook_needs_the_key(monkeypatch):
     assert post("nope")[0] == 401
     assert json.loads(post("p" * 32)[1]) == {"ok": "caller_info", "who": "+19075551234"}
     assert json.loads(post("p" * 32, in_url=True)[1])["ok"] == "caller_info" and post("nope", in_url=True)[0] == 401
+    body = json.dumps({"caller": "+1"}).encode()
+    h = H.__new__(H)
+    h.path, h.rfile, h.headers = "/api/phone/" + "p" * 32 + "/caller_info", io.BytesIO(body), {"Content-Length": str(len(body))}
+    h._send = lambda code, b, ctype, cache=0: sent.append((code, b))
+    h.do_POST()
+    assert json.loads(sent[-1][1])["ok"] == "caller_info"
+    h.path, h.rfile = "/api/phone/" + "a" * 32 + "/caller_info", io.BytesIO(body)
+    h.do_POST()
+    assert sent[-1][0] == 401
 
 
 def test_tools_copy_the_donna_agents_webhook_shape():
@@ -81,7 +90,7 @@ def test_tools_copy_the_donna_agents_webhook_shape():
     t = phone_agent._tool(hook, "driver_change", "https://chat.example.com", "secret")
     api = t["api_schema"]
     assert t["name"] == "driver_change" and "id" not in t
-    assert api["url"] == "https://chat.example.com/api/phone/tool/driver_change?key=secret" and api["request_headers"] == {}
+    assert api["url"] == "https://chat.example.com/api/phone/secret/driver_change" and api["request_headers"] == {}
     props = api["request_body_schema"]["properties"]
     assert props["caller"]["dynamic_variable"] == "system__caller_id" and "dynamic_variable" not in props["said"]
     assert props["conversation_id"]["dynamic_variable"] == "system__conversation_id"

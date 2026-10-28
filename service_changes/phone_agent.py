@@ -341,9 +341,9 @@ def _tool(hook: dict, name: str, url: str, token: str) -> dict:
     desc, fields = FIELDS[name]
     t.update(name=name, description=desc)
     api = t["api_schema"]
-    # The key rides in the address: ElevenLabs sends a webhook's URL exactly as written (a header copied from the Donna
-    # agent can be one of its stored secrets, which then isn't this key).
-    api.update(url=f"{url}/api/phone/tool/{name}?key={token}", method="POST")
+    # The key rides in the address's path (a header copied from the Donna agent can be one of ElevenLabs' stored secrets,
+    # and a ?query can be dropped); the path is sent exactly as written.
+    api.update(url=f"{url}/api/phone/{token}/{name}", method="POST")
     api.pop("query_params_schema", None)
     api.pop("path_params_schema", None)
     api["request_headers"] = {}
