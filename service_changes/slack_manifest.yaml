@@ -21,7 +21,8 @@ oauth_config:
       - chat:write         # post thread replies
       - reactions:read     # see 👍 / ✅ replies from drivers and staff
       - reactions:write    # mark messages it has picked up
-      - users:read         # tell drivers' route accounts apart from office staff
+      - users:read         # tell drivers' route accounts apart from office staff (and their phones, for the 888 line)
+      - files:read         # drivers' voice messages in the route channels
       - im:history         # office staff's private questions to the bot
       - im:read
 settings:

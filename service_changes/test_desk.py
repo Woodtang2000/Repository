@@ -804,3 +804,21 @@ def test_bill_by_voice_gets_the_business_not_scotts_briefing(setup, monkeypatch)
     [t] = slack.bot_posts("D1", "ticket")
     assert "Bill, by voice" in t["text"] and desk.meta(t)["src_channel"] == "DB" and queued[0][1] == "U9SGPJP0C"
     assert desk.meta(t)["driver_id"] == "U9SGPJP0C"
+
+
+def test_a_voice_message_is_read_like_a_typed_one(setup, tmp_path):
+    """Gloves on: the driver holds the mic in Slack. Donna says what she heard, then it's the usual question and ticket;
+    the answer can be a voice message too, and nothing is transcribed twice."""
+    slack, d = setup
+    d.data_dir = str(tmp_path)
+    said = {"F1": "more mats at wendys", "F2": "6"}
+    heard = []
+    d.transcribe_clip = lambda f: heard.append(f["id"]) or said[f["id"]]
+    clip = lambda fid: [{"id": fid, "subtype": "slack_audio", "mimetype": "audio/mp4", "url_private_download": "https://x"}]
+    slack.say("C1", "U1", "", files=clip("F1"), subtype="file_share")
+    assert d.run_once()["asked"] == 1
+    [h] = slack.bot_posts("C1", "heard")
+    assert h["text"] == "<@U1> 🎙️ Heard: _more mats at wendys_" and "more mats at wendys" in CALLS[-1]
+    slack.say("C1", "U1", "", files=clip("F2"), subtype="file_share")
+    assert d.run_once()["ticket"] == 1 and "Mike Driver: 6" in CALLS[-1]
+    assert d.run_once() == NOTHING and heard == ["F1", "F2"]

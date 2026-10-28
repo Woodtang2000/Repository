@@ -190,7 +190,59 @@ class Desk:
     def thread(self, channel: str, m: dict) -> list[dict]:
         if not m.get("reply_count"):
             return [m]
-        return self.slack.conversations_replies(channel=channel, ts=m["ts"], include_all_metadata=True, limit=200)["messages"]
+        return self.hear(channel, self.slack.conversations_replies(channel=channel, ts=m["ts"], include_all_metadata=True,
+                                                                   limit=200)["messages"])
+
+    def hear(self, channel: str, msgs: list[dict]) -> list[dict]:
+        """Voice messages (a driver holds the mic in Slack, gloves on): each clip's words become the message's text, so
+        it's read like anything typed. Transcribed once (ElevenLabs, webchat.transcribe), kept in voice_notes.json;
+        the first time, Donna posts what she heard so the driver can check it."""
+        clips = [(m, f) for m in msgs if not _is_bot(m, self.me) for f in m.get("files") or []
+                 if f.get("subtype") == "slack_audio" or str(f.get("mimetype", "")).startswith("audio/")]
+        if not clips:
+            return msgs
+        path = os.path.join(self.data_dir, "voice_notes.json")
+        try:
+            heard = json.load(open(path))
+        except (OSError, ValueError):
+            heard = {}
+        new = False
+        for m, f in clips:
+            words = heard.get(f.get("id", ""))
+            if words is None and f.get("id") and not _seen(m, self.me):
+                words = self.transcribe_clip(f)
+                if words is None:
+                    continue  # not reachable now: the next pass tries again
+                heard[f["id"]], new = words, True
+                self.post(channel, f"<@{m.get('user')}> 🎙️ Heard: _{words or '(nothing I could make out: type it, or try again)'}_",
+                          {"kind": "heard", "src_ts": m["ts"], "driver_id": m.get("user")},
+                          thread_ts=m.get("thread_ts") if m.get("thread_ts") not in (None, m["ts"]) else None)
+            if words and words not in m.get("text", ""):
+                m["text"] = (m.get("text", "").strip() + " " + words).strip()
+        if new:
+            with open(path + ".tmp", "w") as fh:
+                json.dump(heard, fh)
+            os.replace(path + ".tmp", path)
+        return msgs
+
+    def transcribe_clip(self, f: dict) -> str | None:
+        import urllib.request
+        from .webchat import transcribe
+        url = f.get("url_private_download") or f.get("url_private")
+        token = getattr(self.slack, "token", None) or os.environ.get("SLACK_BOT_TOKEN", "")
+        if not url or (f.get("size") or 0) > 25_000_000:
+            return ""
+        try:
+            req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
+            with urllib.request.urlopen(req, timeout=60) as r:
+                audio, ctype = r.read(25_000_001), r.headers.get("Content-Type", "")
+        except Exception as e:
+            print(time.strftime("%H:%M"), "voice message not downloaded:", str(e)[:200], flush=True)
+            return None
+        if ctype.startswith("text/html"):  # Slack's sign-in page: the app is missing files:read
+            print(time.strftime("%H:%M"), "voice message: Slack sent a web page, not audio (add files:read to the app)", flush=True)
+            return None
+        return transcribe(audio, f.get("name") or "clip.m4a", f.get("mimetype") or "audio/mp4")
 
     def post(self, channel: str, text: str, payload: dict, posted: list | None = None, **kw) -> dict:
         r = _post(self.slack, channel, text, payload, **kw)
@@ -477,8 +529,9 @@ class Desk:
         top = list(reversed(list(_messages(self.slack, cid, oldest, include_all_metadata=True))))
         self.fetched[cid] = {m["ts"] for m in top}
         bot_posts = [m for m in top if _is_bot(m, self.me) and meta(m)]
+        self.hear(cid, top)
         for m in top:
-            if m.get("subtype") or _is_bot(m, self.me):
+            if m.get("subtype") not in (None, "file_share") or _is_bot(m, self.me):
                 continue
             key = (cid, m["ts"])
             if not _seen(m, self.me) and self.phone_add(name, cid, m):
@@ -535,7 +588,7 @@ class Desk:
 
     def _answers(self, t: dict, src: dict) -> bool:
         """A thread reply the bot should read: from whoever posted, or anyone not in the office, not yet 👀."""
-        return (not _is_bot(t, self.me) and t.get("subtype") in (None, "thread_broadcast") and not _seen(t, self.me)
+        return (not _is_bot(t, self.me) and t.get("subtype") in (None, "thread_broadcast", "file_share") and not _seen(t, self.me)
                 and (t.get("user") == src.get("user") or not self.is_staff(t.get("user"))))
 
     # ---- office side ----------------------------------------------------------------------------------------
@@ -1436,7 +1489,7 @@ class Desk:
                 return
             if channel not in watched:
                 return
-            if ev.get("type") == "message" and not ev.get("bot_id") and ev.get("subtype") in (None, "thread_broadcast") \
+            if ev.get("type") == "message" and not ev.get("bot_id") and ev.get("subtype") in (None, "thread_broadcast", "file_share") \
                     and channel != self.desk_id and ev.get("user") != self.me \
                     and not (ev.get("thread_ts") not in (None, ev.get("ts")) and self.is_staff(ev.get("user"))):
                 try:
@@ -1452,7 +1505,7 @@ class Desk:
             own_ticket = (channel == self.desk_id and ev.get("type") == "message" and ev.get("subtype") is None
                           and ev.get("user") == self.me and not ev.get("thread_ts"))  # texts/email/phone posting one
             if ev.get("type") in ("message", "reaction_added") and (ev.get("user") != self.me or own_ticket):
-                new_top = (ev.get("type") == "message" and ev.get("subtype") is None and channel != self.desk_id
+                new_top = (ev.get("type") == "message" and ev.get("subtype") in (None, "file_share") and channel != self.desk_id
                            and ev.get("thread_ts") in (None, ev.get("ts")))
                 todo.put((channel, ev.get("ts") if new_top else None, 0))
 

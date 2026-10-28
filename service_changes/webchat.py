@@ -770,6 +770,35 @@ def smooth(text: str) -> str:
     return re.sub(r",\s*,", ",", text).strip()
 
 
+def transcribe(audio: bytes, filename: str = "clip.m4a", mimetype: str = "audio/mp4") -> str | None:
+    """A voice message as text, from ElevenLabs speech to text (ELEVENLABS_STT_MODEL, default scribe_v1); None when
+    it isn't set up or fails. The API key needs the Speech to Text permission."""
+    key = os.environ.get("ELEVENLABS_API_KEY", "").strip()
+    if not key or not audio:
+        return None
+    boundary = "donna" + secrets.token_hex(8)
+    safe = re.sub(r"[^\w.-]", "_", filename)
+    parts = [(f'--{boundary}\r\nContent-Disposition: form-data; name="model_id"\r\n\r\n'
+              f'{os.environ.get("ELEVENLABS_STT_MODEL", "scribe_v1")}\r\n').encode(),
+             (f'--{boundary}\r\nContent-Disposition: form-data; name="tag_audio_events"\r\n\r\nfalse\r\n').encode(),
+             (f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="{safe}"'
+              f'\r\nContent-Type: {mimetype or "application/octet-stream"}\r\n\r\n').encode() + audio + b"\r\n",
+             f"--{boundary}--\r\n".encode()]
+    req = urllib.request.Request("https://api.elevenlabs.io/v1/speech-to-text", data=b"".join(parts), method="POST",
+                                 headers={"xi-api-key": key, "Content-Type": f"multipart/form-data; boundary={boundary}"})
+    try:
+        t0 = time.time()
+        with urllib.request.urlopen(req, timeout=120) as r:
+            text = (json.loads(r.read()).get("text") or "").strip()
+        print(time.strftime("%H:%M"), f"donna ears: {len(audio) // 1000} kB heard in {time.time() - t0:.1f}s", flush=True)
+        return text
+    except urllib.error.HTTPError as e:
+        print(time.strftime("%H:%M"), "donna ears (ElevenLabs) failed:", e.code, e.read(300)[:300], flush=True)
+    except Exception as e:
+        print(time.strftime("%H:%M"), "donna ears (ElevenLabs) failed:", str(e)[:200], flush=True)
+    return None
+
+
 def speak(text: str) -> bytes | None:
     """Donna's voice: `text` as MP3 from ElevenLabs, or None when it isn't set up or doesn't answer. ELEVENLABS_VOICE_ID
     picks the voice (from the ElevenLabs Voice Library); ELEVENLABS_MODEL trades speed for quality
