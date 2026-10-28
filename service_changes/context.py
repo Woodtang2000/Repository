@@ -75,6 +75,7 @@ class Alliant:
     sku: dict[tuple, str] = field(default_factory=dict)  # (account, item) or (account, wearer#, "ITEM SIZE") -> Alliant SKU
     skus: dict[str, dict] = field(default_factory=dict)  # SKU -> its details from skus.csv (no prices)
     ar: dict[str, dict] = field(default_factory=dict)  # account -> balance and last payment (ar.csv): Scott and Bill only
+    sku_counts: dict[tuple, int] = field(default_factory=dict)  # (sku, item name) -> accounts using it, company-wide
     cards: dict[str, dict] = field(default_factory=dict)  # account -> record card header (stop_sequence, special_instructions, ...)
     as_of: str = ""  # date of the export the data came from, e.g. "Oct 3"
     exported_at: datetime | None = None  # when the data was exported from Alliant (feed_done.txt, else file time)

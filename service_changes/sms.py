@@ -241,7 +241,19 @@ def only(alliant: Alliant, accounts: list[str]) -> Alliant:
         sku={k: v for k, v in alliant.sku.items() if k[0] in keep},
         cards={a: v for a, v in alliant.cards.items() if a in keep},
         holds={a: v for a, v in alliant.holds.items() if a in keep},
+        ar={},  # balances never travel with a customer's data
+        sku_counts=sku_counts(alliant),  # how many accounts use each SKU (no account in it): the ticket's "usual" SKU
     )
+
+
+def sku_counts(alliant: Alliant) -> dict[tuple, int]:
+    if alliant.sku_counts:
+        return alliant.sku_counts
+    out: dict[tuple, int] = {}
+    for key, sku in alliant.sku.items():
+        if len(key) == 2 and sku:
+            out[(sku, key[1])] = out.get((sku, key[1]), 0) + 1
+    return out
 
 
 def customer_facts(alliant: Alliant, account: str) -> str:

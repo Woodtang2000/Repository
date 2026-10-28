@@ -468,3 +468,15 @@ def test_new_item_ticket_names_the_usual_sku():
     assert usual_sku(a, "bar mops") == ("5-01-01", "TOWEL BAR MOP GOLD STRIPE", 3)
     assert usual_sku(a, "3x5 mat") is None  # two colors, one each: a person picks
     assert usual_sku(a, "") is None
+
+
+def test_usual_sku_works_on_a_texters_narrowed_data():
+    from .checks import usual_sku
+    from .context import Alliant, Customer
+    from .sms import only
+    a = Alliant(customers=[Customer("5045-1-00000", "HOMER GOLF COURSE", "9", ["Thu"])],
+                sku={("A1", "TOWEL BAR MOP GOLD STRIPE"): "5-01-01", ("A2", "TOWEL BAR MOP GOLD STRIPE"): "5-01-01"},
+                ar={"A1": {"balance": "10"}, "5045-1-00000": {"balance": "5"}})
+    mine = only(a, ["5045-1-00000"])
+    assert mine.sku == {} and mine.ar == {}  # nothing of another account's, and no balances at all
+    assert usual_sku(mine, "bar mops") == ("5-01-01", "TOWEL BAR MOP GOLD STRIPE", 2)

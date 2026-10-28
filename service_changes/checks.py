@@ -427,14 +427,13 @@ def usual_sku(alliant: Alliant, item: str | None) -> tuple[str, str, int] | None
     words = [w.rstrip("s") for w in re.findall(r"[a-z0-9]{2,}", (item or "").lower()) if w not in ("the", "and", "more", "new")]
     if not words:
         return None
-    counts: dict[tuple[str, str], int] = {}
-    for key, sku in alliant.sku.items():
-        if len(key) != 2 or not sku:
-            continue
-        name = key[1]
-        low = name.lower()
-        if all(re.search(rf"\b{re.escape(w)}", low) for w in words):
-            counts[(sku, name)] = counts.get((sku, name), 0) + 1
+    every: dict[tuple[str, str], int] = dict(alliant.sku_counts)  # company-wide, also on a customer's narrowed copy
+    if not every:
+        for key, sku in alliant.sku.items():
+            if len(key) == 2 and sku:
+                every[(sku, key[1])] = every.get((sku, key[1]), 0) + 1
+    counts = {(sku, name): n for (sku, name), n in every.items()
+              if all(re.search(rf"\b{re.escape(w)}", name.lower()) for w in words)}
     if not counts:
         return None
     ranked = sorted(counts.items(), key=lambda kv: -kv[1])
