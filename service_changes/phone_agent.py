@@ -252,12 +252,12 @@ def _tool(hook: dict, name: str, url: str, token: str) -> dict:
     desc, fields = FIELDS[name]
     t.update(name=name, description=desc)
     api = t["api_schema"]
-    api.update(url=f"{url}/api/phone/tool/{name}", method="POST")
+    # The key rides in the address: ElevenLabs sends a webhook's URL exactly as written (a header copied from the Donna
+    # agent can be one of its stored secrets, which then isn't this key).
+    api.update(url=f"{url}/api/phone/tool/{name}?key={token}", method="POST")
     api.pop("query_params_schema", None)
     api.pop("path_params_schema", None)
-    old = api.get("request_headers") or {}
-    sample = next(iter(old.values()), "")
-    api["request_headers"] = {"X-Donna-Key": token if isinstance(sample, str) else {**sample, "value": token}}
+    api["request_headers"] = {}
     body = api.get("request_body_schema") or {"type": "object", "properties": {}}
     props = body.get("properties") or {}
     dyn = next((p for p in props.values() if any(isinstance(v, str) and v == "donna_session" for v in p.values())), None)

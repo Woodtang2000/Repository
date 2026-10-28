@@ -536,7 +536,7 @@ def make_handler(chat: Chat, public_url: str):
                 return self._phone(path)
             if path == "/v1/chat/completions":
                 return self._agent()
-            m = re.fullmatch(r"/api/phone/tool/(\w+)", path)
+            m = re.fullmatch(r"/api/phone/tool/(\w+)", path.split("?")[0])
             if m:  # the phone lines' ElevenLabs agents (phone_agent.py)
                 return self._phone_tool(m.group(1))
             if path == "/api/donna/tool":
@@ -717,7 +717,7 @@ def make_handler(chat: Chat, public_url: str):
             """A tool call from a phone line's ElevenLabs agent, with PHONE_AGENT_TOKEN in X-Donna-Key."""
             import hmac
             key = os.environ.get("PHONE_AGENT_TOKEN", "")
-            given = (self.headers.get("X-Donna-Key") or "").strip()
+            given = (self.headers.get("X-Donna-Key") or (parse_qs(urlparse(self.path).query).get("key") or [""])[0]).strip()
             if len(key) < 24 or not hmac.compare_digest(given.encode(), key.encode()) or not getattr(chat, "phone", None):
                 print(time.strftime("%H:%M"), f"phone tool {name}: refused ("
                       + ("no PHONE_AGENT_TOKEN on the server" if len(key) < 24 else "phone lines not set up here"
