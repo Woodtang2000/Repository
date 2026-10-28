@@ -536,6 +536,9 @@ def make_handler(chat: Chat, public_url: str):
                 return self._phone(path)
             if path == "/v1/chat/completions":
                 return self._agent()
+            m = re.fullmatch(r"/api/phone/tool/(\w+)", path)
+            if m:  # the phone lines' ElevenLabs agents (phone_agent.py)
+                return self._phone_tool(m.group(1))
             if path == "/api/donna/tool":
                 return self._agent_tool()
             if path == "/api/donna/agent":
@@ -709,6 +712,28 @@ def make_handler(chat: Chat, public_url: str):
             if not who:
                 time.sleep(1)
             return who
+
+        def _phone_tool(self, name: str):
+            """A tool call from a phone line's ElevenLabs agent, with PHONE_AGENT_TOKEN in X-Donna-Key."""
+            import hmac
+            key = os.environ.get("PHONE_AGENT_TOKEN", "")
+            given = (self.headers.get("X-Donna-Key") or "").strip()
+            if len(key) < 24 or not hmac.compare_digest(given.encode(), key.encode()) or not getattr(chat, "phone", None):
+                time.sleep(1)
+                return self._send(401, b'{"error":"bad key"}', "application/json")
+            try:
+                n = min(int(self.headers.get("Content-Length") or 0), 20000)
+                body = json.loads(self.rfile.read(n) or b"{}")
+                if "_tools" not in chat.__dict__:
+                    from .phone_agent import PhoneTools
+                    chat._tools = PhoneTools(chat.phone)
+                out = chat._tools.handle(name, body if isinstance(body, dict) else {})
+            except ValueError:
+                return self._send(400, b'{"error":"bad request"}', "application/json")
+            except Exception as e:
+                print(time.strftime("%H:%M"), "phone tool error:", str(e)[:200], flush=True)
+                out = {"error": "Something went wrong on my end. Take a message for the office instead."}
+            self._send(200, json.dumps(out).encode(), "application/json")
 
         def _owner(self, given: str) -> bool:
             """Is this Scott's key (OWNER_VOICE_TOKEN, 24+ characters)? A wrong one waits a second, to slow guessing."""
