@@ -869,7 +869,8 @@ class Desk:
                 if m:  # Donna's workstation reporting a finished job
                     try:
                         body = json.loads(self.rfile.read(min(int(self.headers.get("Content-Length") or 0), 20000)) or b"{}")
-                        out = desk.jobs().result(m.group(1), str(body.get("status") or ""), str(body.get("note") or ""))
+                        out = desk.jobs().result(m.group(1), str(body.get("status") or ""), str(body.get("note") or ""),
+                                                 str(body.get("readback") or ""))
                     except Exception as e:
                         print(time.strftime("%H:%M"), "alliant jobs error:", e, flush=True)
                         return self.reply(500, b"{}")
@@ -1041,10 +1042,44 @@ class Desk:
         else:
             self.post(p["src_channel"], msg, {"kind": "readback", "src_ts": p["src_ts"], "driver_id": p.get("driver_id"),
                                               "msgs": p.get("msgs", [])})
+        try:
+            self.change_email(p, customer)
+        except Exception as e:  # the email is extra: never hold up the ticket over it
+            print(time.strftime("%H:%M"), "change email not sent:", e, flush=True)
         self.slack.chat_update(channel=self.desk_id, ts=t["ts"], text="",
                                attachments=shrink(self.slack, self.desk_id, t, GREEN, stamp(who, "Entered") + " · readback sent"),
                                metadata={"event_type": KIND, "event_payload": {**p, "kind": "done", "done_at": time.time(),
                                                                                "entered_by": who}})
+
+    def change_email(self, p: dict, customer: str) -> list[str]:
+        """The account's invoice contact (who pays the bills; the Alliant card's email) gets an email confirming the
+        change. CHANGE_EMAILS: "customer" (default: changes the customer asked for by text, email or phone), "all"
+        (drivers' too) or "off". Returns who it went to."""
+        mode = os.environ.get("CHANGE_EMAILS", "customer").lower()
+        src, acct = p.get("src_channel", ""), p.get("account", "")
+        if mode == "off" or not acct or not customer or (mode != "all" and src not in ("text", "email", "phone")):
+            return []
+        from .context import company_for
+        from .sms import plain
+        card = self.alliant.cards.get(acct, {})
+        already = (p.get("email_to") or "").lower()  # an emailed request got its readback in its own thread
+        to = [e for e in dict.fromkeys(x.strip().lower() for x in re.split(r"[;,\s]+", card.get("email") or "")
+                                       if re.fullmatch(r"[^@\s]+@[^@\s]+\.\w+", x.strip()))
+              if e != already]
+        if not to:
+            return []
+        name = next((c.name for c in self.alliant.customers if c.account == acct), card.get("name", acct)).title()
+        company = company_for(acct)
+        what = re.sub(r"^All done!\s*", "", plain(customer).split("\nThanks")[0]).strip()
+        how = {"text": "by text", "email": "by email", "phone": "by phone"}.get(src, "through your route driver")
+        from . import bird
+        for e in to:
+            bird.send(e, f"{company}: a change to your service for {name}",
+                      f"Hello,\n\nThis confirms a change to your {company} service for {name} ({acct}), requested {how} "
+                      f"and entered today:\n\n{what}\n\nIf this doesn't look right, just reply to this email or call us at "
+                      f"(907) 222-7738.\n\nThank you,\nDonna\n{company}", key=f"change/{acct}/{p.get('src_ts', '')}")
+        print(time.strftime("%H:%M"), f"change email sent for {acct} to {len(to)} invoice contact(s)", flush=True)
+        return to
 
     def verify_pass(self, now: float) -> None:
         """The morning after tickets are ✅'d, check them against the new Alliant export (verify.py) and tell the

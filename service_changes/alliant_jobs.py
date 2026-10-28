@@ -122,7 +122,7 @@ class Jobs:
             self.save(data)
             return job
 
-    def result(self, job_id: str, status: str, note: str) -> str:
+    def result(self, job_id: str, status: str, note: str, readback: str = "") -> str:
         """She's finished a job: entered (readback goes out, as if the office ✅'d it) or needs_person (back to the
         office with her reason). Her note goes in the ticket's thread, never to the customer."""
         from .desk import KIND, meta
@@ -145,6 +145,11 @@ class Jobs:
             self.desk.slack.chat_postMessage(channel=self.desk.desk_id, thread_ts=job_id, text=f"🤖 Donna: {note}"[:3000],
                                              unfurl_links=False)
         if job["status"] == "entered":
+            if readback.strip():  # what she actually did on Alliant's screen beats the ticket's (last night's data)
+                p = dict(meta(t))
+                name = next((c.name for c in getattr(self.desk.alliant, "customers", []) if c.account == p.get("account")), "")
+                p["readback"] = f"✅ {p.get('account', '')} {name} – {readback.strip()[:300]}"
+                t = {**t, "metadata": {"event_type": KIND, "event_payload": p}}
             self.desk.send_readback(t, self.desk.me, [])
             return "entered"
         p = meta(t)

@@ -83,7 +83,10 @@ notes rather than guessing. The house rules below still win over the notes.
 ## Reporting
 
     curl -s -X POST -H "Authorization: Bearer $(cat ~/.donna_worker_token)" -H "Content-Type: application/json" \
-      -d '{"status": "entered", "note": "..."}' https://chat.snowwhitelinen.com/api/donna/jobs/<id>/result
+      -d '{"status": "entered", "note": "...", "readback": "..."}' https://chat.snowwhitelinen.com/api/donna/jobs/<id>/result
 
 `status` is `entered` or `needs_person`. The note goes in the ticket's Slack thread for the office, never to the
-customer. Leave Alliant on the Customer Center screen when you're done.
+customer. With `entered`, also send `"readback"`: one short line for the customer saying what is now on their account,
+in plain words, no SKUs, prices or Alliant jargon ("bar mops changed from 50 to 60 a week", "50 bar mops added, weekly
+on Tuesdays"). It's what the customer is texted and what the person who pays the bills is emailed, so it must match
+what you actually saved. Leave Alliant on the Customer Center screen when you're done.

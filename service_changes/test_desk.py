@@ -726,3 +726,28 @@ def test_account_number_groups_and_totals():
     facts = group_facts(a, ["4000-1-00800", "4000-1-01606"], "how many mats in all of 4000")
     assert "ALL MAT ITEMS combined: 10 per delivery, inventory 10, 2 different items, at 2 of 2 locations" in facts
     assert "MAT CONFETTI GREY 3X10 (10-10-02): 8 per delivery, inventory 8, at 2 locations" in facts
+
+
+def test_change_email_to_the_invoice_contact(monkeypatch):
+    from types import SimpleNamespace
+    from .context import Alliant, Customer
+    from . import bird
+    sent = []
+    monkeypatch.setattr(bird, "send", lambda to, subject, text, in_reply_to="", key="": sent.append((to, subject, text)))
+    monkeypatch.delenv("CHANGE_EMAILS", raising=False)
+    d = SimpleNamespace(alliant=Alliant(customers=[Customer("5045-1-00000", "HOMER GOLF COURSE", "5", ["Tue"])],
+                                        cards={"5045-1-00000": {"email": "ap@homergolf.com; Owner@HomerGolf.com"}}))
+    customer = "All done! bar mops changed from 50 to 60 a week (Homer Golf Course). Donna entered it for you.\nThanks so much!"
+    to = desk.Desk.change_email(d, {"src_channel": "text", "account": "5045-1-00000", "src_ts": "S1"}, customer)
+    assert to == ["ap@homergolf.com", "owner@homergolf.com"] and len(sent) == 2
+    assert "Snow White Linen: a change to your service for Homer Golf Course" == sent[0][1]
+    assert "requested by text" in sent[0][2] and "bar mops changed from 50 to 60 a week" in sent[0][2]
+    assert "Thanks so much" not in sent[0][2]
+    assert desk.Desk.change_email(d, {"src_channel": "C123", "account": "5045-1-00000"}, customer) == []  # a driver's: not by default
+    monkeypatch.setenv("CHANGE_EMAILS", "all")
+    assert desk.Desk.change_email(d, {"src_channel": "C123", "account": "5045-1-00000"}, customer)
+    monkeypatch.setenv("CHANGE_EMAILS", "off")
+    assert desk.Desk.change_email(d, {"src_channel": "text", "account": "5045-1-00000"}, customer) == []
+    monkeypatch.delenv("CHANGE_EMAILS")
+    assert desk.Desk.change_email(d, {"src_channel": "email", "account": "5045-1-00000", "email_to": "ap@homergolf.com"},
+                                  customer) == ["owner@homergolf.com"]  # the emailer already has the readback

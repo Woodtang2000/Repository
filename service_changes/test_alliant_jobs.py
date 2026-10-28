@@ -106,7 +106,7 @@ def test_workstation_key(monkeypatch):
     h.path, h.headers = "/api/donna/jobs/rules", {"Authorization": "Bearer " + "w" * 32}
     h._send = lambda code, b, ctype, cache=0: sent.append((code, b))
     h.do_GET()
-    assert sent[-1][0] == 200 and b"Never change anything in the **Billing** box" in sent[-1][1]
+    assert sent[-1][0] == 200 and b"the only field you may change is **Auto Count**" in sent[-1][1]
 
 
 def test_owner_can_always_send_a_ticket(tmp_path):
@@ -137,3 +137,13 @@ def test_workstation_reads_the_alliant_notes(tmp_path, monkeypatch):
     assert get("/api/donna/jobs/notes/02%20Customer%20Items.md") == (200, b"New Item: pick the SKU")
     assert get("/api/donna/jobs/notes/../secret.md")[0] == 404
     assert get("/api/donna/jobs/notes", key="nope")[0] == 401
+
+
+def test_her_readback_is_what_she_actually_did(tmp_path):
+    jobs, slack, t, readbacks = setup(tmp_path)
+    jobs.desk.alliant = SimpleNamespace(customers=[SimpleNamespace(account="1205-1-00004", name="MIDAS #4")])
+    jobs.desk.send_readback = lambda t, user, notes: readbacks.append(t["metadata"]["event_payload"]["readback"])
+    jobs.queue(tap("UANA"))
+    jobs.next()
+    jobs.result("100.1", "entered", "screen 120, set 150", readback="bar mops changed from 120 to 150 a week")
+    assert readbacks == ["✅ 1205-1-00004 MIDAS #4 – bar mops changed from 120 to 150 a week"]
