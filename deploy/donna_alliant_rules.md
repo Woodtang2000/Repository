@@ -30,8 +30,9 @@ Account 1205-1-00004 = Account **1205**, Branch **1** (Snow White; 2 = The Laund
      b. **Go To Customer** → **Customer Catalog** → add the SKU from the account's available SKUs.
      c. **Customer Items** → **New Item** → that SKU: quantity as both inventory and autocount, the ticket's frequency
         (weekly if it says so) on the customer's delivery day.
-     In both catalogs, never type or change a price: leave whatever Alliant fills in. If a catalog won't take the SKU
-     without a price typed in, stop: `needs_person` ("SKU 5-01-01 needs a price in the account catalog").
+     In both catalogs, keep the **suggested price Alliant fills in from the SKU** exactly as it is: never type, round or
+     change a price. If no price is suggested and one is required, stop: `needs_person` ("SKU 5-01-01 has no suggested
+     price in the account catalog"). In your note say "suggested price kept", never the amount.
    - **Wearers**: Add Wearers (name, sizes, quantities from the ticket), Stop Wearer.
    - **Customer Entry**: address, phone, contact only.
 5. Check the current count on screen matches the ticket's "current" number before changing it. If it differs (someone
