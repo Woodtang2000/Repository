@@ -15,6 +15,10 @@ the queue.
   `claude /login` and in the Claude extension in her Chrome), or sign the Claude extension out of the other browsers.
 - Run `claude --chrome` once by hand and accept anything it asks (permissions, which browser), then `/exit`.
 
+Her background runs load **none of her Claude account's connectors** (Gmail, Drive, Slack…):
+`ENABLE_CLAUDEAI_MCP_SERVERS=false` in the script. An Alliant job only needs Chrome; a connector would let an
+unattended run read her inbox (sign-in codes) or post as her.
+
 ## Install (paste in Terminal on the Mac mini, as Donna's user)
 
 ```
@@ -29,7 +33,7 @@ JOB="$(curl -s --max-time 20 -H "Authorization: Bearer $KEY" https://chat.snowwh
 case "$JOB" in ""|*'"job": null'*) exit 0 ;; esac
 echo "=== $(date) job: $JOB" >> "$LOG"
 cd "$HOME/Donna"
-claude -p --chrome --permission-mode auto "You are Donna at your Alliant workstation. This job is already taken from \
+ENABLE_CLAUDEAI_MCP_SERVERS=false claude -p --chrome --permission-mode auto "You are Donna at your Alliant workstation. This job is already taken from \
 your queue for you (don't call jobs/next): $JOB
 Get your rules first: curl -s -H \"Authorization: Bearer \$(cat ~/.donna_worker_token)\" \
 https://chat.snowwhitelinen.com/api/donna/jobs/rules . Follow them exactly, including reading your Alliant notes. \
