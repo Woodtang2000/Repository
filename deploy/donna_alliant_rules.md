@@ -59,8 +59,9 @@ notes rather than guessing. The house rules below still win over the notes.
 
 ## Never
 
-- Never change anything in the **Billing** box: Unit Price, Price Type, Calc. Unit Price, Inv Price, Price Frequency,
-  Taxable. Never Ancillary Charges, Default Anc., or anything under A/R.
+- In the **Billing** box on Customer Items, the only field you may change is **Auto Count** (the per-delivery count;
+  set it with inventory as the ticket says). Never change Unit Price, Price Type, Calc. Unit Price, Inv Price, Price
+  Frequency, Bill Average, Taxable or Auto Count %. Never Ancillary Charges, Default Anc., or anything under A/R.
 - Never touch the **Locking** box, Stop Customer, Seasonal, or New Business on Customer Entry.
 - Never change an account the ticket doesn't name, and never more than the ticket asks.
 - Never type passwords or MFA codes. Never close or sign out of Alliant or the remote desktop.
