@@ -1,9 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#00506A"/><stop offset="1" stop-color="#002F3C"/></linearGradient>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#003746"/><stop offset="1" stop-color="#003746"/></linearGradient>
     <linearGradient id="hair" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#E2632B"/><stop offset=".55" stop-color="#C2401C"/><stop offset="1" stop-color="#8E2812"/></linearGradient>
-    <linearGradient id="gown" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FFC23A"/><stop offset="1" stop-color="#E39A08"/></linearGradient>
-    <radialGradient id="glow" cx=".5" cy=".42" r=".5"><stop offset="0" stop-color="#0B6B85"/><stop offset="1" stop-color="#0B6B85" stop-opacity="0"/></radialGradient>
+    <linearGradient id="gown" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#F9AF10"/><stop offset="1" stop-color="#E9A00C"/></linearGradient>
+    <radialGradient id="glow" cx=".5" cy=".42" r=".5"><stop offset="0" stop-color="#0A5165"/><stop offset="1" stop-color="#0A5165" stop-opacity="0"/></radialGradient>
   </defs>
   <rect width="1024" height="1024" fill="url(#bg)"/>
   <circle cx="512" cy="440" r="380" fill="url(#glow)"/>
@@ -17,7 +17,7 @@
   <path d="M462 560 L546 560 L556 716 Q505 740 452 716 Z" fill="#F1BB98"/>
   <path d="M462 590 Q505 630 546 590 L548 620 Q505 656 460 620 Z" fill="#DFA27F"/>
   <!-- necklace -->
-  <path d="M444 722 Q507 776 572 722" stroke="#F9AE12" stroke-width="5" fill="none"/>
+  <path d="M444 722 Q507 776 572 722" stroke="#F9AF10" stroke-width="5" fill="none"/>
   <circle cx="507" cy="760" r="10" fill="#FFD772" stroke="#E39A08" stroke-width="3"/>
   <!-- face -->
   <path d="M500 300 C580 300 618 370 614 450 C610 530 560 596 504 600 C448 596 396 530 392 450 C388 370 420 300 500 300 Z" fill="#F7CDAE"/>
@@ -45,6 +45,6 @@
   <path d="M330 470 C320 540 330 600 316 660" stroke="#F07A3C" stroke-width="8" fill="none" stroke-linecap="round" opacity=".55"/>
   <!-- gold earring peeking out -->
   <circle cx="394" cy="520" r="8" fill="#FFD772"/>
-  <path d="M394 528 L394 556" stroke="#F9AE12" stroke-width="4"/>
-  <circle cx="394" cy="562" r="9" fill="#F9AE12"/>
+  <path d="M394 528 L394 556" stroke="#F9AF10" stroke-width="4"/>
+  <circle cx="394" cy="562" r="9" fill="#F9AF10"/>
 </svg>
