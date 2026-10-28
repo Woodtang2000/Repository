@@ -9,7 +9,10 @@ for their own accounts only; a change becomes a ✅ ticket in #service-desk and 
 else can ask general questions; a new prospect goes to Bill in #sales-desk, and an existing customer calling from another
 number goes to the office as an unverified request to call back. Never prices, balances or contract terms.
 
-Employee line: call-outs (sick, late, absent), problems on route, and questions. Messages go to #employee-calls
+Employee line: drivers call in a customer change, gloves on ("Midas wants 50 more bar mops"): a caller whose number
+is on file (employee_phones.csv, or the phone in their Slack profile) is read back the change like in their route
+channel, and their "yes" makes the same ticket a post would, with the readback in the customer's route channel.
+Also call-outs (sick, late, absent), problems on route, and questions. Messages go to #employee-calls
 (EMPLOYEE_CALLS_CHANNEL) for the supervisors. Donna never asks why someone is sick, never pressures them, never mentions
 attendance counts and never decides excused or unexcused.
 
@@ -95,10 +98,21 @@ Get their name first if you don't have it.
 """
 
 
+DRIVER_RULES = """
+This caller is {name}, a Snow White employee (their number is on file). Drivers call to report a customer change,
+the same thing they'd post in their route channel: more or fewer of an item, a new total, stop or restart an item, a
+new item, a new or departing wearer and their sizes, a repair or inventory count, a hold or skipped week, a one-time
+order. Make sure you have the customer (and store number or department if they have several), the item, how many and
+whether that's MORE or the new TOTAL, and how often for a new item; for a wearer, the full name, garments and sizes.
+Then set action change with `summary` = the change in the driver's own words, as they'd type it ("Humpy's wants 50 more
+bar mops"). Don't say it's done or sent: the system reads it back to them next. One change at a time; then ask if
+there's anything else. You can't look up accounts on this call."""
+
+
 class Turn(BaseModel):
     say: str = Field(description="What Donna says next, spoken aloud.")
-    action: Literal["listen", "request", "lead", "message", "transfer", "goodbye"]
-    summary: str = Field("", description="For request or message: office-ready summary. For lead: what they need.")
+    action: Literal["listen", "request", "lead", "message", "transfer", "goodbye", "change"]
+    summary: str = Field("", description="For request, message or change: office-ready summary. For lead: what they need.")
     caller_name: str = ""
     business: str = Field("", description="For lead: the business name.")
     town: str = ""
@@ -156,6 +170,38 @@ class Phone:
         from .sms import load_phones
         return load_phones(os.path.join(self.data_dir, "customer_phones.csv")).get(digits(phone))
 
+    def staff(self, phone: str) -> dict | None:
+        """An employee calling from a number on file: employee_phones.csv (phone,slack_id,name), else the phone in their
+        Slack profile. {"user": Slack id, "name": ...}."""
+        want = digits(phone)
+        if len(want) < 10:
+            return None
+        import csv
+        path = os.path.join(self.data_dir, "employee_phones.csv")
+        if os.path.exists(path):
+            with open(path, newline="") as f:
+                for row in csv.DictReader(f):
+                    if digits(row.get("phone", "")) == want and (row.get("slack_id") or "").strip():
+                        return {"user": row["slack_id"].strip(), "name": (row.get("name") or "").strip()}
+        cache = self.__dict__.setdefault("profiles", {"at": 0, "by_phone": {}})
+        if time.time() - cache["at"] > 3600:
+            by_phone = {}
+            try:
+                cursor = None
+                while True:
+                    r = self.slack.users_list(limit=500, cursor=cursor)
+                    for u in r.get("members", []):
+                        p = u.get("profile") or {}
+                        if not u.get("deleted") and not u.get("is_bot") and len(digits(p.get("phone", ""))) == 10:
+                            by_phone[digits(p["phone"])] = {"user": u["id"], "name": p.get("real_name") or u.get("real_name") or ""}
+                    cursor = (r.get("response_metadata") or {}).get("next_cursor")
+                    if not cursor:
+                        break
+                cache.update(at=time.time(), by_phone=by_phone)
+            except Exception as e:
+                print(time.strftime("%H:%M"), "phone: Slack profiles not read:", str(e)[:200], flush=True)
+        return cache["by_phone"].get(want)
+
     def channel_id(self, name: str) -> str | None:
         for page in self.slack.conversations_list(types="public_channel,private_channel", exclude_archived=True, limit=1000):
             for c in page["channels"]:
@@ -191,7 +237,7 @@ class Phone:
     def start(self, form: dict) -> str:
         sid, caller, called = form.get("CallSid", ""), form.get("From", ""), form.get("To", "")
         line = "employees" if digits(called) == EMPLOYEE_LINE else "customers"
-        who = self.caller(caller) if line == "customers" else None
+        who = self.caller(caller) if line == "customers" else self.staff(caller)
         call = {"line": line, "from": caller, "who": who, "turns": [], "pending": None, "quiet": 0, "posted": 0,
                 "at": time.time()}
         with self.lock:
@@ -199,7 +245,9 @@ class Phone:
                 self.calls.pop(k)
             self.calls[sid] = call
         if line == "employees":
-            hello = "Hi, this is Donna on the employee line. Who am I speaking with, and what can I do for you?"
+            first = ((who or {}).get("name") or "").split()[0] if (who or {}).get("name") else ""
+            hello = (f"Hi {first}, it's Donna. What do you need?" if first else
+                     "Hi, this is Donna on the employee line. Who am I speaking with, and what can I do for you?")
         else:
             company = company_for(who["accounts"][0]) if who else "Snow White Linen"
             first = (who.get("name") or "").split()[0] if who and who.get("name") else ""
@@ -256,7 +304,10 @@ class Phone:
                   "The office is closed right now: take a message instead (action request, message or lead) and say "
                   "someone will call them back next business day.")
         if call["line"] == "employees":
-            return PERSONALITY + "\n\n" + EMPLOYEE_RULES.format(office=office)
+            known = DRIVER_RULES.format(name=call["who"].get("name") or "an employee") if call["who"] else (
+                "\nIf this caller wants to change a customer's service, take it as a message for the office (action "
+                "message): their number isn't on file, so you can't enter changes for them.")
+            return PERSONALITY + "\n\n" + EMPLOYEE_RULES.format(office=office) + known
         who = call["who"]
         if who:
             from .sms import customer_facts, only
@@ -277,6 +328,20 @@ class Phone:
 
     def ask(self, call: dict) -> Turn:
         said = call["turns"][-1]["content"] if call["turns"] else ""
+        if call.get("change") and call["line"] == "employees":  # her read-back or question about a driver's change
+            from .desk import NO, YES
+            c = call["change"]
+            if c.get("confirm") and YES.match(said):
+                call["change"] = None
+                self.send_change(call, c)
+                return Turn(say="Sent. You'll see the readback in the route channel once the office enters it. Anything else?",
+                            action="listen")
+            if c.get("confirm") and NO.match(said) and len(said.split()) <= 4:
+                call["change"] = None
+                return Turn(say="Okay, I won't send it. What should it be?", action="listen")
+            text = (f"{c['text']}\nCorrection: {said}" if c.get("confirm") else
+                    f"{c['text']}\nDonna asked: {c['asked']}\nThe answer: {said}")
+            return self.driver_change(call, text)
         helper = getattr(self, "helper", None)
         if call["line"] == "employees" and helper:  # "how do I…" in Alliant or on the handheld: from the training notes
             from .desk import ALLIANT_Q
@@ -293,7 +358,47 @@ class Phone:
         r = self.claude.beta.messages.parse(model=MODEL, max_tokens=800, system=self.system(call), messages=turns,
                                             output_format=Turn, betas=["server-side-fallback-2026-07-01"],
                                             fallbacks="default")
-        return r.parsed_output or Turn(say="Sorry, could you say that again?", action="listen")
+        turn = r.parsed_output or Turn(say="Sorry, could you say that again?", action="listen")
+        if turn.action == "change":
+            if call["line"] != "employees" or not call["who"]:
+                turn.action = "message" if call["line"] == "employees" else "request"
+            else:
+                return self.driver_change(call, turn.summary or said)
+        return turn
+
+    def driver_change(self, call: dict, text: str) -> Turn:
+        """A driver's change by phone, checked like a route-channel post: a question if anything's unclear, else the
+        readback and "Want me to send that in?" (their yes: send_change)."""
+        from .checks import check, readback, split_by_account
+        from .context import service_day
+        from .parser import parse_message
+        from .run import fill_item_matches, fix_department, other_route_account
+        from .sms import ACTIONABLE
+        import string
+        data = self.alliant()
+        name = call["who"].get("name") or "Driver"
+        now = time.time()
+        parsed = parse_message(self.claude, text, "employee-phone", f"{now:.6f}", data, author=f"{name} (driver, by phone)")
+        if parsed.category not in ACTIONABLE:
+            call["change"] = None
+            return Turn(say="I'll pass that to the office for you. Anything else?", action="message", summary=text)
+        other_route_account(parsed, data)
+        parts = split_by_account(parsed)
+        for part in parts:
+            fix_department(part, data, None, service_day(now))
+            fill_item_matches(self.claude, part, data)
+        results = [check(part, data) for part in parts]
+        questions = list(dict.fromkeys(q for r in results for q in r.questions))
+        if questions:
+            call["change"] = {"text": text, "asked": " ".join(questions[:2])}
+            return Turn(say=" ".join(questions[:2]), action="listen")
+        said = []
+        for r in results:
+            rb = re.sub(r"^✅\s*(\d{4}-\d-\d{5}\s*)?", "", readback(r)).strip()
+            who, _, what = rb.partition(" – ")
+            said.append(f"{string.capwords(who)}, {what}" if what else rb)
+        call["change"] = {"text": text, "parts": parts, "results": results, "confirm": True}
+        return Turn(say="; ".join(said) + ". Want me to send that in?", action="listen")
 
     def act(self, sid: str, call: dict, turn: Turn) -> str:
         call["turns"].append({"role": "assistant", "content": turn.say})
@@ -385,6 +490,35 @@ class Phone:
                 "readback": readback(result) if not result.questions else "", "driver": who.get("name", ""),
                 "driver_id": "", "account": parsed.account_number, "msgs": [], "sms_to": call["from"],
                 "expect": expectations(result) if not result.questions else []}})
+
+    def send_change(self, call: dict, c: dict) -> None:
+        """The driver said yes: a note in the customer's route channel (the readback lands under it, @mentioning them)
+        and the usual ticket in #service-desk, as if they'd posted it."""
+        from .checks import ticket
+        from .todo import attachment
+        from .verify import expectations
+        from .checks import readback
+        data = self.alliant()
+        driver, name = call["who"]["user"], call["who"].get("name") or "a driver"
+        for part, result in zip(c["parts"], c["results"]):
+            cust = next((x for x in data.customers if x.account == part.account_number), None)
+            where = self.channel_id(f"route-{cust.route}") if cust and part.account_number.split("-")[1:2] == ["1"] else None
+            if where is None:  # no route channel for it: their private messages with Donna
+                where = self.slack.conversations_open(users=driver)["channel"]["id"]
+            note = self.slack.chat_postMessage(channel=where, text=f"📞 <@{driver}> called this in: _{c['text'].splitlines()[0][:300]}_",
+                                               unfurl_links=False,
+                                               metadata={"event_type": "service_desk", "event_payload": {"kind": "phone_change"}})
+            link = self.slack.chat_getPermalink(channel=where, message_ts=note["ts"])["permalink"]
+            lines = ticket(result, data, with_readback=False).splitlines()
+            text = "\n".join(lines + ["", "> " + c["text"].splitlines()[0][:300],
+                                       f"<{link}|📞 {name} called it in> · React ✅ or type done when it's in Alliant"])
+            self.slack.chat_postMessage(
+                channel=self.channel_id(DESK_CHANNEL), text="", attachments=attachment(text, button=False), unfurl_links=False,
+                metadata={"event_type": "service_desk", "event_payload": {
+                    "kind": "ticket", "src_channel": where, "src_ts": note["ts"], "readback": readback(result),
+                    "driver": name, "driver_id": driver, "account": part.account_number or "", "msgs": [],
+                    "expect": expectations(result)}})
+        print(time.strftime("%H:%M"), f"phone: {name}'s change sent ({len(c['parts'])} ticket(s))", flush=True)
 
     def employee_message(self, call: dict, turn: Turn) -> None:
         from . import todo

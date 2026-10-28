@@ -200,3 +200,39 @@ def test_employee_how_to_comes_from_the_alliant_notes(desk):
     p2.helper = p.helper
     call(p2, "+19075550000", "+18668278398", "how do I add a new item in alliant")
     assert len(asked) == 1  # customers never get the internal notes
+
+
+def test_a_driver_calls_in_a_change_gloves_on(desk, monkeypatch, tmp_path):
+    """A driver whose number is on file says the change; Donna reads it back, their yes makes the same ticket a route
+    post would, with a note (and later the readback) in the customer's route channel."""
+    make, leads = desk
+    import service_changes.parser as parser
+    import service_changes.run as run
+    (tmp_path / "employee_phones.csv").write_text("phone,slack_id,name\n(907) 555-7777,UMIKE,Mike Driver\n")
+    monkeypatch.setattr(parser, "parse_message", lambda *a, **k: ParsedMessage(
+        category=Category.item_change, account_number="1205-1-00004", summary="towels",
+        changes=[Change(action=Action.set, item="shop towels", quantity=400)]))
+    monkeypatch.setattr(run, "fill_item_matches", lambda c, p, a: None)
+    p = make(phone.Turn(say="", action="change", summary="Midas wants shop towels to 400"),
+             channels=("service-desk", "employee-calls", "route-12"))
+    p.slack.chat_getPermalink = lambda channel, message_ts: {"permalink": "https://slack/x"}
+    post = p.slack.chat_postMessage
+    p.slack.chat_postMessage = lambda **kw: post(**kw) or {"ts": "9.9"}
+    xml = call(p, "+19075557777", "+18885197604", "midas wants shop towels to four hundred")
+    assert "Hi Mike, it's Donna" in xml[0]
+    assert "300 to 400" in xml[-1] and "Want me to send that in?" in xml[-1] and not p.slack.posts
+    xml.append(p.heard("CA1", {"SpeechResult": "yes"}))
+    assert "Sent." in xml[-1]
+    note, t = p.slack.posts
+    assert note["channel"] == "Croute-12" and "<@UMIKE> called this in" in note["text"]
+    assert t["channel"] == "Cservice-desk" and t["meta"]["kind"] == "ticket" and t["meta"]["driver_id"] == "UMIKE"
+    assert t["meta"]["src_channel"] == "Croute-12" and "Mike Driver called it in" in t["text"]
+
+
+def test_an_unknown_employee_number_cant_enter_changes(desk):
+    make, leads = desk
+    p = make(phone.Turn(say="I'll pass that on.", action="change", summary="Midas 50 more towels"))
+    p.slack.users_list = lambda **kw: {"members": []}
+    call(p, "+19075550000", "+18885197604", "midas wants 50 more towels")
+    [m] = p.slack.posts
+    assert m["meta"]["kind"] == "employee_call"
