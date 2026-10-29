@@ -430,6 +430,8 @@ class Phone:
     # ---- what reaches the office -----------------------------------------------------------------------------------
 
     def transcript(self, call: dict) -> str:
+        if not call["turns"]:  # a call on the ElevenLabs agents: its transcript is in ElevenLabs (Conversations)
+            return "_Full call transcript: ElevenLabs → the line's agent → Conversations._"
         return "\n".join(("> Caller: " if t["role"] == "user" else "> Donna: ") + t["content"] for t in call["turns"][-12:])
 
     def record(self, sid: str, call: dict, turn: Turn) -> None:

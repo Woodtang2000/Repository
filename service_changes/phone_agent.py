@@ -91,8 +91,7 @@ class PhoneTools:
             return {"error": "unknown tool"}
         c = self.call(body)
         said = str(body.get("summary") or body.get("said") or body.get("question") or "").strip()[:2000]
-        if said:
-            c["turns"].append({"role": "user", "content": said})
+        # (no transcript lines: on these calls Donna's tools get summaries, not the caller's own words)
         out = getattr(self, name)(c, body, said)
         print(time.strftime("%H:%M"), f"phone agent: {name} ({c['line']}, …{digits(c['from'])[-4:]})", flush=True)
         return out
