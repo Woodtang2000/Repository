@@ -76,10 +76,16 @@ def service_day(ts: str | float) -> str:
     return DAYS[datetime.fromtimestamp(float(ts), ALASKA).weekday()]
 
 
+LAUNDRY_GROUP_NUMBERS: set[str] = set()  # account numbers with any branch 2 customer (Alliant.from_dir fills it)
+
+
 def company_for(account: str | None) -> str:
-    """Which company signs a message to this account: branch 2 is The Laundry Group, everything else Snow White."""
+    """Which company signs a message to this account: branch 2 is The Laundry Group, and so is every location of an
+    account number that has any branch 2 customer (Scott: "a -2 in any of the customers: a Laundry Group customer for
+    all"); everything else Snow White."""
     parts = (account or "").split("-")
-    return "The Laundry Group" if len(parts) > 1 and parts[1] == "2" else "Snow White Linen"
+    tlg = len(parts) > 1 and (parts[1] == "2" or parts[0] in LAUNDRY_GROUP_NUMBERS)
+    return "The Laundry Group" if tlg else "Snow White Linen"
 
 
 def frequency_label(code: str | None) -> str | None:
@@ -161,6 +167,8 @@ class Alliant:
         import os
         f = lambda n: os.path.join(data_dir, n) if os.path.exists(os.path.join(data_dir, n)) else None
         data = cls.load(f("customers.csv"), f("current_items.csv"), f("garments.csv"), f("wearers.csv"))
+        LAUNDRY_GROUP_NUMBERS.clear()
+        LAUNDRY_GROUP_NUMBERS.update(c.account.split("-")[0] for c in data.customers if c.account.split("-")[1:2] == ["2"])
         data.load_aliases(f("aliases.csv") or os.path.join(os.path.dirname(__file__), "aliases.csv"))
         data.load_skus(f("skus.csv"))
         data.load_ar(f("ar.csv"))

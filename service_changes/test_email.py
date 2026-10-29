@@ -216,3 +216,13 @@ def test_one_email_to_both_donna_addresses_is_one_ticket(desk):
     assert len([p for p in slack.posts if p["meta"].get("kind") == "ticket"]) == 1
     ed.run_once()  # and the same one again on the next look: still one
     assert len([p for p in slack.posts if p["meta"].get("kind") == "ticket"]) == 1
+
+
+def test_a_branch_2_customer_anywhere_makes_the_whole_account_the_laundry_group(tmp_path):
+    from .context import Alliant, company_for
+    (tmp_path / "customers.csv").write_text("account,name,route,days\n1204-1-00000,KOBUK LODGE,1,Mon\n"
+                                            "1204-2-00001,KOBUK LODGE ANNEX,2,Tue\n5045-1-00000,HOMER GOLF COURSE,5,Tue\n")
+    Alliant.from_dir(str(tmp_path))
+    assert company_for("1204-1-00000") == "The Laundry Group" and company_for("1204-2-00001") == "The Laundry Group"
+    assert company_for("5045-1-00000") == "Snow White Linen"
+    Alliant.from_dir(str(tmp_path / "none"))  # leave no Laundry Group numbers behind for other tests

@@ -245,3 +245,69 @@ def add_items(base: str, token: str, opp_id: str, items: list[dict]) -> list[str
             print("opportunity product not added:", e, flush=True)
             missed.append(body["Description"])
     return missed
+
+
+# ---- contacts the office links to an account (sms.TextDesk.approve) -------------------------------------------------
+
+def split_name(name: str) -> tuple[str, str]:
+    """"Jane Smith at Midas" -> ("Jane", "Smith"); a Contact needs a last name."""
+    name = re.split(r"\s+(?:at|from|with|@)\s+", (name or "").strip(), maxsplit=1)[0].strip(" ,")
+    parts = name.split()
+    if not parts:
+        return "", "(name not given)"
+    return (" ".join(parts[:-1]), parts[-1]) if len(parts) > 1 else ("", parts[0])
+
+
+def sync_contact(accounts: list[str], name: str, email: str = "", phone: str = "") -> list[str]:
+    """A number or email the office just linked to Alliant accounts, onto the Salesforce Account whose Account Number
+    is the Alliant account's first part (5045-1-00000 -> 5045; 1204-1 and 1204-2 are the same Account): found among
+    its Contacts by email or phone, blanks are filled in (email, mobile) and nothing is overwritten; not found, a new
+    Contact. No such Account, or two: nothing is written. One line per Account; "⚠️" ones are for the office."""
+    if not configured():
+        return []
+    email, phone = (email or "").strip().lower(), _digits(phone)
+    first, last = split_name(name)
+    token, instance = _token()
+    base = f"{instance}/services/data/{API}"
+    query = lambda soql: _call("GET", f"{base}/query?" + urllib.parse.urlencode({"q": soql}), token).get("records") or []
+    out, done = [], set()
+    for num in dict.fromkeys(a.split("-")[0] for a in accounts):
+        try:
+            if not num.isdigit():
+                continue
+            found = query(f"SELECT Id, Name FROM Account WHERE AccountNumber = {_q(num)} LIMIT 3")
+            if len(found) != 1:
+                out.append(f"⚠️ {'no' if not found else 'more than one'} Salesforce account numbered {num}")
+                continue
+            acct = found[0]
+            if acct["Id"] in done:
+                continue
+            done.add(acct["Id"])
+            contacts = query(f"SELECT Id, Name, Email, MobilePhone, Phone FROM Contact WHERE AccountId = {_q(acct['Id'])} LIMIT 500")
+            hit = next((c for c in contacts if (email and (c.get("Email") or "").lower() == email) or
+                        (phone and phone in (_digits(c.get("MobilePhone")), _digits(c.get("Phone"))))), None)
+            if hit:
+                fill = {}
+                if email and not hit.get("Email"):
+                    fill["Email"] = email
+                if phone and not hit.get("MobilePhone") and _digits(hit.get("Phone")) != phone:
+                    fill["MobilePhone"] = phone
+                if fill:
+                    _call("PATCH", f"{base}/sobjects/Contact/{hit['Id']}", token, fill)
+                out.append(f"{hit['Name']} on {acct['Name']}: " + (
+                    "added " + " and ".join({"Email": "email", "MobilePhone": "mobile"}[k] for k in fill) if fill
+                    else "already there"))
+                continue
+            new = {"AccountId": acct["Id"], "LastName": last,
+                   "Description": "Added by Donna when the office linked them to the account."}
+            if first:
+                new["FirstName"] = first
+            if email:
+                new["Email"] = email
+            if phone:
+                new["MobilePhone"] = phone
+            _call("POST", f"{base}/sobjects/Contact", token, new)
+            out.append(f"{(first + ' ' + last).strip()} added to {acct['Name']}")
+        except Exception as e:  # never hold up the link over Salesforce
+            out.append(f"⚠️ Salesforce didn't take it for account {num}: {str(e)[:150]}")
+    return out

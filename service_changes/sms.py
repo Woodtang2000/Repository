@@ -914,6 +914,7 @@ class TextDesk:
         if request:
             p = {**(p or {}), "held": (p or {}).get("held", []) + [[request, sid or f"req-{time.time():.0f}"]]}
         now = self.save_contact(self.addr(key), accounts, name)
+        self.to_salesforce(self.addr(key), now, name)
         to = (p or {}).get("phone") or self.addr(key)
         names = " and ".join(self.name(self.alliant, a) for a in now)
         said, send = [self.set_up.format(names=names)], self.send
@@ -924,6 +925,20 @@ class TextDesk:
         finally:
             self.send = send
         self.send(to, "\n\n".join(dict.fromkeys(said)))  # the same acknowledgement twice reads as once
+
+    def to_salesforce(self, addr: str, accounts: list[str], name: str) -> None:
+        """The person just linked becomes (or fills in) a Contact on the Salesforce Account (salesforce.py); the
+        office hears only when it couldn't be done."""
+        from . import salesforce
+        if not salesforce.configured():
+            return
+        lines = salesforce.sync_contact(accounts, name, **({"phone": addr} if self.word == "text" else {"email": addr}))
+        for ln in lines:
+            print(time.strftime("%H:%M"), "salesforce:", ln, flush=True)
+        problems = [ln for ln in lines if ln.startswith("⚠️")]
+        if problems:
+            self.office(f"{self.icon} {self.masked(addr)} is linked, but Salesforce wasn't updated:\n" + "\n".join(problems),
+                        {"kind": "salesforce"})
 
     def ask(self, phone: str, lines: list[str], questions: list[str], convo: dict | None) -> None:
         msg = "Happy to! Just one quick question: " + questions[0] if len(questions) == 1 else \

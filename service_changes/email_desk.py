@@ -266,8 +266,8 @@ class EmailDesk(TextDesk):
         yet, by the address they wrote to."""
         from .context import company_for
         accounts = self.contacts().get(email_key(addr), {}).get("accounts") or []
-        if accounts:
-            return company_for(accounts[0])
+        if accounts:  # any Laundry Group account makes them a Laundry Group customer for all of it
+            return "The Laundry Group" if any(company_for(a) == "The Laundry Group" for a in accounts) else "Snow White Linen"
         return "The Laundry Group" if self.state["threads"].get(email_key(addr), {}).get("to_tlg") else "Snow White Linen"
 
     def _send(self, to: str, body: str) -> None:
