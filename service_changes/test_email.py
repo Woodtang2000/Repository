@@ -159,3 +159,14 @@ def test_emails_come_from_donna_with_her_picture(monkeypatch):
     assert b["from"] == {"email": "donna@mail.snowwhitelinen.com", "name": "Donna – The Laundry Group"}
     assert b["reply_to"] == ["service@snowwhitelinen.com"] and "866-TAP-TEXT (866-827-8398)" in b["text"]
     assert "donna-avatar.png" in b["html"] and "Bar mops to 60 a week." in b["html"] and "<b style" in b["html"]
+
+
+def test_an_owners_own_address_and_a_forged_staff_sender(desk, monkeypatch):
+    ed, slack, sent, inbox, seen = desk
+    monkeypatch.setenv("EMAIL_TRUSTED", "bill@dubinsky.com")
+    inbox.append(mail(1, "Bill@Dubinsky.com", "Fwd: Costco wants 200 more bar mops", name="Bill"))
+    inbox.append(mail(2, "scotty@snowwhitelinen.com", "Fwd: Costco wants 200 more bar mops", spf=False, name="Scott"))
+    ed.run_once()
+    tickets = [p for p in slack.posts if p["meta"].get("kind") == "ticket"]
+    assert [t["meta"]["email_to"] for t in tickets] == ["bill@dubinsky.com", "scotty@snowwhitelinen.com"]
+    assert "couldn't be verified" not in str(tickets[0]) and "couldn't be verified" in str(tickets[1])
