@@ -400,3 +400,12 @@ def test_drivers_field_guide_needs_its_link(monkeypatch):
     assert code == 200 and b"Donna Field Guide" in body and b"(888) 519-7604" in body and b"noindex" in body
     assert get("/drivers/route-guide-2026x/guide.pdf")[2] == "application/pdf"
     assert get("/drivers/route-guide-2026x/donna.png")[2] == "image/png"
+
+
+def test_website_chat_knows_what_items_are_for():
+    from .webchat import Chat
+    chat = Chat.__new__(Chat)
+    chat.facts = {"sw": "facts", "tlg": "facts"}
+    sw, tlg = chat.system("sw"), chat.system("tlg")
+    assert "ABOUT OUR ITEMS" in sw and "3x10, often called a runner" in sw and "yellow for restaurants" in sw
+    assert "ABOUT OUR ITEMS" not in tlg  # The Laundry Group's site is hospitals and hotels

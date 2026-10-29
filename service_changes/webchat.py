@@ -123,7 +123,12 @@ class Chat:
         portal += (f"\n\nQUOTE PAGE: a new business that wants a detailed quote can pick items and quantities at {quote} "
                    "(no prices shown; it goes straight to Bill). Offer it when they want a quote on specific items, and "
                    "still help here if they'd rather chat.")
-        return (c["rules"] + "\n\n" + SAFE.replace("{next_time}", next_time).replace("{portal}", portal) + "\n\nFACTS (approved by the owner; product names and anonymous averages from our "
+        from .context import PRODUCT_NOTES
+        items = ("" if site != "sw" else "\n\nABOUT OUR ITEMS (the owner's own words: use them to explain what something is "
+                 "for and to help a visitor pick; suggest the standard items and sizes first, custom ones only if they ask; "
+                 "never prices):\n" + "\n".join(PRODUCT_NOTES.values()))
+        return (c["rules"] + "\n\n" + SAFE.replace("{next_time}", next_time).replace("{portal}", portal) + items
+                + "\n\nFACTS (approved by the owner; product names and anonymous averages from our "
                 "own customers; use averages only as a starting point, never as a quote):\n" + self.facts[site]
                 + f"\n\nThe chat opened with: {c['greeting']}")
 
