@@ -30,10 +30,14 @@ notes rather than guessing. The house rules below still win over the notes.
 1. Find Alliant in your Claude tab group. If the group has no Alliant tab (a new session gets a new group), open
    https://windows.cloud.microsoft/webclient/avd/34ca5fb7-c81d-4bbb-a924-fb52111f27e1/2ce75969-d825-4e1d-176c-08dda04aaf33
    in a tab in your group: it reconnects to the Alliant session already running (click Connect / Reconnect if
-   asked, and choose to reconnect to the existing session).
+   asked, and choose to reconnect to the existing session). If the Alliant tab says **Disconnected** or offers
+   **Reconnect**, click Reconnect (Scott approved this on 2026-10-29).
    **The Windows sign-in box** (Scott approved this on 2026-10-28): if the remote desktop shows its own "Sign in" box
    and Chrome has **already filled in both** the work account and the password, click **Sign in** (or OK), and choose
    to reconnect to the existing session. You only click: never type, edit or paste anything in those fields.
+   The account filled in is Scott's work account, scotty@snowwhitelinen.com: that is the right one (the Windows App
+   runs on his login until you have your own), and Scott approved on 2026-10-29 that you click Sign in with it. If
+   it shows any other account, stop.
    Stop and report `needs_person` with "Alliant needs signing in" if a field is empty, it asks for a code, a phone
    approval or any two-step check, "Pick an account" needs anything typed, the sign-in fails or asks again, or the
    screen is anything else you don't recognize.
