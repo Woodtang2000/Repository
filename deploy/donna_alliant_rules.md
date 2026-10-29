@@ -78,7 +78,8 @@ notes rather than guessing. The house rules below still win over the notes.
 - Never touch the **Locking** box, Stop Customer, Seasonal, or New Business on Customer Entry.
 - Never change an account the ticket doesn't name, and never more than the ticket asks.
 - Never type, paste or change a password or MFA code (clicking Sign in on Chrome's filled-in box, step 1, is the
-  only sign-in you do). Never close or sign out of Alliant or the remote desktop.
+  only sign-in you do). Never sign out of Windows or close the Alliant program inside the remote desktop (closing
+  your own browser tab at the end, see Reporting, only disconnects it; Alliant keeps running for the next job).
 - Never put prices, balances, invoice amounts or anything from A/R in your note: notes are read in Slack.
 - Work only in the Alliant tab in your Claude tab group; never open other sites or other browsers.
 - If a ticket has open questions (❓), a ⚠️ warning, or asks for something these rules don't cover (putting an account
@@ -103,4 +104,14 @@ notes rather than guessing. The house rules below still win over the notes.
 The note goes in the ticket's Slack thread for the office, never to the customer. With `entered`, also send `"readback"`: one short line for the customer saying what is now on their account,
 in plain words, no SKUs, prices or Alliant jargon ("bar mops changed from 50 to 60 a week", "50 bar mops added, weekly
 on Tuesdays"). It's what the customer is texted and what the person who pays the bills is emailed, so it must match
-what you actually saved. Leave Alliant on the Customer Center screen when you're done.
+what you actually saved.
+
+## Finishing every job
+
+1. Leave Alliant on the Customer Center screen.
+2. After your report is sent, **close the Alliant tab you opened** in your Claude tab group (Scott approved this on
+   2026-10-28). That only disconnects this browser tab: the Windows session and Alliant keep running on the server,
+   and the next job reconnects to them. Don't use any Sign out, Log off or Disconnect menu inside the remote desktop;
+   just close the browser tab.
+3. If a reconnect ever lands on a Windows desktop **without Alliant open** (the server ended an idle session), don't
+   start Alliant yourself: report `needs_person` with "Alliant isn't open in the remote session".

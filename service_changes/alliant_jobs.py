@@ -22,7 +22,7 @@ from .todo import GOLD, GREY, body, restyle, stamp
 FILE = "alliant_jobs.json"
 ACTION = "donna_enter"
 # Her rules give her one phrase for it ("Alliant needs signing in"); a note that merely mentions a session isn't one.
-SIGNED_OUT = re.compile(r"alliant needs signing in|needs? (?:to )?sign(?:ing)? in|sign-?in (?:page|screen|prompt)|"
+SIGNED_OUT = re.compile(r"alliant needs signing in|alliant isn't open|needs? (?:to )?sign(?:ing)? in|sign-?in (?:page|screen|prompt)|"
                         r"password (?:page|screen|prompt)|pick an account|signed (?:me |her )?out", re.I)
 STALE_MINUTES = 30  # a job "working" longer than this goes back in the queue (the workstation lost it)
 
