@@ -168,11 +168,17 @@ class Jobs:
                                                                 f"· their answer makes a new ticket"),
                                             metadata={"event_type": KIND, "event_payload": {**p, "kind": "asked", "donna": "asked"}})
                 return f"asked the {who}"
+        if re.search(r"sign(ing|ed)? ?in|log(ged)? ?(in|out)|password|disconnected|session", note, re.I):
+            # Only Alliant's sign-in stopped her: the button comes back, so one tap re-sends it once she's signed in
+            a = restyle(t, GOLD, status="🔒 Waiting for Alliant sign-in · tap below once she's signed back in")[0]
+            a["blocks"] = [b for b in a.get("blocks") or [] if b.get("block_id") != "donna"] + [button(job_id)]
+            self.desk.slack.chat_update(channel=self.desk.desk_id, ts=job_id, text="", attachments=[a],
+                                        metadata={"event_type": KIND, "event_payload": {**p, "donna": "offered"}})
+            self.signed_out()
+            return "back to the office (signed out)"
         self.desk.slack.chat_update(channel=self.desk.desk_id, ts=job_id, text="",
                                     attachments=restyle(t, GOLD, status="🙋 Donna needs a person for this one (see thread)"),
                                     metadata={"event_type": KIND, "event_payload": {**p, "donna": "needs_person"}})
-        if re.search(r"sign(ing|ed)? ?in|log(ged)? ?(in|out)|password|disconnected|session", note, re.I):
-            self.signed_out()
         return "back to the office"
 
     def signed_out(self) -> None:
