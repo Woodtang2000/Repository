@@ -206,3 +206,13 @@ def test_replies_come_from_the_customers_own_company(desk, monkeypatch):
     ed._send("new@lodge.com", "Who are you?")  # not on file yet: wrote to donna@thelaundrygroup.com
     assert [c[1] for c in calls] == ["The Laundry Group", "Snow White Linen", "The Laundry Group"]
     assert "The Laundry Group" in calls[0][2] and "Snow White Linen" in calls[1][2]  # the signature matches
+
+
+def test_one_email_to_both_donna_addresses_is_one_ticket(desk):
+    ed, slack, sent, inbox, seen = desk
+    one = mail(1, "jane@acme.com", "Please add 200 shop towels at Fairbanks")
+    inbox.extend([one, {**one, "id": "rem_copy"}])  # forwarded by donna@snowwhitelinen.com and donna@thelaundrygroup.com
+    ed.run_once()
+    assert len([p for p in slack.posts if p["meta"].get("kind") == "ticket"]) == 1
+    ed.run_once()  # and the same one again on the next look: still one
+    assert len([p for p in slack.posts if p["meta"].get("kind") == "ticket"]) == 1

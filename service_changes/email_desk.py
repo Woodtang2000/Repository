@@ -228,6 +228,14 @@ class EmailDesk(TextDesk):
         for m in self.fetch(since.strftime("%Y-%m-%dT%H:%M:%SZ")):
             sender = email_key(real_sender(m))
             subject = m.get("subject") or ""
+            mid = m.get("message_id") or ""
+            msgids = self.state.setdefault("msgids", {})
+            if mid and msgids.get(mid, m["id"]) != m["id"]:
+                continue  # the same email again: sent to both Donna addresses (or service@ too), each forwarding a copy
+            if mid:
+                msgids[mid] = m["id"]
+                if len(msgids) > 3000:
+                    self.state["msgids"] = dict(list(msgids.items())[-2000:])
             if AUTO.match(sender) or AUTO_SUBJECT.match(subject):
                 continue  # out-of-office, bounces, no-reply senders: never answered (no mail loops)
             body = clean_body(m.get("text") or "")
