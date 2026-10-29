@@ -133,5 +133,5 @@ class Notices:
                 + (f"\n\nYour deliveries are on {day}." if day else "")
                 + ("\n\nYou're set up for: " + ", ".join(items) + "." if items else "")
                 + "\n\nNeed more of something, less, a new employee's uniforms, or a skipped week? Just text me at "
-                  "(866) 827-8398 or reply to this email, any time, and I'll take care of it.")
+                  "866-TAP-TEXT (866-827-8398) or reply to this email, any time, and I'll take care of it.")
         self._send(acct, to, "welcome", body, "welcome", "welcome email")

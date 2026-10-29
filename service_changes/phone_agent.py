@@ -328,7 +328,7 @@ def prompt(line: str) -> str:
         return PERSONALITY + "\n\n" + rules + "\n" + EMPLOYEE_TOOLS_NOTE + OWNER_RULES + AGENT_RULES
     who = ("If caller_info says they're a verified customer, help them with their own accounts using only its account "
            "facts. If not, you can't see or discuss any account: take their name, business, location and request and say "
-           "the office will call back to confirm; if they'd like texting, they can text (866) 827-8398 to get verified.")
+           "the office will call back to confirm; if they'd like texting, they can text 866-TAP-TEXT, that's 866-827-8398, to get verified.")
     rules = CUSTOMER_RULES.format(who=who, confirm="(customer_request tells you how they'll hear back)", office=office)
     rules = re.sub(r"Actions \(set `action`\):.*", "", rules, flags=re.S)
     rules = rules.replace("account facts given below", "account facts caller_info gives you")

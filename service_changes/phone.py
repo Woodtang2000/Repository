@@ -335,7 +335,7 @@ class Phone:
             whom = ("This caller's number is NOT on file, so you can't see or discuss any account. If they're an existing "
                     "customer needing a change, take their name, business, location and request (action request) and "
                     "say the office will call them back to confirm. If they'd like texting set up, they can text "
-                    "(866) 827-8398 and we'll verify them.")
+                    "866-TAP-TEXT, that's 866-827-8398, and we'll verify them.")
             confirm = "and the office will call them back to confirm it"
         return PERSONALITY + "\n\n" + CUSTOMER_RULES.format(who=whom, confirm=confirm, office=office)
 

@@ -37,7 +37,7 @@ def received(since_iso: str, inbound_address_id: str = "") -> list[dict]:
 
 def signature(company: str = "Snow White Linen") -> str:
     """Donna's sign-off on every customer email: texting is the quickest way to reach her."""
-    return (f"Donna\n{company}\nText me any time: (866) 827-8398\nOffice: (907) 222-7738")
+    return (f"Donna\n{company}\nText me any time: 866-TAP-TEXT (866-827-8398)\nOffice: (907) 222-7738")
 
 
 def _html(text: str) -> str:

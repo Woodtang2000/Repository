@@ -30,7 +30,7 @@ def test_garments_arrived_and_welcome(tmp_path, monkeypatch):
     assert n.pass_() == {"garments": 1, "welcome": 1}
     to, subject, text = sent[0]
     assert to == "scott@homergolf.com" and subject == "Snow White Linen: new garments on the way"
-    assert "Dave Jones's new shirt has arrived" in text and "(Tuesday)" in text and "(866) 827-8398" in text
+    assert "Dave Jones's new shirt has arrived" in text and "(Tuesday)" in text and "866-TAP-TEXT (866-827-8398)" in text
     to, subject, text = sent[1]
     assert to == "ann@moosecafe.com" and "Welcome to Snow White Linen!" in text and "40 Towel Bar Mop" in text
     assert "$" not in text and "Wednesday" in text

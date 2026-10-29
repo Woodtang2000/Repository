@@ -157,5 +157,5 @@ def test_emails_come_from_donna_with_her_picture(monkeypatch):
               company="The Laundry Group")
     b = sent[-1]
     assert b["from"] == {"email": "donna@mail.snowwhitelinen.com", "name": "Donna – The Laundry Group"}
-    assert b["reply_to"] == ["service@snowwhitelinen.com"] and "(866) 827-8398" in b["text"]
+    assert b["reply_to"] == ["service@snowwhitelinen.com"] and "866-TAP-TEXT (866-827-8398)" in b["text"]
     assert "donna-avatar.png" in b["html"] and "Bar mops to 60 a week." in b["html"] and "<b style" in b["html"]
