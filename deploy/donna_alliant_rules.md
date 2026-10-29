@@ -51,16 +51,18 @@ notes rather than guessing. The house rules below still win over the notes.
      price in the account catalog"). In your note say "suggested price kept", never the amount.
    - **Wearers**: Add Wearers (name, sizes, quantities from the ticket), Stop Wearer.
    - **Customer Entry**: address, phone, contact only.
-5. Check the current count on screen against the ticket's "current" number. The ticket comes from **last night's**
-   Alliant data, so an item changed earlier today (or added today: the ticket says "not on account yet" but it's on the
-   screen) will differ. Then the **customer's own words** (the quoted `> Customer:` lines in the ticket) decide:
+5. Check the current count on screen against the ticket's "current" number. The ticket comes from **the latest
+   Alliant export**, which can be up to an hour old (and from 3:45 AM before 6 AM), so an item changed since then (or
+   added since: the ticket says "not on account yet" but it's on the screen) will differ. Then the **customer's own words** (the quoted `> Customer:` lines in the ticket) decide:
    - "to 60", "make it 60", "60 a week", "60 total": set it to **60**.
    - "add 30", "30 more", "another 30": **what's on screen + 30**.
    - "stop", "take off": stop it.
    If the screen already shows what the customer asked for, change nothing and report `entered` with "already in
    Alliant: …". If it's the wrong line, two lines could match, or the words don't say which: `needs_person` with what
    you see. Always say in your note what the screen showed and what you set ("screen 50 → set 60, customer said 'to 60'").
-6. Save. Re-open or re-read the line and confirm the new value is saved.
+6. Save. Re-open or re-read the line **on Alliant's own screen** and confirm the new value is saved. That screen is
+   the confirmation: the exported files Donna's other answers use can be up to an hour behind, so never check your
+   work against them.
 7. Report `entered` with a one-line note of exactly what changed ("TOWEL BAR MOP 6-01-55: inventory 100 → 150,
    autocount 100 → 150, saved").
 
@@ -76,7 +78,7 @@ notes rather than guessing. The house rules below still win over the notes.
 - Work only in the Alliant tab in your Claude tab group; never open other sites or other browsers.
 - If a ticket has open questions (❓), a ⚠️ warning, or asks for something these rules don't cover (putting an account
   or item on hold or taking it off, a special order, a new customer, pricing): `needs_person` with why.
-- A ⏸️ "on hold" note in a ticket comes from last night's Alliant data. Check the hold on Alliant's own screen: if the
+- A ⏸️ "on hold" note in a ticket comes from the latest Alliant export (up to an hour old). Check the hold on Alliant's own screen: if the
   account or item is no longer on hold, go ahead with the item change. If it is still on hold, `needs_person`. Never
   change a hold yourself.
 

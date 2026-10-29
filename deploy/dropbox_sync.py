@@ -180,8 +180,8 @@ def sync_feed(conf, auth, done_meta) -> bool:
         shutil.rmtree(tmp, ignore_errors=True)
     conf["feed_hash"] = done_meta["content_hash"]
     save(conf)
-    _restart()
-    log(f"Alliant feed installed ({new_n} customers) and desk restarted.")
+    # The feed refreshes hourly now: the desk, texting and email reload when feed_done.txt changes, no restart needed.
+    log(f"Alliant feed installed ({new_n} customers); Donna reloads it by herself.")
     return True
 
 

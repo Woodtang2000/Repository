@@ -350,7 +350,7 @@ def test_loads_the_alliant_sql_feed(tmp_path):
     assert [c.account for c in a.customers] == ["2500-2-00000"]  # route placeholder accounts left out
     assert a.items["2500-2-00000"]["TOWEL BATH 22X44"] == 400 and a.autocount["2500-2-00000"]["TOWEL BATH 22X44"] == 200
     assert [w.name for w in a.wearers["2500-2-00000"]] == ["Ann Lee"]  # stopped wearers left out
-    assert a.as_of == "Oct 6" and a.exported_at.isoformat() == "2026-10-06T20:48:40-08:00"
+    assert a.as_of == "Oct 6, 8:48 PM" and a.exported_at.isoformat() == "2026-10-06T20:48:40-08:00"
     facts = account_facts(a, "2500-2-00000")
     assert "On-site contact: Maria (907)555-0100" in facts and "Invoice contact: AP INBOX ap@horizon.com" in facts
     assert "On hold in Alliant: MAT CHARCOAL HEATHER 3X5" in facts

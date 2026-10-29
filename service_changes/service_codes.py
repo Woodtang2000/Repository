@@ -1,6 +1,6 @@
 """Drivers asking the plant to pull garments (a service code in Alliant: repair, inspection/audit, relabel) or for an
 inventory at an account. Turns the parsed request into the office ticket, the driver's readback and any questions,
-checked against last night's garment data (garments_in_service.csv).
+checked against the latest garment data (garments_in_service.csv, refreshed hourly).
 
 Snow White's own two-letter codes go in service_codes.csv (code,kind,meaning); until then the ticket says which kind
 of code to pick."""
@@ -56,7 +56,7 @@ def review(parsed, alliant: Alliant) -> tuple[list[str], str, list[str]]:
                 questions.append("Which garment? Send the barcode number (or the wearer's name if it's all their garments).")
         for b, row in found:
             if not row:
-                lines.append(f"⚠️ Barcode *{b}* isn't in last night's Alliant data: check the number")
+                lines.append(f"⚠️ Barcode *{b}* isn't in Alliant's latest data: check the number")
                 continue
             whose = next((w.name for w in alliant.wearers.get(row.get("cust_code", ""), []) if w.employee == row.get("wearer")), "")
             other = row.get("cust_code") != acct

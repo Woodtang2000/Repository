@@ -1656,10 +1656,13 @@ def main():
     # The notes answer how-to questions in #alliant-help (when the bot is in it), in private messages and by voice.
     desk.helper = alliant_help.Helper(slack, claude, args.data, desk.all_channels.get(alliant_help.CHANNEL), desk.me,
                                       alliant_help.find_user(slack, alliant_help.ESCALATE))
-    loaded = [time.time()]
+    from .context import feed_stamp
+    loaded = [time.time(), feed_stamp(args.data)]
 
-    def reload():  # pick up a fresh export without restarting
-        if time.time() - loaded[0] > 3600:
+    def reload():  # pick up a fresh export (hourly) without restarting
+        from .context import feed_stamp
+        if feed_stamp(args.data) != loaded[1] or time.time() - loaded[0] > 3600:
+            loaded[1] = feed_stamp(args.data)
             desk.alliant, loaded[0] = Alliant.from_dir(args.data), time.time()
 
     if args.listen:

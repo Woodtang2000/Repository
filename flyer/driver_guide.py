@@ -79,7 +79,7 @@ GUIDE = [
         ("A wearer's garments", "What does Karissa at Tire Town have?"),
         ("Today's stops", "What are my stops today?"),
         ("Stop order", "Who's after Midas today?")]),
-    ("bullets", ["Answers come from <b>last night's Alliant data</b>; a change made today shows tomorrow.",
+    ("bullets", ["Answers come from <b>Alliant data refreshed every hour</b> (6 AM to 10 PM); a change shows within about an hour.",
                  "She answers about <b>customers on your route</b>; anything else goes to the office.",
                  "If Alliant doesn't say, she asks the office and they answer you in the channel.",
                  "The office can see her answers. After 15 questions in a day she hands the rest to the office."]),

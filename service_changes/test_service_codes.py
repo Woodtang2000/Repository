@@ -28,7 +28,7 @@ def test_wearer_audit_and_unknown_barcode(tmp_path):
     assert "• Wearer *#12 Joey Smith*: all 2 garments in service" in lines and qs == []
     assert any('"Specific Wearers"' in l for l in lines) and "Joey Smith's garments for inspection / audit" in rb
     lines, _, qs = review(parsed("1205-1-00007", barcodes=["555"]), a)
-    assert any("isn't in last night's Alliant data" in l for l in lines)
+    assert any("isn't in Alliant's latest data" in l for l in lines)
     _, _, qs = review(parsed("1205-1-00007"), a)
     assert qs and qs[0].startswith("Which garment?")
 

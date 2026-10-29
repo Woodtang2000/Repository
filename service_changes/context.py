@@ -8,6 +8,7 @@ Optional CSV exports (any extra columns are ignored):
   current_items.csv  account, item, quantity
 """
 import csv
+import os
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -15,6 +16,15 @@ from zoneinfo import ZoneInfo
 
 ALASKA = ZoneInfo("America/Anchorage")
 DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+
+def feed_stamp(data_dir: str) -> float:
+    """When the Alliant feed last finished (feed_done.txt's time; 0 without one). The feed refreshes hourly at :05 from
+    6 AM to 10 PM and at 3:45 AM; each service reloads its data when this changes, without a restart."""
+    try:
+        return os.path.getmtime(os.path.join(data_dir, "feed_done.txt"))
+    except OSError:
+        return 0.0
 
 
 def route_from_channel(channel_name: str) -> str | None:
@@ -122,7 +132,7 @@ class Alliant:
         if f("customers.csv") and data.exported_at is None:
             data.exported_at = datetime.fromtimestamp(os.path.getmtime(f("customers.csv")), ALASKA)
         if data.exported_at:
-            data.as_of = data.exported_at.astimezone(ALASKA).strftime("%b %-d")
+            data.as_of = data.exported_at.astimezone(ALASKA).strftime("%b %-d, %-I:%M %p")
         if f("holds.csv"):
             with open(f("holds.csv"), newline="") as fh:
                 for row in csv.DictReader(fh):

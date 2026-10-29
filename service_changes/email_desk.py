@@ -369,7 +369,8 @@ def main():
     print(time.strftime("%H:%M"), "watching email", flush=True)
     while True:
         try:
-            if time.time() - loaded > 3600:
+            from .context import feed_stamp
+            if time.time() - loaded > 3600 or feed_stamp(args.data) > loaded:  # the hourly feed, without a restart
                 ed.alliant, loaded = Alliant.from_dir(args.data), time.time()
             n = ed.run_once(first)
             first = False
