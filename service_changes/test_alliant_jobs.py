@@ -170,12 +170,13 @@ def test_unclear_she_asks_whoever_asked(tmp_path):
 def test_signed_out_is_announced_once(tmp_path):
     jobs, slack, t, readbacks = setup(tmp_path)
     posted = []
-    slack.chat_postMessage = lambda channel, text, thread_ts=None, **kw: posted.append((channel, thread_ts, text))
+    slack.chat_postMessage = lambda channel, text, thread_ts=None, **kw: posted.append((channel, thread_ts, text, kw))
     jobs.queue(tap("UANA"))
     jobs.next()
     jobs.result("100.1", "needs_person", "Alliant needs signing in")
     alerts = [p for p in posted if p[1] is None]
-    assert [c for c, _, _ in alerts] == ["CDESK", "U4KFSQCDQ"] and "Alliant signed Donna out" in alerts[0][2]
+    assert [p[0] for p in alerts] == ["CDESK", "U4KFSQCDQ"] and "Alliant signed Donna out" in alerts[0][2]
+    assert all(p[3]["blocks"][-1]["elements"][0]["value"] == "100.1" for p in alerts)  # the re-send button rides along
     jobs.signed_out()
     assert len([p for p in posted if p[1] is None]) == 2  # at most once an hour
     assert "donna" in blocks(t) and "Waiting for Alliant sign-in" in str(t["attachments"])  # the button is back

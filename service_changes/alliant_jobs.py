@@ -177,14 +177,14 @@ class Jobs:
             a["blocks"] = [b for b in a.get("blocks") or [] if b.get("block_id") != "donna"] + [button(job_id)]
             self.desk.slack.chat_update(channel=self.desk.desk_id, ts=job_id, text="", attachments=[a],
                                         metadata={"event_type": KIND, "event_payload": {**p, "donna": "offered"}})
-            self.signed_out()
+            self.signed_out(job_id)
             return "back to the office (signed out)"
         self.desk.slack.chat_update(channel=self.desk.desk_id, ts=job_id, text="",
                                     attachments=restyle(t, GOLD, status="🙋 Donna needs a person for this one (see thread)"),
                                     metadata={"event_type": KIND, "event_payload": {**p, "donna": "needs_person"}})
         return "back to the office"
 
-    def signed_out(self) -> None:
+    def signed_out(self, job_id: str = "") -> None:
         """Alliant signed her out: say so where people will see it (the office channel, and Scott directly), at most once
         an hour; a ticket thread alone is easy to miss. She clicks Reconnect and a filled-in Sign in herself; this is
         when that wasn't enough (an empty field, a code or phone approval, another account)."""
@@ -193,10 +193,11 @@ class Jobs:
         self.warned = time.time()
         text = ("⚠️ *Alliant signed Donna out* on her workstation, so she can't enter tickets. Please sign her back in "
                 "(Chrome Remote Desktop → the Alliant tab in her Claude group → sign in → \"Stay signed in? Yes\"), then tap "
-                "*Have Donna do it* again on the waiting ticket.")
-        self.desk.slack.chat_postMessage(channel=self.desk.desk_id, text=text)
+                "*🤖 Donna, enter it* below (or on the waiting ticket).")
+        blocks = [{"type": "section", "text": {"type": "mrkdwn", "text": text}}] + ([button(job_id)] if job_id else [])
+        self.desk.slack.chat_postMessage(channel=self.desk.desk_id, text=text, blocks=blocks)
         owner = os.environ.get("OWNER_SLACK_ID", "U4KFSQCDQ").split(",")[0].strip()
         try:
-            self.desk.slack.chat_postMessage(channel=owner, text=text)
+            self.desk.slack.chat_postMessage(channel=owner, text=text, blocks=blocks)
         except Exception:
             pass
