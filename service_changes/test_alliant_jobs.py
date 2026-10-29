@@ -180,7 +180,11 @@ def test_signed_out_is_announced_once(tmp_path):
     jobs.signed_out()
     assert len([p for p in posted if p[1] is None]) == 2  # at most once an hour
     assert "donna" in blocks(t) and "Waiting for Alliant sign-in" in str(t["attachments"])  # the button is back
-    assert jobs.queue(tap("UANA")) == "queued 100.1" and jobs.next()["id"] == "100.1"  # one tap once she's signed in
+    updated = []
+    slack.chat_update = lambda **kw: updated.append(kw)
+    alert_tap = {**tap("UANA"), "container": {"channel_id": "U4KFSQCDQ", "message_ts": "200.1"}}
+    assert jobs.queue(alert_tap) == "queued 100.1" and jobs.next()["id"] == "100.1"  # one tap once she's signed in
+    assert any(u["ts"] == "200.1" and u["blocks"] == [] and "Re-sent to Donna" in u["text"] for u in updated)
 
 
 def test_only_a_real_sign_in_screen_raises_the_alarm():

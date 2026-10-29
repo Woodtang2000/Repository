@@ -81,7 +81,17 @@ class Jobs:
                 self.desk.slack.chat_postEphemeral(channel=self.desk.desk_id, user=user,
                                                    text="Only the office can send tickets to Donna for Alliant.")
             return f"ignored: {self.desk.name(user)} isn't on the office list"
-        return self.add(ts, user)
+        out = self.add(ts, user)
+        c = payload.get("container") or {}
+        if out.startswith("queued") and c.get("message_ts") and c["message_ts"] != ts:  # tapped on the ⚠️ alert
+            who = self.desk.name(user)
+            try:  # the alert's button goes away, so it's clear the tap took
+                text = (payload.get("message") or {}).get("text") or "⚠️ Alliant signed Donna out"
+                self.desk.slack.chat_update(channel=c.get("channel_id"), ts=c["message_ts"], blocks=[], text=text +
+                                            f"\n🤖 Re-sent to Donna by {who.split()[0] if who else 'office'}")
+            except Exception as e:
+                print(time.strftime("%H:%M"), "alert not updated:", e, flush=True)
+        return out
 
     def add(self, ts: str, user: str) -> str:
         """Put the ticket at `ts` in her queue for `user` (the button, or Scott telling her a change himself)."""
