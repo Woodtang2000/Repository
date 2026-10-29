@@ -31,6 +31,7 @@ LOG="$HOME/Donna/logs/$(date +%F).log"
 KEY="$(cat "$HOME/.donna_worker_token")"
 JOB="$(curl -s --max-time 20 -H "Authorization: Bearer $KEY" https://chat.snowwhitelinen.com/api/donna/jobs/next)" || exit 0
 case "$JOB" in ""|*'"job": null'*) exit 0 ;; esac
+case "$JOB" in *'"id"'*) ;; *) exit 0 ;; esac   # anything but a real job (the server restarting): wait
 echo "=== $(date) job: $JOB" >> "$LOG"
 cd "$HOME/Donna"
 ENABLE_CLAUDEAI_MCP_SERVERS=false claude -p --chrome --permission-mode auto "You are Donna at your Alliant workstation. This job is already taken from \
