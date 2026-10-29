@@ -41,6 +41,13 @@ BULK = re.compile(r"^(list-unsubscribe|list-id|precedence)$", re.I)
 QUOTE = re.compile(r"^(On .{5,200} wrote:|-{2,}\s*Original Message|From: .+|Sent from my |_{5,})", re.I | re.M)
 
 
+def remove_email_everywhere(data_dir: str, addr: str) -> None:
+    """Take an email off the email list (a blocked sender)."""
+    path = os.path.join(data_dir, "customer_emails.csv")
+    rows = _rows(path)
+    _write(path, [r for r in rows if email_key(r.get("email", "")) != email_key(addr)])
+
+
 def is_email_command(text: str) -> bool:
     return bool(ADD_EMAIL.match(text or "") or REMOVE_EMAIL.match(text or ""))
 
@@ -189,6 +196,18 @@ class EmailDesk(TextDesk):
         current = self.contacts().get(self.key(addr), {}).get("accounts", [])
         if current:
             lines.append("This email is now on: " + ", ".join(f"{a} {name(a)}" for a in current))
+        from .sms import other_accounts
+        others = other_accounts(self.data_dir, addr, accounts, current)
+        if others:
+            lines.append("⚠️ This email has also asked about or is on: " + ", ".join(f"{a} {name(a)}" for a in others[:5])
+                         + ". Make sure it's really them before adding it, or Block it.")
+            owner = os.environ.get("OWNER_SLACK_ID", "U4KFSQCDQ").split(",")[0].strip()
+            try:
+                self.slack.chat_postMessage(channel=owner, unfurl_links=False, text=f"⚠️ *{email_key(addr)}* is asking to be "
+                                            f"set up for *{accounts[0]} {name(accounts[0])}*, but has also asked about or is on "
+                                            + ", ".join(f"{a} {name(a)}" for a in others[:5]) + ". The card is in #service-desk.")
+            except Exception:
+                pass
         if accounts:
             lines.append(f"Best match: *{accounts[0]}* {name(accounts[0])}")
             lines.append(f"Tap a button, or type `add {email_key(addr)} to <account number(s)>` for another account.")

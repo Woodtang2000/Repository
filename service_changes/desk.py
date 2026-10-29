@@ -782,6 +782,16 @@ class Desk:
             return "not a sign-up card"
         choice = json.loads(act.get("value") or "{}")
         who = self.name(user).split()[0] if self.name(user) else "office"
+        if choice.get("b"):  # an imposter or a competitor fishing: never answered again, off every account
+            from .sms import block
+            block(self.data_dir, p.get("phone", ""), by=self.name(user), why=(p.get("request") or "")[:200])
+            a = restyle(m, GREY, status=f"🚫 Blocked by {who}: Donna won't answer this number or email again "
+                                        f"(type `unblock {p.get('phone', '')}` to undo)")
+            for att in a:
+                att["blocks"] = [b for b in att.get("blocks") or [] if b.get("block_id") != "link"]
+            self.slack.chat_update(channel=self.desk_id, ts=ts, text="", attachments=a,
+                                   metadata={"event_type": KIND, "event_payload": {**p, "kind": "blocked"}})
+            return f"blocked {p.get('phone')}"
         a = restyle(m, GOLD, status=f"⏳ {'Moving' if choice.get('m') else 'Adding'} to {choice.get('a')} · {who}")
         for att in a:
             att["blocks"] = [b for b in att.get("blocks") or [] if b.get("block_id") != "link"]

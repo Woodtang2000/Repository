@@ -168,3 +168,15 @@ def test_a_customer_on_the_866_line_gets_the_same_question_a_text_would(desk, mo
     r = tools.handle("customer_request", {**jane, "summary": "confetti grey"})
     assert r["status"] == "sent" and "The customer answered: confetti grey" in recorded[0]
     assert "add one 3x10 mat" in recorded[0]
+
+
+def test_a_blocked_caller_gets_no_help(desk, tmp_path):
+    from . import sms
+    make, leads = desk
+    sms.block(str(tmp_path), "+19075551234", by="Sonja")
+    p = make()
+    tools = phone_agent.PhoneTools(p)
+    jane = {"conversation_id": "b1", "caller": "+19075551234", "called": "+18668278398"}
+    assert tools.handle("caller_info", jane)["blocked"] is True
+    assert tools.handle("customer_request", {**jane, "summary": "how many towels"})["blocked"] is True and not p.slack.posts
+    assert "<Hangup/>" in p.start({"CallSid": "x", "From": "+19075551234", "To": "+18668278398"})

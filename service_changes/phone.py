@@ -237,8 +237,16 @@ class Phone:
 
     # ---- the call ------------------------------------------------------------------------------------------------
 
+    def blocked(self, caller: str) -> bool:
+        from .sms import blocked
+        return digits(caller) in blocked(self.data_dir)
+
     def start(self, form: dict) -> str:
         sid, caller, called = form.get("CallSid", ""), form.get("From", ""), form.get("To", "")
+        if self.blocked(caller):  # the office blocked this number: nothing about any account, no requests
+            print(time.strftime("%H:%M"), f"phone: blocked number …{digits(caller)[-4:]}", flush=True)
+            return ("<Response>" + self.speech("Thanks for calling. Please call our office during business hours at "
+                                               "907-222-7738. Goodbye.") + "<Hangup/></Response>")
         line = "employees" if digits(called) == EMPLOYEE_LINE else "customers"
         who = self.caller(caller) if line == "customers" else self.staff(caller)
         call = {"line": line, "from": caller, "who": who, "turns": [], "pending": None, "quiet": 0, "posted": 0,
@@ -467,6 +475,7 @@ class Phone:
                 p = digits(call["from"])
                 signup_card(self.slack, self.channel_id(DESK_CHANNEL), data, call["from"], turn.caller_name or "",
                             turn.summary, found.accounts, request=turn.summary, current=current.get("accounts", []),
+                            data_dir=self.data_dir,
                             head=f"📞 *Phone request{' · ⚠️ urgent' if turn.urgent else ''}* from ({p[:3]}) {p[3:6]}-{p[6:]}, "
                                  "a number not on file")
                 return

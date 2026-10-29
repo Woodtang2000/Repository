@@ -90,6 +90,8 @@ class PhoneTools:
         if name not in TOOLS:
             return {"error": "unknown tool"}
         c = self.call(body)
+        if name != "caller_info" and self.phone.blocked(c["from"]):
+            return {"blocked": True, "note": "This number is blocked: end the call politely."}
         said = str(body.get("summary") or body.get("said") or body.get("question") or "").strip()[:2000]
         # (no transcript lines: on these calls Donna's tools get summaries, not the caller's own words)
         out = getattr(self, name)(c, body, said)
@@ -103,6 +105,9 @@ class PhoneTools:
         caller, called = str(body.get("caller_id") or ""), str(body.get("called_number") or "")
         line = "employees" if digits(called) == EMPLOYEE_LINE else "customers"
         boss = {u.strip() for u in os.environ.get("OWNER_SLACK_ID", "U4KFSQCDQ").split(",")}
+        if self.phone.blocked(caller):
+            return {"type": "conversation_initiation_client_data", "dynamic_variables": {"caller_name": "", "caller_known": "no"},
+                    "conversation_config_override": {"agent": {"first_message": FIRST[line]}}}
         staff = self.phone.staff(caller)
         scott = digits(caller) in owner_phones() or (staff or {}).get("user") in boss
         who = self.phone.caller(caller) if line == "customers" else staff
@@ -128,6 +133,10 @@ class PhoneTools:
     # ---- the tools -------------------------------------------------------------------------------------------------
 
     def caller_info(self, c: dict, body: dict, said: str) -> dict:
+        if self.phone.blocked(c["from"]):  # the office blocked this number
+            c["who"], c["scott"] = None, False
+            return {"blocked": True, "note": "This number is blocked. Don't discuss any account or take any request; say "
+                    "the office will be glad to help at 907-222-7738 during business hours, and end the call politely."}
         info = {"line": c["line"], "office_open": office_open(),
                 "office_hours": os.environ.get("PHONE_OFFICE_HOURS", "Mon-Fri 8:00-17:00") + " Alaska time"}
         if c["scott"] and secret():

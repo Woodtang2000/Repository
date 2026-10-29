@@ -69,8 +69,86 @@ ADD_CMD = re.compile(rf"^\s*(?:add|approve)\s+{PHONE}\s+(?:to|for)\s+(.+?)\s*$",
 REMOVE_CMD = re.compile(rf"^\s*(?:remove|delete)\s+{PHONE}\s*$", re.I)
 
 
+UNBLOCK_CMD = re.compile(r"^\s*unblock\s+(\S+(?:\s*\S+){0,3})\s*$", re.I)
+BLOCKED_FILE = "blocked_contacts.csv"  # numbers and emails the office blocked (an imposter, a competitor fishing)
+
+
 def is_phone_command(text: str) -> bool:
-    return bool(ADD_CMD.match(text or "") or REMOVE_CMD.match(text or ""))
+    return bool(ADD_CMD.match(text or "") or REMOVE_CMD.match(text or "") or UNBLOCK_CMD.match(text or ""))
+
+
+def contact_key(addr: str) -> str:
+    """A phone number's 10 digits, or an email lowercased: the same person however it's written."""
+    addr = (addr or "").strip()
+    return addr.lower() if "@" in addr else phone_key(addr)
+
+
+def blocked(data_dir: str) -> set[str]:
+    path = os.path.join(data_dir, BLOCKED_FILE)
+    if not os.path.exists(path):
+        return set()
+    with open(path, newline="") as f:
+        return {contact_key(r.get("contact", "")) for r in csv.DictReader(f) if r.get("contact")}
+
+
+def block(data_dir: str, addr: str, by: str, why: str = "") -> None:
+    """Never answer this number or email again (texts, email, calls), and take it off every account."""
+    path = os.path.join(data_dir, BLOCKED_FILE)
+    rows = []
+    if os.path.exists(path):
+        with open(path, newline="") as f:
+            rows = [r for r in csv.DictReader(f)]
+    if contact_key(addr) not in {contact_key(r.get("contact", "")) for r in rows}:
+        rows.append({"contact": contact_key(addr), "by": by, "at": time.strftime("%Y-%m-%d %H:%M"), "why": why[:200]})
+    with open(path + ".tmp", "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=["contact", "by", "at", "why"])
+        w.writeheader()
+        w.writerows(rows)
+    os.replace(path + ".tmp", path)
+    if "@" in addr:
+        from .email_desk import remove_email_everywhere
+        remove_email_everywhere(data_dir, addr)
+    else:
+        remove_phone(os.path.join(data_dir, "customer_phones.csv"), addr)
+
+
+ASKS_FILE = "contact_requests.json"  # every sign-up request per number or email: who they said they were, when
+
+
+def other_accounts(data_dir: str, addr: str, accounts: list[str], current: list[str]) -> list[str]:
+    """Remember this request; return the accounts this number or email already asked for (last 90 days) or is on,
+    other than the ones it's asking for now. Non-empty: someone may be fishing across customers."""
+    path = os.path.join(data_dir, ASKS_FILE)
+    try:
+        asks = json.load(open(path))
+    except (OSError, ValueError):
+        asks = {}
+    key, now = contact_key(addr), time.time()
+    mine = [a for a in asks.get(key, []) if now - a["at"] < 90 * 86400]
+    before = [x for a in mine for x in a["accounts"]] + list(current)
+    if accounts:
+        mine.append({"at": now, "accounts": accounts[:1]})
+    asks[key] = mine[-20:]
+    with open(path + ".tmp", "w") as f:
+        json.dump(asks, f)
+    os.replace(path + ".tmp", path)
+    base = lambda a: a.split("-")[0]  # the same customer's other locations (1205-1-00004 and 1205-1-00008) are fine
+    return list(dict.fromkeys(x for x in before if accounts and base(x) not in {base(a) for a in accounts[:1]}))
+
+
+def unblock(data_dir: str, addr: str) -> bool:
+    path = os.path.join(data_dir, BLOCKED_FILE)
+    if not os.path.exists(path):
+        return False
+    with open(path, newline="") as f:
+        rows = [r for r in csv.DictReader(f)]
+    keep = [r for r in rows if contact_key(r.get("contact", "")) != contact_key(addr)]
+    with open(path + ".tmp", "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=["contact", "by", "at", "why"])
+        w.writeheader()
+        w.writerows(keep)
+    os.replace(path + ".tmp", path)
+    return len(keep) < len(rows)
 
 
 # ---- Twilio (standard library only) ---------------------------------------------------------------------------
@@ -221,12 +299,19 @@ def link_buttons(accounts: list[str], current: list[str], name) -> dict | None:
             els.append({"type": "button", "action_id": f"link_add{i + 1}", "value": json.dumps({"a": a, "m": 0}),
                         **({"style": "primary"} if i == 0 else {}),
                         "text": {"type": "plain_text", "text": f"Add to {label}"}})
-    return {"type": "actions", "block_id": "link", "elements": els} if els else None
+    els.append({"type": "button", "action_id": "link_block", "style": "danger", "value": json.dumps({"b": 1}),
+                "text": {"type": "plain_text", "text": "Block"},
+                "confirm": {"title": {"type": "plain_text", "text": "Block this caller?"},
+                            "text": {"type": "plain_text", "text": "Donna will never answer this number or email again "
+                                     "(texts, email or calls) and it comes off every account. Type \"unblock\" and the "
+                                     "number in #service-desk to undo."},
+                            "confirm": {"type": "plain_text", "text": "Block"}, "deny": {"type": "plain_text", "text": "Cancel"}}})
+    return {"type": "actions", "block_id": "link", "elements": els}
 
 
 def signup_card(slack, desk_id: str, alliant: Alliant, phone: str, who: str, said: str, accounts: list[str],
                 by: str = "", request: str = "", current: list[str] | None = None, kind: str = "sms_signup",
-                head: str = "") -> None:
+                head: str = "", data_dir: str = "") -> None:
     """Ask the office to approve a number for an account: a button (or ✅) approves. `request`: what they asked for
     (a call, a text), handled as soon as the number is approved. `current`: accounts the number is already on."""
     name = lambda a: next((c.name for c in alliant.customers if c.account == a), "")
@@ -236,6 +321,19 @@ def signup_card(slack, desk_id: str, alliant: Alliant, phone: str, who: str, sai
     lines = [head + (f": {who}" if who else ""), f"_{said[:200]}_"]
     if current:
         lines.append("This number is now on: " + ", ".join(f"{a} {name(a)}" for a in current))
+    others = other_accounts(data_dir, phone, accounts, current) if data_dir else []
+    if others:  # the same number naming different customers: could be someone fishing, so the owner hears about it
+        warn = (f"⚠️ This number has also asked about or is on: " + ", ".join(f"{a} {name(a)}" for a in others[:5])
+                + ". Make sure it's really them before adding it, or Block it.")
+        lines.append(warn)
+        owner = os.environ.get("OWNER_SLACK_ID", "U4KFSQCDQ").split(",")[0].strip()
+        try:
+            slack.chat_postMessage(channel=owner, unfurl_links=False,
+                                   text=f"⚠️ *{pretty}* is asking to be set up for *{accounts[0]} {name(accounts[0])}*, "
+                                        f"but has also asked about or is on " + ", ".join(f"{a} {name(a)}" for a in others[:5])
+                                        + ". The card is in #service-desk, with a Block button if it's not legit.")
+        except Exception:
+            pass
     if accounts:
         lines.append(f"Best match: *{accounts[0]}* {name(accounts[0])}")
         if accounts[1:]:
@@ -340,7 +438,8 @@ class TextDesk:
 
     def card(self, addr: str, who: str, said: str, accounts: list[str], by: str = "") -> None:
         current = self.contacts().get(self.key(addr), {}).get("accounts", [])
-        signup_card(self.slack, self.desk_id, self.alliant, addr, who, said, accounts, by=by, current=current)
+        signup_card(self.slack, self.desk_id, self.alliant, addr, who, said, accounts, by=by, current=current,
+                    data_dir=self.data_dir)
 
     def inbound(self, since: datetime) -> list[dict]:
         """New messages as {"id", "from", "body"}, oldest first."""
@@ -413,6 +512,9 @@ class TextDesk:
 
     def handle(self, phone: str, body: str, sid: str) -> None:
         key = self.key(phone)
+        if contact_key(phone) in blocked(self.data_dir):  # the office blocked them: no answer, nothing about any account
+            self.log(phone, "blocked: ignored")
+            return
         cmd = demo.COMMAND.match(body)
         if cmd and demo.allowed(key, self.key):
             return self.demo_command(phone, cmd.group(1))
@@ -641,6 +743,13 @@ class TextDesk:
             # Slack links phone numbers: "<tel:9075551234|(907) 555-1234>" reads as what was typed
             text = re.sub(r"<tel:[^|>]*\|([^>]*)>", r"\1", text)
             text = re.sub(r"<tel:([^|>]*)>", r"\1", text)
+            unb = UNBLOCK_CMD.match(text)
+            if unb and m["ts"] not in done:
+                ok = unblock(self.data_dir, unb.group(1))
+                self.office(f"{self.icon} {'Unblocked' if ok else 'Nothing blocked for'} {unb.group(1).strip()}.",
+                            {"kind": "sms_admin"})
+                done.add(m["ts"])
+                continue
             add, rem = self.add_cmd.match(text), self.remove_cmd.match(text)
             if re.match(r"^\s*(add|approve|remove|delete)\b", text, re.I) and m["ts"] not in self.__dict__.setdefault("logged", set()):
                 self.logged.add(m["ts"])

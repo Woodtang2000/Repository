@@ -283,7 +283,7 @@ def test_a_phone_caller_is_linked_with_a_button_and_their_request_runs(desk):
                     current=["M4"], head="📞 *Phone request* from (907) 555-1234, a number not on file")
     card = slack.posts[-1]
     els = card["attachments"][0]["blocks"][-1]["elements"]
-    assert [e["text"]["text"] for e in els] == ["Move to Midas #8 (Palmer)", "Add Midas #8 (Palmer) too"]
+    assert [e["text"]["text"] for e in els] == ["Move to Midas #8 (Palmer)", "Add Midas #8 (Palmer) too", "Block"]
     assert "This number is now on: M4 MIDAS #4 (FAIRBANKS)" in card["text"]
     card["meta"].update(approved_by="U2", move=True)  # "Move to Midas #8" tapped
     assert td.office_pass() == 1
@@ -301,3 +301,28 @@ def test_an_owner_with_several_accounts_adds_one_more(desk):
     card["meta"].update(approved_by="U2", move=False, accounts=["C1"])
     td.office_pass()
     assert sms.load_phones(td.data_dir + "/customer_phones.csv")["9075559999"]["accounts"] == ["M4", "M8", "C1"]
+
+
+def test_a_blocked_number_gets_nothing_and_unblock_undoes_it(desk):
+    td, slack, texts, seen = desk
+    sms.block(td.data_dir, "+19075551234", by="Sonja Burke", why="competitor asking about Midas")
+    assert "9075551234" not in sms.load_phones(td.data_dir + "/customer_phones.csv")  # off every account
+    td.handle("+19075551234", "how many towels does Midas get?", "S9")
+    assert not texts and "alliant" not in seen  # no reply, no account looked at
+    slack.say("unblock 907-555-1234")
+    td.office_pass()
+    assert "9075551234" not in sms.blocked(td.data_dir) and "Unblocked" in slack.posts[-1]["text"]
+
+
+def test_a_number_asking_about_different_customers_is_flagged(desk):
+    td, slack, texts, seen = desk
+    td.card("+19075550000", "Bob", "Midas in Fairbanks", ["M4"])
+    assert "⚠️" not in slack.posts[-1]["text"]
+    td.card("+19075550000", "Bob", "Midas again", ["M4"])  # the same account again: fine
+    assert "⚠️" not in slack.posts[-1]["text"]
+    from .sms import other_accounts  # locations of one customer share the account's first part: not flagged
+    assert other_accounts(td.data_dir, "+19075550001", ["1205-1-00008"], ["1205-1-00004"]) == []
+    td.card("+19075550000", "Bob", "Costco deli", ["C1"])  # now a different customer
+    warned = [p for p in slack.posts if "⚠️" in p["text"]]
+    assert any(p["channel"] == "D1" and "has also asked about or is on: M4" in p["text"] for p in warned)
+    assert any(p["channel"] == "U4KFSQCDQ" for p in warned)  # Scott hears about it directly
