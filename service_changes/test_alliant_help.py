@@ -437,33 +437,47 @@ def test_route_questions_by_voice_skip_the_parse(monkeypatch):
     assert "CARLILE" in seen["facts"] and "COSTCO" not in seen["facts"] and "owner" in seen["asker"]
 
 
-def test_balances_only_for_scott_and_bill_in_private(monkeypatch):
+def test_balances_only_for_scott_and_bill_in_private(monkeypatch, tmp_path):
+    """The private money files (data/private/: ar, open invoices, pricing, account details) answer Scott and Bill in a
+    private message or by voice, prices included; anyone else, or a channel, gets nothing from them."""
     from types import SimpleNamespace
     from .desk import Desk
-    from .context import Alliant, Customer, ar_facts
+    from .context import Alliant, Customer
     import service_changes.parser as parser
     from .parser import Answer
-    data = Alliant(customers=[Customer("1205-1-00004", "MIDAS #4", "4", ["Mon"]), Customer("1205-1-00007", "MIDAS 7", "4", ["Thu"])],
-                   ar={"1205-1-00004": {"balance": "1,240.50", "last_payment_date": "2026-09-30", "last_payment_amount": "600.00"},
-                       "1205-1-00007": {"balance": "100.00", "last_payment_date": "2026-10-20"}})
+    priv = tmp_path / "private"
+    priv.mkdir()
+    (priv / "ar.csv").write_text("account,name,balance,over_90,last_payment_date,last_payment_amount\n"
+                                 "1205-1-00004,MIDAS #4,\"1,240.50\",200.00,2026-09-30,600.00\n"
+                                 "1205-1-00007,MIDAS 7,100.00,0,2026-10-20,50.00\n")
+    (priv / "pricing.csv").write_text("account,sku,description,price,price_type\n1205-1-00004,5-01-01,TOWEL BAR MOP,0.42,8\n"
+                                      "1205-1-00004,6-03-10,MAT 3X5 CHARCOAL,3.10,8\n")
+    (priv / "open_invoices.csv").write_text("account,invoice,inv_date,amount,balance\n1205-1-00004,88123,2026-07-01,300.00,200.00\n")
+    (priv / "account_details.csv").write_text("account,contract_expiry,sales_rep\n1205-1-00004,2027-03-31,Bill\n")
+    data = Alliant(customers=[Customer("1205-1-00004", "MIDAS #4", "4", ["Mon"]), Customer("1205-1-00007", "MIDAS 7", "4", ["Thu"])])
     seen = []
     monkeypatch.setattr(parser, "answer_lookup", lambda c, q, facts, asker="": seen.append(facts) or Answer(answer="Owes $1,240.50.", found=True))
     said = []
-    d = SimpleNamespace(alliant=data, desk_id="CDESK", claude=None, asker=lambda u: "owner",
+    d = SimpleNamespace(alliant=data, desk_id="CDESK", claude=None, asker=lambda u: "owner", data_dir=str(tmp_path),
                         office_group=lambda t, p: [], say=None)
     parsed = SimpleNamespace(account_number="1205-1-00004")
-    ask = lambda user, here: Desk.ar_answer(d, user, "how much does Midas 4 owe us", parsed, here,
-                                            lambda t, p: said.append((t, p["ar"])))
+    ask = lambda user, here, q="how much does Midas 4 owe us": Desk.ar_answer(d, user, q, parsed, here,
+                                                                               lambda t, p: said.append((t, p["ar"])))
     ask("UDRIVER", "D123")
     assert said[-1][1] == "refused" and "aren't something I can share" in said[-1][0] and not seen
     ask("U9SGPJP0C", "CDESK")  # Bill, but in the office channel
     assert said[-1][1] == "private" and not seen
     ask("U9SGPJP0C", "D123")  # Bill, privately
     assert said[-1][1] == "answered" and "balance 1,240.50" in seen[-1] and "last payment date 2026-09-30" in seen[-1]
-    ask("U4KFSQCDQ", "voice")  # Scott by voice
-    assert said[-1][1] == "answered"
-    assert ar_facts(data, ["1205-1-00004", "1205-1-00007"]).startswith("TOTAL owed across these 2 accounts (already added up): $1,340.50")
-    d.alliant = Alliant()
+    assert "Open invoices (1" in seen[-1] and "TOWEL BAR MOP" not in seen[-1]  # only what a balance question needs
+    ask("U4KFSQCDQ", "voice", "what do we charge Midas 4 for bar mops")  # Scott by voice: prices aren't filtered here
+    assert said[-1][1] == "answered" and "price 0.42" in seen[-1] and "CHARCOAL" not in seen[-1]
+    ask("U4KFSQCDQ", "D1", "when does the Midas 4 contract expire")
+    assert "contract expiry 2027-03-31" in seen[-1]
+    d.office_group = lambda t, p: ["1205-1-00004", "1205-1-00007"]
+    ask("U4KFSQCDQ", "D1", "what do the Midas stores owe")
+    assert "TOTAL owed across these 2 accounts (already added up): $1,340.50" in seen[-1]
+    d.data_dir = str(tmp_path / "empty")
     ask("U4KFSQCDQ", "D1")
     assert said[-1][1] == "missing"
 

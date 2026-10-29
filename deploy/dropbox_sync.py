@@ -95,7 +95,12 @@ FEED_FILES = ["customers.csv", "customer_cards.csv", "current_items.csv", "garme
 # Garment tracking (barcode status, custom-scan text, open customer POs): used once the Mac export writes them.
 OPTIONAL = {"holds.csv", "garments_in_service.csv", "purchase_orders.csv", "garment_scans.csv", "open_work_orders.csv",
             "skus.csv",  # SKU details (weights in ounces), no prices
-            "ar.csv"}    # balance and last payment per account: Scott and Bill only, in private (desk.ar_answer)
+            "garments_retired.csv",  # garments out of service in the last 2 years (barcode lookups)
+            "routes.csv", "route_stops.csv"}  # route names, and every stop per day in driving order
+# Money files, for Scott and Bill only (desk.private_answer): ar, open invoices, pricing, account details. Kept apart in
+# data/private/ (owner-only permissions), never in the feed files staff answers come from.
+PRIVATE_DIR = "/private - Scott and Bill only"
+PRIVATE_FILES = ("ar.csv", "open_invoices.csv", "pricing.csv", "account_details.csv")
 FEED_REQUIRED = {"customers.csv": {"account", "name", "route", "service_days"},
                  "customer_cards.csv": {"account", "name"},
                  "current_items.csv": {"account", "item", "quantity", "autocount", "sku"},
@@ -227,6 +232,32 @@ def sync_notes(conf, auth) -> None:
         log(f"Alliant University notes: {changed} file(s) updated, {len(new)} in all.")
 
 
+def sync_private(conf, auth) -> None:
+    """Mirror the Scott-and-Bill-only money files into data/private/ (folder 700, files 600), only when changed. The
+    desk reads them fresh on each private question, so no restart is needed."""
+    local = os.path.join(DATA, "private")
+    os.makedirs(local, mode=0o700, exist_ok=True)
+    os.chmod(local, 0o700)
+    old, new, changed = conf.get("private_hashes", {}), {}, 0
+    for name in PRIVATE_FILES:
+        meta = _meta(auth, f"{PRIVATE_DIR}/{name}")
+        if meta is None:
+            continue
+        new[name] = meta["content_hash"]
+        dest = os.path.join(local, name)
+        if old.get(name) == meta["content_hash"] and os.path.exists(dest):
+            continue
+        fd = os.open(dest + ".new", os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "wb") as f:
+            f.write(_download(auth, meta["path_lower"]))
+        os.replace(dest + ".new", dest)
+        changed += 1
+    if changed:
+        conf["private_hashes"] = new
+        save(conf)
+        log(f"Private Scott-and-Bill files: {changed} updated ({', '.join(sorted(new))}).")
+
+
 def sync():
     conf = load()
     token = access_token(conf)
@@ -235,6 +266,10 @@ def sync():
         sync_notes(conf, auth)
     except Exception as e:  # never let the notes get in the way of the customer data
         log(f"Alliant University notes not synced: {e}")
+    try:
+        sync_private(conf, auth)
+    except Exception as e:
+        log(f"Private Scott-and-Bill files not synced: {e}")
     done = _meta(auth, "/feed_done.txt")
     if done and sync_feed(conf, auth, done) and feed_age_hours(done) <= STALE_HOURS:
         return  # the feed is current: the PDF is only a fallback

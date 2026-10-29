@@ -56,7 +56,8 @@ VOICE_PORT = int(os.environ.get("DESK_VOICE_PORT", "8091"))  # Donna's voice (de
 SKU_Q = re.compile(r"\b(weigh\w*|pounds?|lbs?|dimensions?|materials?|fabric|made of|blend|sku|how big|"
                    r"case pack|pack size|\d-\d\d-\d\d)\b", re.I)  # questions about what an item is, not who has it
 AR_Q = re.compile(r"\b(owes?|owing|balance|past due|overdue|paid us|last paid|last payment|pay(s|ing)? us|"
-                  r"credit hold|collections?|receivables?|a/?r)\b", re.I)
+                  r"credit hold|collections?|receivables?|a/?r|pric(?:e|es|ed|ing)|charg(?:e|es|ing)|rates?|contracts?|"
+                  r"expir\w*|terms|sales ?rep|bill.?to|invoices?|minimum charge|insurance|replacement cost)\b", re.I)
 AR_USERS = {u.strip() for u in os.environ.get("AR_SLACK_IDS", "U4KFSQCDQ,U9SGPJP0C").split(",") if u.strip()}  # Scott, Bill
 ALLIANT_Q = re.compile(r"\b(alliant|catalog|customer items|customer entry|new item|stop item|add wearers?|stop wearer|"
                        r"work orders?|pull list|system create|handheld|route mobile|special order|ancillary|"
@@ -738,28 +739,31 @@ class Desk:
         return self._jobs
 
     def ar_answer(self, user: str | None, text: str, parsed, here: str, say) -> bool:
-        """What an account owes and when it last paid: for Scott and Bill only (AR_SLACK_IDS), and only in a private
-        message with the bot or by voice, never in a channel. Everyone else is told it's not something Donna shares."""
+        """Money questions (what an account owes, invoices, pricing, contract and account details), from the private
+        files (private_data.py): for Scott and Bill only (AR_SLACK_IDS), and only in a private message with the bot or
+        by voice, never in a channel. Everyone else is told it's not something Donna shares."""
         if user not in AR_USERS:
-            say(f"<@{user}> Balances and payments aren't something I can share. Scott or Bill can help with that.",
+            say(f"<@{user}> Balances, invoices and pricing aren't something I can share. Scott or Bill can help with that.",
                 {"kind": "answer", "ar": "refused"})
             return True
         if here == self.desk_id or not (here == "voice" or str(here).startswith("D")):
             say(f"<@{user}> Ask me that in a private message and I'll tell you there.", {"kind": "answer", "ar": "private"})
             return True
-        if not self.alliant.ar:
-            say(f"<@{user}> I don't have the balances yet. They're coming in the Alliant feed as ar.csv.",
-                {"kind": "answer", "ar": "missing"})
+        from . import private_data
+        if not private_data.load(self.data_dir):
+            say(f"<@{user}> I don't have the private money files yet (balances, invoices, pricing). They come from the "
+                "Alliant feed's \"private - Scott and Bill only\" folder.", {"kind": "answer", "ar": "missing"})
             return True
         accounts = self.office_group(text, parsed) or ([parsed.account_number] if parsed.account_number else [])
         if not accounts:
             say(f"<@{user}> Which customer? Give me the account number or location.",
                 {"kind": "office_ask", "user": user, "q": text})
             return True
-        from .context import ar_facts
         from .parser import answer_lookup
-        ans = answer_lookup(self.claude, text, "Accounts receivable (private, for the owner and Bill):\n"
-                            + ar_facts(self.alliant, accounts[:60]), asker=self.asker(user))
+        names = {c.account: c.name for c in self.alliant.customers}
+        ans = answer_lookup(self.claude, text, "Private money files (balances, open invoices, pricing, account details): "
+                            "for Scott and Bill only, who are asking now; give the numbers they ask for.\n"
+                            + private_data.facts(self.data_dir, accounts[:60], text, names), asker=self.asker(user))
         as_of = f" _(Alliant as of {self.alliant.as_of})_" if self.alliant.as_of else ""
         say(f"<@{user}> {ans.answer}{as_of}"[:3900], {"kind": "answer", "ar": "answered"})
         return True
