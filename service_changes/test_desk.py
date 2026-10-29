@@ -787,6 +787,7 @@ def test_scott_tells_donna_a_change_by_voice(setup, monkeypatch, tmp_path):
     assert slack.msgs["DS"][-1]["text"] == "Quick check from Donna: 6 in total, or 6 more?"
     reply = d.owner_change("DS", "6", "DS", typed={"ts": "1.0", "user": "U4KFSQCDQ", "channel": "DS"})
     assert reply.endswith("Want me to put that in?") and "Donna asked: 6 in total, or 6 more?" in CALLS[-1]
+    assert "MAT CHARCOAL HEATHER 3X10" in CALLS[-1]  # the ticket's exact items come along
 
 
 def test_bill_by_voice_gets_the_business_not_scotts_briefing(setup, monkeypatch):
@@ -876,3 +877,16 @@ def test_scotts_texted_change_gets_its_readback_by_text(setup, monkeypatch):
     assert d.run_once()["readback"] == 1
     assert sent and sent[0][0] == "+19072306513" and sent[0][1].startswith("Donna: ✅ W1 WENDY'S #4412 – 200 shop towels added")
     assert "DSCOTT" not in slack.msgs  # by text only, the way he asked
+
+
+def test_her_question_keeps_the_tickets_exact_items(setup):
+    slack, d = setup
+    slack.msgs.setdefault("DS", [])
+    t = d.post("D1", "*4000-1-00400*  SAFEWAY 1739AS (P)\n:no_entry: *Stop*  MAT CONFETTI GREY 3X10 `10-10-02` · 5 → *0*\n"
+                     ":heavy_minus_sign: *Decrease*  MAT CONFETTI GREY 3X5 `10-10-03` · inventory 8 → *4*\n\n"
+                     "> On account 4000-1-00400, stop all the mats. Reduce the inventory by half.",
+               {"kind": "ticket", "src_channel": "DS", "src_ts": "1.1", "driver_id": "U4KFSQCDQ", "account": "4000-1-00400"})
+    d.ask_requester(t, "Inventory to half, or to zero?")
+    text = d.changes["DS"]["text"]
+    assert text.startswith("On account 4000-1-00400, stop all the mats.")
+    assert "The ticket for it: Stop  MAT CONFETTI GREY 3X10 10-10-02 · 5 → 0; Decrease" in text and "MAT CONFETTI GREY 3X5" in text

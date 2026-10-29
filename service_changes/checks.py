@@ -66,7 +66,10 @@ def current_qty(alliant: Alliant, account: str | None, item: str) -> tuple[str, 
     in Alliant ("please", "new"). A real color like "brandywine" is kept, so "4x6 brandywine"
     won't match a charcoal 4x6.
     """
-    return _find(alliant.items.get(account or "", {}), item, alliant_vocab(alliant))
+    items, vocab = alliant.items.get(account or "", {}), alliant_vocab(alliant)
+    found = _find(items, item, vocab)
+    bare_item = re.sub(r"\s*\([^)]*\)", "", item or "").strip()  # "grey mat (currently inventory 10)": the aside isn't the item
+    return found or (_find(items, bare_item, vocab) if bare_item and bare_item != item else None)
 
 
 @dataclass
@@ -272,6 +275,8 @@ def check(parsed: ParsedMessage, alliant: Alliant) -> Result:
                 # "Fix the inventory" is about Alliant's inventory number; everything else about the autocount.
                 cc.current = _autocount(cc, alliant, parsed.account_number)
         q = ch.quantity
+        if q is None and ch.fraction and ch.action == Action.decrease and cc.current is not None and 0 < ch.fraction < 1:
+            q = ch.quantity = round(cc.current * ch.fraction)  # "by half": 10 -> 5 taken off, leaving 5
 
         if ch.action == Action.stop:
             cc.new_total = 0 if cc.current is not None else None
@@ -400,13 +405,15 @@ ICONS = {Action.add: "➕", Action.decrease: "➖", Action.set: "🔢", Action.s
          Action.size_change: "📏", Action.other: "✏️"}
 
 
-def _inventory_follows(cc: CheckedChange, alliant: Alliant, acct: str | None) -> str:
+def _inventory_follows(cc: CheckedChange, alliant: Alliant, acct: str | None, said: set | None = None) -> str:
     """Every item's inventory is either equal to its auto count or double it (Scott, 2026-10-24), so a change to the
     auto count moves the inventory with it: equal stays equal, double stays double. Price types 14 and 21 bill on
     inventory, which is why it matters. Any other ratio is an old entry mistake for the office to fix."""
     ch = cc.change
     if ch.inventory or ch.wearer or cc.wearer_number or cc.current is None or cc.new_total is None:
         return ""
+    if said and (cc.alliant_item or ch.item) in said:
+        return ""  # they said what the inventory should be (its own line): that wins over equal-or-double
     pt = alliant.price_type.get(acct or "", {}).get(cc.alliant_item or "")
     if pt == "11":
         return ""  # COG: the customer owns it and pays per wash, so the inventory ratio doesn't apply
@@ -658,7 +665,8 @@ def ticket(result: Result, alliant: Alliant, with_readback: bool = True) -> str:
             bits.append(freq)
         if ch.effective:
             bits.append(ch.effective)
-        inv_line = _inventory_follows(cc, alliant, acct)
+        said = {c.alliant_item or c.change.item for c in result.changes if c.change.inventory}
+        inv_line = _inventory_follows(cc, alliant, acct, said)
         if inv_line:
             bits.append(inv_line)
         if cc.standard_qty:

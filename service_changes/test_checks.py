@@ -620,3 +620,21 @@ def test_just_a_mat_asks_which_instead_of_picking_the_most_common():
     r = check(ParsedMessage(category=Category.item_change, account_number="5045-1-00000", summary="mat",
                             changes=[Change(action=Action.add, item="mat", quantity=1)]), data)
     assert r.questions and r.questions[-1].startswith("What color and size mat?")
+
+
+def test_stop_the_mats_and_cut_the_inventory_in_half():
+    from .checks import check, readback, ticket
+    from .context import Alliant, Customer
+    from .schema import Action, Category, Change, ParsedMessage
+    a = Alliant(customers=[Customer("4000-1-00400", "SAFEWAY 1739AS (P)", "4", ["Tue"])],
+                items={"4000-1-00400": {"MAT CONFETTI GREY 3X10": 10, "MAT CONFETTI GREY 3X5": 8}},
+                autocount={"4000-1-00400": {"MAT CONFETTI GREY 3X10": 5, "MAT CONFETTI GREY 3X5": 4}})
+    changes = []
+    for item in ("MAT CONFETTI GREY 3X10", "MAT CONFETTI GREY 3X5"):
+        changes += [Change(action=Action.stop, item=item),
+                    Change(action=Action.decrease, item=item, inventory=True, fraction=0.5)]
+    r = check(ParsedMessage(category=Category.item_change, account_number="4000-1-00400", summary="s", changes=changes), a)
+    t = ticket(r, a)
+    assert "5 → *0*" in t and "inventory 10 → *5*" in t and "4 → *0*" in t and "inventory 8 → *4*" in t
+    assert "→ *0* too" not in t and not r.questions  # the inventory they said wins: no conflicting "inventory → 0 too"
+    assert "from 10 to 5" in readback(r)

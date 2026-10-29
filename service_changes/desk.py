@@ -1350,9 +1350,13 @@ class Desk:
             if p.get("owner_sms"):  # he texted it in: ask by text too (his answer finds this question by his user id)
                 from .sms import send_sms
                 send_sms(p["owner_sms"], f"Donna: Quick check: {q}")
+            # the ticket's own lines too: they name the exact Alliant items ("MAT CONFETTI GREY 3X10"), which the
+            # request alone ("stop all the mats") doesn't, so the answer is read against the right items
+            lines = [re.sub(r"[*`_]", "", re.sub(r":[a-z_]+:\s*", "", ln)).strip() for ln in todo_bar.body(t).splitlines()
+                     if re.match(r"^\s*(?::[a-z_]+:|[➕➖🔢⛔🔄📏✏️])", ln)]
+            text = (" ".join(said) or todo_bar.body(t)) + ("\nThe ticket for it: " + "; ".join(lines) if lines else "")
             self.__dict__.setdefault("changes", {})[p["src_channel"]] = {
-                "text": " ".join(said) or todo_bar.body(t), "asked": q, "at": time.time(), "user": p.get("driver_id"),
-                "workstation": True}
+                "text": text, "asked": q, "at": time.time(), "user": p.get("driver_id"), "workstation": True}
             return self.name(p.get("driver_id")).split()[0] if p.get("driver_id") else "owner"
         if p.get("src_channel") in self.routes.values() and p.get("src_ts"):
             who = f"<@{p['driver_id']}> " if p.get("driver_id") else ""
