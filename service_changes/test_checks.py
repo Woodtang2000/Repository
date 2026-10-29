@@ -652,8 +652,10 @@ def test_stopping_an_item_asks_what_the_inventory_should_be():
     r = check(p(stop("MAT CONFETTI GREY 3X10"), stop("MAT CONFETTI GREY 3X5")), a)
     assert len(r.questions) == 1 and "MAT CONFETTI GREY 3X10 (10 in inventory) and MAT CONFETTI GREY 3X5 (8 in inventory)" in r.questions[0]
     assert "Zero" in r.questions[0] and "→ *0* too" not in ticket(r, a)  # never an automatic inventory on a stop
-    c = check(p(stop("MAT CONFETTI GREY 3X10")), a, asker="customer").questions[0]
-    assert c.startswith("When we stop the mat confetti grey 3x10, should your driver pick them all up") and "inventory" not in c
+    from .checks import stop_notice
+    c = check(p(stop("MAT CONFETTI GREY 3X10")), a, asker="customer")
+    assert not c.questions and "inventory stays *10* for now" in ticket(c, a)  # told, not asked; the office sees STI
+    assert stop_notice(c).startswith("Once they're stopped, you have two weeks to turn all of them in")
     r = check(p(stop("MAT CONFETTI GREY 3X10", keep_inventory=True)), a)
     assert not r.questions and "inventory stays *10* for now (STI" in ticket(r, a)
     r = check(p(stop("MAT CONFETTI GREY 3X10"), Change(action=Action.set, item="MAT CONFETTI GREY 3X10", quantity=0, inventory=True)), a)

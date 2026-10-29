@@ -667,7 +667,9 @@ class TextDesk:
                      "driver_id": "", "account": acct, "msgs": [], self.to_key: phone, **self.ticket_extra(phone),
                      "expect": expectations(result) if parsed.category in ACTIONABLE and not result.questions else []},
                     todo="own")
-        self.send(phone, GOT_IT.format(how="text" if self.word == "text" else "email"))
+        from .checks import stop_notice
+        notice = stop_notice(result) if parsed.category in ACTIONABLE else ""
+        self.send(phone, GOT_IT.format(how="text" if self.word == "text" else "email") + (" " + notice if notice else ""))
         self.state["convos"].pop(self.key(phone), None)
 
     # ---- Scott texting from his own phone -----------------------------------------------------------------------

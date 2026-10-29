@@ -336,13 +336,23 @@ def check(parsed: ParsedMessage, alliant: Alliant, asker: str = "staff") -> Resu
     return Result(parsed, out, cust.name if cust else None)
 
 
+STOP_NOTICE = ("Once they're stopped, you have two weeks to turn all of them in to your driver. Anything we haven't "
+               "gotten back after two weeks is billed as a loss.")
+
+
+def stop_notice(result: Result) -> str:
+    """What a customer is told when they stop items they have some of (Scott, 2026-10-29: told, not asked)."""
+    return STOP_NOTICE if any(c.change.action == Action.stop and c.change.keep_inventory and (stop_inventory(c) or 0) > 0
+                              for c in getattr(result, "changes", [])) else ""
+
+
 def stop_inventory(cc: CheckedChange) -> int | None:
     """What's in inventory on an item being stopped (Alliant's inventory number, not the per-delivery count)."""
     return cc.inventory if cc.inventory is not None else cc.current
 
 
 def _ask_stop_inventory(out: list[CheckedChange], who: str, asker: str) -> None:
-    """A stopped item keeps its inventory until someone lowers it: it shows on the next two invoices as $0.00 "STI"
+    """Staff are asked; customers are told (stop_notice). A stopped item keeps its inventory until someone lowers it: it shows on the next two invoices as $0.00 "STI"
     (still in inventory), then each piece still there is billed as a loss. Drivers pick them up, but if the office
     doesn't lower the inventory by what came back, the customer is billed a loss on all of it (Scott, 2026-10-29).
     So whoever stops an item says what the inventory should be: zero, cut down, or left for now. One question for
@@ -353,15 +363,13 @@ def _ask_stop_inventory(out: list[CheckedChange], who: str, asker: str) -> None:
              and (c.alliant_item or c.change.item) not in said]
     if not open_:
         return
+    if asker == "customer":  # customers aren't asked: they're told how it works (stop_notice), and the inventory
+        for c in open_:      # stays until the driver brings them back, for the office to lower by what came back
+            c.change.keep_inventory = True
+        return
     items = " and ".join(f"{(c.alliant_item or c.change.item)} ({stop_inventory(c)} in inventory)" for c in open_)
-    if asker == "customer":
-        q = (f"When we stop the {' and '.join((c.alliant_item or c.change.item).lower() for c in open_)}, should your "
-             "driver pick them all up, pick up some (how many?), or leave them with you for now? Anything still with "
-             "you after two weeks may be billed as lost.")
-    else:
-        q = (f"Stopping {items}: what should the inventory be? Zero (picked up), cut down (to how many, or by half), "
-             "or left as is for now? Left in inventory, they bill as lost after two invoices.")
-    open_[0].questions.append(q)
+    open_[0].questions.append(f"Stopping {items}: what should the inventory be? Zero (picked up), cut down (to how many, "
+                              "or by half), or left as is for now? Left in inventory, they bill as lost after two invoices.")
 
 
 VERBS = {Action.add: "added", Action.decrease: "decreased", Action.stop: "stopped", Action.restart: "restarted",
