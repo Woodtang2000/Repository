@@ -480,3 +480,15 @@ def test_usual_sku_works_on_a_texters_narrowed_data():
     mine = only(a, ["5045-1-00000"])
     assert mine.sku == {} and mine.ar == {}  # nothing of another account's, and no balances at all
     assert usual_sku(mine, "bar mops") == ("5-01-01", "TOWEL BAR MOP GOLD STRIPE", 2)
+
+
+def test_lookup_and_item_match_run_with_their_models():
+    """answer_lookup has no model argument; match_items and parse_message take one (phone.CHECK_MODEL)."""
+    from types import SimpleNamespace
+    from . import parser
+    seen = []
+    client = SimpleNamespace(beta=SimpleNamespace(messages=SimpleNamespace(
+        parse=lambda **kw: seen.append(kw["model"]) or SimpleNamespace(parsed_output=None))))
+    parser.answer_lookup(client, "how many mats", "facts")
+    parser.match_items(client, ["mops"], ["MOP WET"], model="claude-sonnet-5-5")
+    assert seen == [parser.MODEL, "claude-sonnet-5-5"]

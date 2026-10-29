@@ -149,7 +149,7 @@ def answer_lookup(client: anthropic.Anthropic, question: str, facts: str, asker:
               + "Use only the data above; if it doesn't say, set found to false and say what you couldn't find."
               + (" " + OWNER_VOICE if "owner" in asker else ""))
     response = client.beta.messages.parse(
-        model=model or MODEL,
+        model=MODEL,
         max_tokens=4000,
         messages=[{"role": "user", "content": prompt}],
         output_format=Answer,
@@ -221,7 +221,7 @@ def match_items(client: anthropic.Anthropic, driver_items: list[str], account_it
                 "Return null if two items fit equally or none fits.\n"
               + "\n".join(f"{i + 1}. {t}" for i, t in enumerate(driver_items)))
     response = client.beta.messages.parse(
-        model=MODEL,
+        model=model or MODEL,
         max_tokens=4000,
         messages=[{"role": "user", "content": prompt}],
         output_format=ItemMatch,
