@@ -452,6 +452,9 @@ def make_handler(chat: Chat, public_url: str):
             m = re.fullmatch(r"/twilio/voice/audio/([0-9a-f]{20})\.mp3", u.path)
             if m and getattr(chat, "phone", None) and m.group(1) in chat.phone.audio:  # Donna's lines on a phone call
                 return self._send(200, chat.phone.audio[m.group(1)], "audio/mpeg", cache=3600)
+            if u.path == "/donna-avatar.png":  # Donna's picture, beside her sign-off in customer emails
+                with open(os.path.join(REPO, "brand", "donna_google_profile.png"), "rb") as f:
+                    return self._send(200, f.read(), "image/png", cache=86400)
             if u.path == "/donna-icon.png":  # Donna's home-screen icon (navy and gold, like Squirrel Tamer's acorn)
                 with open(os.path.join(REPO, "website_chat", "donna_icon.png"), "rb") as f:
                     return self._send(200, f.read(), "image/png", cache=86400)

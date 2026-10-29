@@ -35,10 +35,37 @@ def received(since_iso: str, inbound_address_id: str = "") -> list[dict]:
     return sorted(msgs, key=lambda m: m.get("received_at") or "")
 
 
-def send(to: str, subject: str, text: str, in_reply_to: str = "", key: str = "") -> None:
+def signature(company: str = "Snow White Linen") -> str:
+    """Donna's sign-off on every customer email: texting is the quickest way to reach her."""
+    return (f"Donna\n{company}\nText me any time: (866) 827-8398\nOffice: (907) 222-7738")
+
+
+def _html(text: str) -> str:
+    """The plain text as a simple email, with Donna's picture beside her sign-off (the text stays the fallback)."""
+    import html
+    body, _, sig = text.rpartition("\n\nDonna\n")
+    if not body:
+        body, sig = text, ""
+    pic = os.environ.get("WEBCHAT_PUBLIC_URL", "https://chat.snowwhitelinen.com").rstrip("/") + "/donna-avatar.png"
+    para = "".join(f"<p style=\"margin:0 0 12px\">{html.escape(p).replace(chr(10), '<br>')}</p>"
+                   for p in body.split("\n\n") if p.strip())
+    lines = ("Donna\n" + sig).split("\n") if sig else []
+    sign = ("" if not lines else
+            f'<table role="presentation" style="margin-top:16px;border-top:3px solid #f9af10;padding-top:10px"><tr>'
+            f'<td style="padding-right:12px;vertical-align:top"><img src="{pic}" width="56" height="56" alt="Donna" '
+            f'style="border-radius:50%;display:block"></td><td style="font:14px/1.45 Arial,sans-serif;color:#1c2226">'
+            f'<b style="color:#003746">{html.escape(lines[0])}</b><br>'
+            + "<br>".join(html.escape(l) for l in lines[1:]) + "</td></tr></table>")
+    return (f'<div style="font:15px/1.5 Arial,sans-serif;color:#1c2226;max-width:600px">{para}{sign}</div>')
+
+
+def send(to: str, subject: str, text: str, in_reply_to: str = "", key: str = "", company: str = "") -> None:
+    """From Donna (EMAIL_FROM, e.g. donna@mail.snowwhitelinen.com), named for the customer's company; replies go to
+    EMAIL_REPLY_TO (service@), which comes back to the desk."""
+    company = company or ("The Laundry Group" if "The Laundry Group" in text[-200:] else "Snow White Linen")
     body = {"from": {"email": os.environ.get("EMAIL_FROM", "service@mail.snowwhitelinen.com"),
-                     "name": "Snow White Linen"},
-            "to": [to], "subject": subject, "text": text, "category": "transactional"}
+                     "name": f"Donna \u2013 {company}"},
+            "to": [to], "subject": subject, "text": text, "html": _html(text), "category": "transactional"}
     if os.environ.get("EMAIL_REPLY_TO"):
         body["reply_to"] = [os.environ["EMAIL_REPLY_TO"]]
     if in_reply_to:

@@ -733,7 +733,7 @@ def test_change_email_to_the_invoice_contact(monkeypatch):
     from .context import Alliant, Customer
     from . import bird
     sent = []
-    monkeypatch.setattr(bird, "send", lambda to, subject, text, in_reply_to="", key="": sent.append((to, subject, text)))
+    monkeypatch.setattr(bird, "send", lambda to, subject, text, in_reply_to="", key="", company="": sent.append((to, subject, text)))
     monkeypatch.delenv("CHANGE_EMAILS", raising=False)
     d = SimpleNamespace(alliant=Alliant(customers=[Customer("5045-1-00000", "HOMER GOLF COURSE", "5", ["Tue"])],
                                         cards={"5045-1-00000": {"email": "ap@homergolf.com; Owner@HomerGolf.com"}}))

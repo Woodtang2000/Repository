@@ -1215,7 +1215,7 @@ class Desk:
             company = company_for(p.get("account"))
             subject = p.get("email_subject") or f"Your {company} request"
             bird.send(p["email_to"], subject if subject.lower().startswith("re:") else "Re: " + subject,
-                      plain(customer) + f"\n\nDonna\n{company}\n(907) 222-7738", in_reply_to=p.get("email_msgid", ""),
+                      plain(customer) + "\n\n" + bird.signature(company), in_reply_to=p.get("email_msgid", ""), company=company,
                       key=f"readback/{t['ts']}")
         else:
             self.post(p["src_channel"], msg, {"kind": "readback", "src_ts": p["src_ts"], "driver_id": p.get("driver_id"),
@@ -1249,7 +1249,7 @@ class Desk:
                 from . import bird
                 subject = p.get("email_subject") or f"Your {company} request"
                 bird.send(to, subject if subject.lower().startswith("re:") else "Re: " + subject,
-                          f"Happy to! Just one quick question on your request: {q}\n\nDonna\n{company}\n(907) 222-7738",
+                          f"Happy to! Just one quick question on your request: {q}\n\n" + bird.signature(company), company=company,
                           in_reply_to=p.get("email_msgid", ""))
             path = os.path.join(self.data_dir, f"{word}_asks.json")
             try:
@@ -1300,7 +1300,8 @@ class Desk:
             bird.send(e, f"{company}: a change to your service for {name}",
                       f"Hello,\n\nThis confirms a change to your {company} service for {name} ({acct}), requested {how} "
                       f"and entered today:\n\n{what}\n\nIf this doesn't look right, just reply to this email or call us at "
-                      f"(907) 222-7738.\n\nThank you,\nDonna\n{company}", key=f"change/{acct}/{p.get('src_ts', '')}")
+                      f"(907) 222-7738.\n\nThank you,\n\n" + bird.signature(company), key=f"change/{acct}/{p.get('src_ts', '')}",
+                      company=company)
         print(time.strftime("%H:%M"), f"change email sent for {acct} to {len(to)} invoice contact(s)", flush=True)
         return to
 

@@ -228,7 +228,7 @@ class EmailDesk(TextDesk):
         t = self.state["threads"].get(email_key(to), {})
         subject = t.get("subject") or "Your Snow White Linen request"
         bird.send(email_key(to), subject if subject.lower().startswith("re:") else "Re: " + subject,
-                  plain(body) + "\n\nSnow White Linen\n(907) 222-7738", in_reply_to=t.get("msgid", ""))
+                  plain(body) + "\n\n" + bird.signature(), in_reply_to=t.get("msgid", ""))
 
     def sign_up(self, addr: str, body: str, sid: str, n: int) -> None:
         """An unknown sender: the email itself usually says who they are, so the office gets a card straight away and
