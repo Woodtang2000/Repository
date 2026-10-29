@@ -30,9 +30,13 @@ notes rather than guessing. The house rules below still win over the notes.
 1. Find Alliant in your Claude tab group. If the group has no Alliant tab (a new session gets a new group), open
    https://windows.cloud.microsoft/webclient/avd/34ca5fb7-c81d-4bbb-a924-fb52111f27e1/2ce75969-d825-4e1d-176c-08dda04aaf33
    in a tab in your group: it reconnects to the Alliant session already running (click Connect / Reconnect if
-   asked, and choose to reconnect to the existing session). If it shows a sign-in page, a password or code prompt,
-   or anything but Alliant: stop, report `needs_person` with "Alliant needs signing in" (never type a password or
-   code).
+   asked, and choose to reconnect to the existing session).
+   **The Windows sign-in box** (Scott approved this on 2026-10-28): if the remote desktop shows its own "Sign in" box
+   and Chrome has **already filled in both** the work account and the password, click **Sign in** (or OK), and choose
+   to reconnect to the existing session. You only click: never type, edit or paste anything in those fields.
+   Stop and report `needs_person` with "Alliant needs signing in" if a field is empty, it asks for a code, a phone
+   approval or any two-step check, "Pick an account" needs anything typed, the sign-in fails or asks again, or the
+   screen is anything else you don't recognize.
 2. Customer Center → Go To Customer: Account, Branch, Customer from the job. Wearer changes: Go To Wearer.
 3. Check the header: the account number and the customer name must match the ticket. If not: `needs_person`.
 4. Make exactly the ticket's changes, nothing else:
@@ -73,7 +77,8 @@ notes rather than guessing. The house rules below still win over the notes.
   Frequency, Bill Average, Taxable or Auto Count %. Never Ancillary Charges, Default Anc., or anything under A/R.
 - Never touch the **Locking** box, Stop Customer, Seasonal, or New Business on Customer Entry.
 - Never change an account the ticket doesn't name, and never more than the ticket asks.
-- Never type passwords or MFA codes. Never close or sign out of Alliant or the remote desktop.
+- Never type, paste or change a password or MFA code (clicking Sign in on Chrome's filled-in box, step 1, is the
+  only sign-in you do). Never close or sign out of Alliant or the remote desktop.
 - Never put prices, balances, invoice amounts or anything from A/R in your note: notes are read in Slack.
 - Work only in the Alliant tab in your Claude tab group; never open other sites or other browsers.
 - If a ticket has open questions (❓), a ⚠️ warning, or asks for something these rules don't cover (putting an account
