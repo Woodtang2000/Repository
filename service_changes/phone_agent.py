@@ -34,10 +34,31 @@ def owner_phones() -> set[str]:
     return {digits(x) for x in os.environ.get("OWNER_PHONES", "").split(",") if len(digits(x)) == 10}
 
 
-def secret() -> str:
-    """Scott's phone secret: OWNER_PHONE_SECRET, a phrase of three words or more ("bar mops in the snow") or digits;
-    OWNER_PHONE_PIN works too. Empty when not set or too short to be safe."""
-    raw = (os.environ.get("OWNER_PHONE_SECRET") or os.environ.get("OWNER_PHONE_PIN") or "").strip()
+def trusted(caller: str, staff: dict | None = None) -> dict | None:
+    """Who besides a customer this number is, for owner-level texting and calls, before their code phrase:
+    Scott (OWNER_PHONES, or his Slack profile phone): {"user", "name": "Scott", "harvey": True}; or a partner from
+    TRUSTED_PHONES ("9072403690:U9SGPJP0C:Bill", comma separated): business only, never Harvey mode."""
+    d = digits(caller)[-10:]
+    boss = [u.strip() for u in os.environ.get("OWNER_SLACK_ID", "U4KFSQCDQ").split(",") if u.strip()]
+    if d in owner_phones() or (staff or {}).get("user") in boss:
+        return {"user": boss[0], "name": "Scott", "harvey": True}
+    for entry in os.environ.get("TRUSTED_PHONES", "").split(","):
+        num, _, rest = entry.strip().partition(":")
+        user, _, name = rest.partition(":")
+        if len(digits(num)) >= 10 and digits(num)[-10:] == d and user.strip():
+            return {"user": user.strip(), "name": name.strip() or "there", "harvey": False}
+    return None
+
+
+def secret(user: str = "") -> str:
+    """A code phrase for the phone and texting: Scott's is OWNER_PHONE_SECRET (OWNER_PHONE_PIN works too), anyone
+    else's PHONE_SECRET_<their Slack id>. Three words or more ("bar mops in the snow") or 4+ digits; empty when not
+    set or too short to be safe."""
+    boss = os.environ.get("OWNER_SLACK_ID", "U4KFSQCDQ").split(",")[0].strip()
+    if user and user != boss:
+        raw = (os.environ.get(f"PHONE_SECRET_{user}") or "").strip()
+    else:
+        raw = (os.environ.get("OWNER_PHONE_SECRET") or os.environ.get("OWNER_PHONE_PIN") or "").strip()
     if re.search(r"[a-z]", raw, re.I):
         return raw if len(raw.split()) >= 3 else ""
     return raw if len(spoken_digits(raw)) >= 4 else ""
@@ -78,10 +99,10 @@ class PhoneTools:
             caller, called = str(body.get("caller") or ""), str(body.get("called") or "")
             line = "employees" if digits(called) == EMPLOYEE_LINE or body.get("line") == "employees" else "customers"
             who = self.phone.caller(caller) if line == "customers" else self.phone.staff(caller)
-            boss = {u.strip() for u in os.environ.get("OWNER_SLACK_ID", "U4KFSQCDQ").split(",")}
-            scott = digits(caller) in owner_phones() or (self.phone.staff(caller) or {}).get("user") in boss
+            person = trusted(caller, self.phone.staff(caller))
             self.calls[conv] = {"line": line, "from": caller, "who": who, "turns": [], "change": None, "posted": 0, "at": now,
-                                "scott": scott, "owner": False, "tries": 0, "conv": conv}
+                                "scott": bool(person and secret(person["user"])), "person": person, "owner": False,
+                                "tries": 0, "conv": conv}
         c = self.calls[conv]
         c["at"] = now
         return c
@@ -109,13 +130,14 @@ class PhoneTools:
             return {"type": "conversation_initiation_client_data", "dynamic_variables": {"caller_name": "", "caller_known": "no"},
                     "conversation_config_override": {"agent": {"first_message": FIRST[line]}}}
         staff = self.phone.staff(caller)
-        scott = digits(caller) in owner_phones() or (staff or {}).get("user") in boss
+        person = trusted(caller, staff)
+        scott = bool(person and secret(person["user"]))
         who = self.phone.caller(caller) if line == "customers" else staff
         first = ((who or {}).get("name") or "").split()[0] if (who or {}).get("name") else ""
         if first.lower().strip(",.") in ("donna", "snow", "the"):
             first = ""
-        if scott and secret():
-            hello, first = "Hi Scott, it's Donna. What's the phrase?", "Scott"
+        if scott:
+            hello, first = f"Hi {person['name']}, it's Donna. What's the phrase?", person["name"]
         elif line == "employees":
             hello = f"Hi {first}, it's Donna. What do you need?" if first else FIRST["employees"]
         elif who:
@@ -125,7 +147,7 @@ class PhoneTools:
         else:
             hello = FIRST["customers"]
         print(time.strftime("%H:%M"), f"phone agent: greeting {line} …{digits(caller)[-4:]}"
-              + (" (Scott)" if scott else " (known)" if who else ""), flush=True)
+              + (f" ({person['name']})" if scott else " (known)" if who else ""), flush=True)
         return {"type": "conversation_initiation_client_data",
                 "dynamic_variables": {"caller_name": first or "", "caller_known": "yes" if who or scott else "no"},
                 "conversation_config_override": {"agent": {"first_message": hello}}}
@@ -139,9 +161,10 @@ class PhoneTools:
                     "the office will be glad to help at 907-222-7738 during business hours, and end the call politely."}
         info = {"line": c["line"], "office_open": office_open(),
                 "office_hours": os.environ.get("PHONE_OFFICE_HOURS", "Mon-Fri 8:00-17:00") + " Alaska time"}
-        if c["scott"] and secret():
-            info.update(owner_candidate=True, name="Scott", note="This is Scott's number. Greet him, ask for his secret phrase, "
-                        "and call verify_owner with what he says. Until it says verified, treat him like any caller.")
+        if c["scott"]:
+            n = c["person"]["name"]
+            info.update(owner_candidate=True, name=n, note=f"This is {n}'s number. Greet them, ask for their secret phrase, "
+                        "and call verify_owner with what they say. Until it says verified, treat them like any caller.")
         who = c["who"]
         if c["line"] == "employees":
             info.update(known=bool(who), name=(who or {}).get("name", ""),
@@ -225,12 +248,19 @@ class PhoneTools:
     def verify_owner(self, c: dict, body: dict, said: str) -> dict:
         """Scott's secret phrase or PIN (secret()), only from his own number, three tries a call: caller ID alone can be
         faked."""
-        real = secret()
+        real = secret((c.get("person") or {}).get("user", ""))
         if not c["scott"] or not real or c["tries"] >= 3:
             return {"verified": False, "note": "Not available on this call. Carry on as a normal call."}
         c["tries"] += 1
         if secret_matches(str(body.get("pin") or said), real):
             c["owner"] = True
+            if not c["person"]["harvey"]:
+                n = c["person"]["name"]
+                print(time.strftime("%H:%M"), f"phone agent: {n} verified (business only)", flush=True)
+                return {"verified": True, "mode": "business", "note": f"Business mode: {n} is one of the owners. For a "
+                        "customer, an account, a balance or a change on any account, call ask_donna with their words and "
+                        "give its answer in your own voice. Friendly and businesslike: no Harvey mode, nothing about the "
+                        "team or people, Slack or email."}
             print(time.strftime("%H:%M"), "phone agent: Scott verified (Harvey mode)", flush=True)
             return {"verified": True, "note": "Harvey mode: you're Scott's Donna now, exactly like his Donna app. For "
                     "anything about the business, customers, the team and people, Slack, email, balances or a change, "
@@ -244,7 +274,7 @@ class PhoneTools:
         if not c["owner"]:
             return {"answer": "", "note": "Only after verify_owner."}
         import urllib.request
-        owner = os.environ.get("OWNER_SLACK_ID", "U4KFSQCDQ").split(",")[0].strip()
+        owner = (c.get("person") or {}).get("user") or os.environ.get("OWNER_SLACK_ID", "U4KFSQCDQ").split(",")[0].strip()
         req = urllib.request.Request(f"http://127.0.0.1:{os.environ.get('DESK_VOICE_PORT', '8091')}/voice",
                                      data=json.dumps({"text": said, "convo": "phone-" + c["conv"], "user": owner}).encode(),
                                      headers={"Content-Type": "application/json"})
@@ -282,6 +312,9 @@ direct, confident, a step ahead, a little wit, warm. For anything about the busi
 Slack, email, balances or a change, call ask_donna with his exact words and give him its answer in your own voice,
 never changing a fact or number. A change: ask_donna reads it back; pass his yes, no or correction to ask_donna word for
 word. Never say a change is done unless ask_donna said so. Never repeat his secret phrase back.
+Bill, the other owner, gets the same greeting and phrase check; when verify_owner says mode "business", be his
+friendly, businesslike Donna (no Harvey mode): ask_donna for customers, accounts, balances and changes on any account,
+the same read-back and yes. Never repeat his phrase back either.
 """
 
 AGENT_RULES = """

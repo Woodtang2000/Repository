@@ -223,11 +223,6 @@ def caller_id_lines(cid: dict, match_name: str = "") -> list[str]:
     return out
 
 
-def owner_numbers() -> set[str]:
-    """Scott's own numbers (OWNER_PHONES), 10 digits each."""
-    return {d[-10:] for d in (re.sub(r"\D", "", x) for x in os.environ.get("OWNER_PHONES", "").split(",")) if len(d) >= 10}
-
-
 def plain(text: str) -> str:
     """Slack markup to plain text for a phone."""
     text = re.sub(r"<@\w+>\s*", "", text)
@@ -577,8 +572,11 @@ class TextDesk:
         if contact_key(phone) in blocked(self.data_dir):  # the office blocked them: no answer, nothing about any account
             self.log(phone, "blocked: ignored")
             return
-        if self.word == "text" and key in owner_numbers():  # Scott's own phone: any account, after his code phrase
-            return self.owner_text(phone, body)
+        if self.word == "text":  # Scott's or Bill's own phone: any account, after their code phrase
+            from .phone_agent import trusted
+            person = trusted(phone)
+            if person:
+                return self.owner_text(phone, body, person)
         cmd = demo.COMMAND.match(body)
         if cmd and demo.allowed(key, self.key):
             return self.demo_command(phone, cmd.group(1))
@@ -674,13 +672,14 @@ class TextDesk:
 
     # ---- Scott texting from his own phone -----------------------------------------------------------------------
 
-    def owner_text(self, phone: str, body: str) -> None:
-        """Scott's own number (OWNER_PHONES) texting: the same Donna as his Donna app (desk.voice, any account, his yes
-        before anything changes), once he's texted his code phrase (OWNER_PHONE_SECRET) on its own; a text's caller ID
-        can be faked. Good for OWNER_TEXT_HOURS (12); 3 wrong tries locks it until tomorrow and tells him in Slack.
-        A request sent before the phrase is held and answered right after it. The phrase itself is never logged."""
+    def owner_text(self, phone: str, body: str, person: dict) -> None:
+        """Scott's own number (OWNER_PHONES) or Bill's (TRUSTED_PHONES) texting: the same Donna as their Donna app
+        (desk.voice: Harvey mode for Scott, business only for Bill; any account, their yes before anything changes),
+        once they've texted their code phrase on its own; a text's caller ID can be faked. Good for OWNER_TEXT_HOURS
+        (12); 3 wrong tries locks it until tomorrow and tells them in Slack. A request sent before the phrase is held
+        and answered right after it. The phrase itself is never logged."""
         from .phone_agent import secret, secret_matches
-        key, real, now = self.key(phone), secret(), time.time()
+        key, real, now = self.key(phone), secret(person["user"]), time.time()
         st = self.state.setdefault("owner", {}).setdefault(key, {"until": 0, "tries": 0, "day": "", "held": ""})
         today = datetime.now(ALASKA).strftime("%Y-%m-%d")
         if st["day"] != today:
@@ -699,8 +698,7 @@ class TextDesk:
                     if st["tries"] >= 3:
                         st["held"] = ""
                         self.save()
-                        owner = os.environ.get("OWNER_SLACK_ID", "U4KFSQCDQ").split(",")[0].strip()
-                        self.slack.chat_postMessage(channel=owner, text=f"⚠️ Someone texting from your number {self.masked(phone)} got "
+                        self.slack.chat_postMessage(channel=person["user"], text=f"⚠️ Someone texting from your number {self.masked(phone)} got "
                                                                         "the code phrase wrong 3 times. Texting changes is locked until tomorrow.")
                         return
                     self.save()
@@ -708,22 +706,21 @@ class TextDesk:
                 st.update(asked=True, held=body[:1000])  # answered right after the phrase
                 self.log(phone, "owner number: asked for the code phrase")
                 self.save()
-                return self.send(phone, "Donna: hi Scott! Text me your code phrase first, then I'll take care of that.")
+                return self.send(phone, f"Donna: hi {person['name']}! Text me your code phrase first, then I'll take care of that.")
             hours = float(os.environ.get("OWNER_TEXT_HOURS", "12") or 12)
             held = st["held"]
             st.update(until=now + hours * 3600, tries=0, held="", asked=False)
             self.save()
             self.log(phone, "owner number: verified")
             if not held:
-                return self.send(phone, "Donna: got it, Scott. What can I do?")
+                return self.send(phone, f"Donna: got it, {person['name']}. What can I do?")
             body = held
         self.log(phone, "owner text")
-        self.send(phone, "Donna: " + self.ask_desk(body, key))
+        self.send(phone, "Donna: " + self.ask_desk(body, key, person["user"]))
 
-    def ask_desk(self, text: str, key: str) -> str:
+    def ask_desk(self, text: str, key: str, owner: str) -> str:
         """desk.voice on 127.0.0.1 (desk.serve_voice), the way the phone agent's ask_donna does."""
         import urllib.request
-        owner = os.environ.get("OWNER_SLACK_ID", "U4KFSQCDQ").split(",")[0].strip()
         req = urllib.request.Request(f"http://127.0.0.1:{os.environ.get('DESK_VOICE_PORT', '8091')}/voice",
                                      data=json.dumps({"text": text, "convo": "sms-" + key, "user": owner}).encode(),
                                      headers={"Content-Type": "application/json"})

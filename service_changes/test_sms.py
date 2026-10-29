@@ -358,7 +358,7 @@ def test_scott_texts_changes_after_his_code_phrase(desk, monkeypatch):
     monkeypatch.setenv("OWNER_PHONES", "907-230-6513")
     monkeypatch.setenv("OWNER_PHONE_SECRET", "bar mops in the snow")
     asked = []
-    monkeypatch.setattr(sms.TextDesk, "ask_desk", lambda self, text, key: asked.append((text, key)) or "Homer Golf Course: "
+    monkeypatch.setattr(sms.TextDesk, "ask_desk", lambda self, text, key, owner: asked.append((text, key)) or "Homer Golf Course: "
                         "20 bib aprons added. Want me to put that in?")
     me = "+19072306513"
     td.handle(me, "add 20 bib aprons to homer golf course", "S1")
@@ -377,7 +377,7 @@ def test_three_wrong_phrases_lock_scotts_number(desk, monkeypatch):
     td, slack, texts, seen = desk
     monkeypatch.setenv("OWNER_PHONES", "9072306513")
     monkeypatch.setenv("OWNER_PHONE_SECRET", "bar mops in the snow")
-    monkeypatch.setattr(sms.TextDesk, "ask_desk", lambda self, text, key: (_ for _ in ()).throw(AssertionError("no")))
+    monkeypatch.setattr(sms.TextDesk, "ask_desk", lambda self, text, key, owner: (_ for _ in ()).throw(AssertionError("no")))
     posted = []
     slack.chat_postMessage = lambda channel, text, **kw: posted.append((channel, text))
     me = "+19072306513"
@@ -385,3 +385,38 @@ def test_three_wrong_phrases_lock_scotts_number(desk, monkeypatch):
         td.handle(me, said, f"S{i}")
     assert posted and posted[0][0] == "U4KFSQCDQ" and "3 times" in posted[0][1]
     assert len(texts) == 3  # asked for the phrase, then two "not it"; nothing after the lock, not even the right phrase
+
+
+def test_bill_texts_business_only_with_his_own_phrase(desk, monkeypatch):
+    td, slack, texts, seen = desk
+    monkeypatch.setenv("TRUSTED_PHONES", "907-240-3690:U9SGPJP0C:Bill")
+    monkeypatch.setenv("OWNER_PHONE_SECRET", "bar mops in the snow")
+    monkeypatch.delenv("PHONE_SECRET_U9SGPJP0C", raising=False)
+    asked = []
+    monkeypatch.setattr(sms.TextDesk, "ask_desk", lambda self, text, key, owner: asked.append((text, owner)) or "Sure.")
+    bill = "+19072403690"
+    td.handle(bill, "what does chili's have", "B1")
+    assert "isn't set up yet" in texts[-1][1] and not asked  # no phrase of his own yet: nothing, not even Scott's works
+    td.handle(bill, "bar mops in the snow", "B2")
+    assert not asked
+    monkeypatch.setenv("PHONE_SECRET_U9SGPJP0C", "golf carts at dawn")
+    td.handle(bill, "what does chili's have", "B3")
+    assert texts[-1][1].startswith("Donna: hi Bill!")
+    td.handle(bill, "golf carts at dawn", "B4")
+    assert asked == [("what does chili's have", "U9SGPJP0C")]  # as Bill: desk.voice keeps him business only
+
+
+def test_trusted_numbers():
+    import os
+    from .phone_agent import secret, trusted
+    os.environ["TRUSTED_PHONES"] = "9072403690:U9SGPJP0C:Bill"
+    os.environ["OWNER_PHONES"] = "9072306513"
+    try:
+        assert trusted("+19072306513")["harvey"] and trusted("+19072306513")["name"] == "Scott"
+        assert trusted("(907) 240-3690") == {"user": "U9SGPJP0C", "name": "Bill", "harvey": False}
+        assert trusted("+19075551234") is None
+        os.environ["PHONE_SECRET_U9SGPJP0C"] = "too short"
+        assert secret("U9SGPJP0C") == ""  # two words: not safe enough
+    finally:
+        for k in ("TRUSTED_PHONES", "OWNER_PHONES", "PHONE_SECRET_U9SGPJP0C"):
+            os.environ.pop(k, None)
