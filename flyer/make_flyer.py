@@ -1,11 +1,14 @@
 """Make the "Text Snow White Linen" flyer (PDF + PNG) for toll-free verification and for customers.
   python3 make_flyer.py "(888) 555-0123"
+  python3 make_flyer.py "(866) 827-8398" Text-Snow-White-Linen-866-827-8398 "866-TAP-TEXT"   # the letters, big
 """
 import sys, pathlib
 from playwright.sync_api import sync_playwright
 
 number = sys.argv[1] if len(sys.argv) > 1 else "(8XX) XXX-XXXX"
 name = sys.argv[2] if len(sys.argv) > 2 else "Text-Snow-White-Linen"  # output file name, one per number
+vanity = sys.argv[3] if len(sys.argv) > 3 else ""  # the number in letters ("866-TAP-TEXT"), shown big over the digits
+shown = (f'{vanity}</div><div class="also">{number}' if vanity else number)
 html = f"""<!doctype html><html><head><meta charset="utf-8"><style>
 @page {{ size: Letter; margin: 0 }}
 * {{ box-sizing: border-box }}
@@ -18,6 +21,7 @@ h1 {{ font-size: 40pt; margin: 26px 0 6px; line-height:1.05; }}
 .number {{ background:#1f4e79; color:#fff; border-radius:14px; padding: 26px 30px; text-align:center; }}
 .number .label {{ font-size: 13pt; opacity:.85; letter-spacing:1px; text-transform:uppercase; }}
 .number .digits {{ font-size: 46pt; font-weight:700; margin-top:6px; letter-spacing:1px; }}
+.number .also {{ font-size: 20pt; opacity:.9; margin-top:4px; letter-spacing:1px; }}
 h2 {{ font-size: 16pt; margin: 26px 0 10px; color:#1f4e79; }}
 ul {{ margin:0; padding-left: 22px; font-size: 13.5pt; line-height:1.6; }}
 .steps li {{ margin-bottom: 4px; }}
@@ -28,7 +32,7 @@ ul {{ margin:0; padding-left: 22px; font-size: 13.5pt; line-height:1.6; }}
 <div class="top"><div class="brand">Snow White Linen</div></div>
 <h1>Text us your service changes</h1>
 <p class="sub">Add or remove items, set up new employees and uniforms, or put deliveries on hold, by text.</p>
-<div class="number"><div class="label">Text</div><div class="digits">{number}</div></div>
+<div class="number"><div class="label">Text</div><div class="digits">{shown}</div></div>
 <h2>How it works</h2>
 <ul class="steps">
 <li><b>You text us first.</b> We only reply to messages you send.</li>
@@ -51,7 +55,7 @@ Consent to receive texts is not a condition of service. Carriers are not liable 
 out = pathlib.Path(__file__).parent
 (out / "flyer.html").write_text(html)
 with sync_playwright() as p:
-    b = p.chromium.launch(executable_path="/opt/pw-browsers/chromium-1194/chrome-linux/chrome")
+    b = p.chromium.launch(executable_path="/opt/pw-browsers/chromium")
     pg = b.new_page(viewport={"width": 816, "height": 1056}, device_scale_factor=2)
     pg.set_content(html)
     pg.pdf(path=str(out / f"{name}.pdf"), format="Letter", print_background=True)
