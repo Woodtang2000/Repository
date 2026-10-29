@@ -471,18 +471,10 @@ class Phone:
         from .todo import attachment
         from .verify import expectations
         who = call["who"]
-        accounts = who["accounts"]
-        mine = only(self.alliant(), accounts)
-        acct = turn.account if turn.account in accounts else (accounts[0] if len(accounts) == 1 else None)
-        parsed = parse_message(self.claude, f"Customer: {turn.summary}", "customer-phone", f"{time.time():.6f}", mine,
-                               author=f"{who.get('name') or 'Customer'} (the customer, by phone)", model=CHECK_MODEL)
-        parsed.account_number = acct if acct else (parsed.account_number if parsed.account_number in accounts else None)
-        for c in parsed.changes:
-            c.account_number = None
-        if parsed.account_number is None or parsed.category not in ACTIONABLE:
+        checked = self.customer_check(call, turn)
+        if checked is None:
             return self.office_note(call, turn, verified=True)
-        fill_item_matches(self.claude, parsed, mine, model=CHECK_MODEL)
-        result = check(parsed, mine)
+        parsed, result, mine = checked
         out = ticket(result, mine, with_readback=False).splitlines()
         if result.questions:
             out.append("⚠️ _Still unclear after the call. Please call the customer._")
@@ -525,6 +517,27 @@ class Phone:
                     "driver": name, "driver_id": driver, "account": part.account_number or "", "msgs": [],
                     "expect": expectations(result)}})
         print(time.strftime("%H:%M"), f"phone: {name}'s change sent ({len(c['parts'])} ticket(s))", flush=True)
+
+    def customer_check(self, call: dict, turn: Turn):
+        """A verified customer's request, read and checked like a text: (parsed, result, their accounts' data), or None
+        when it isn't a change to one of their accounts (then it's a note for the office)."""
+        from .checks import check
+        from .parser import parse_message
+        from .run import fill_item_matches
+        from .sms import ACTIONABLE, only
+        who = call["who"]
+        accounts = who["accounts"]
+        mine = only(self.alliant(), accounts)
+        acct = turn.account if turn.account in accounts else (accounts[0] if len(accounts) == 1 else None)
+        parsed = parse_message(self.claude, f"Customer: {turn.summary}", "customer-phone", f"{time.time():.6f}", mine,
+                               author=f"{who.get('name') or 'Customer'} (the customer, by phone)", model=CHECK_MODEL)
+        parsed.account_number = acct if acct else (parsed.account_number if parsed.account_number in accounts else None)
+        for c in parsed.changes:
+            c.account_number = None
+        if parsed.account_number is None or parsed.category not in ACTIONABLE:
+            return None
+        fill_item_matches(self.claude, parsed, mine, model=CHECK_MODEL)
+        return parsed, check(parsed, mine), mine
 
     def employee_message(self, call: dict, turn: Turn) -> None:
         from . import todo

@@ -157,9 +157,19 @@ class PhoneTools:
         if c["posted"] > 5:
             return {"result": "Already passed several requests from this call; don't send more."}
         import threading
-        if c["line"] == "customers" and c["who"]:  # checked and posted in the background: the caller isn't kept waiting
+        if c["line"] == "customers" and c["who"]:
+            if c.get("asking"):  # their answer to her question: read together with the request
+                turn.summary = f"{c['asking']['text']}\nDonna asked: {c['asking']['q']}\nThe customer answered: {said}"
+                c["posted"] -= 1
+            checked = self.phone.customer_check(c, turn)
+            questions = list(dict.fromkeys(checked[1].questions)) if checked else []
+            if questions and (c.get("asking") or {}).get("n", 0) < 2:  # the same question a text would get, asked now
+                c["asking"] = {"text": turn.summary, "q": " ".join(questions[:2]), "n": (c.get("asking") or {}).get("n", 0) + 1}
+                return {"status": "question", "say": c["asking"]["q"]}
+            c["asking"] = None
+            # the ticket is posted in the background: the caller isn't kept waiting
             threading.Thread(target=self.phone.record, args=(f"agent-{c['posted']}", c, turn), daemon=True).start()
-            return {"result": "Sent to the office. They'll get a text the moment it's entered."}
+            return {"status": "sent", "result": "Sent to the office. They'll get a text the moment it's entered."}
         self.phone.office_note(c, turn, verified=False)
         return {"result": "Passed to the office; they'll call back to confirm before changing anything."}
 
@@ -271,7 +281,9 @@ How to work on the phone (you are speaking, not writing):
 CUSTOMER_TOOLS_NOTE = """Your tools on this line:
 - customer_request: an existing customer's change or service problem, once you have what the office needs (which item, how
   many, which location, which employee and sizes). summary = office-ready (the account, exactly what to change, quantities).
-  It tells you whether they'll be texted or called back; say so.
+  If it returns status "question" (which color, more or total...), ask the customer its `say` in your own words, then
+  call customer_request again with summary = their answer. Otherwise it tells you whether they'll be texted or called
+  back; say so.
 - new_lead: a new business. Fill caller_name, business, town, best_time; summary = what they need.
 """
 
@@ -323,7 +335,8 @@ FIRST = {"customers": "Thanks for calling Snow White Linen, this is Donna. How c
 LABEL = {"customers": "Donna – customer line", "employees": "Donna – employee line"}
 FIELDS = {  # tool -> (description, {property: description}); every tool also gets the caller, number and conversation
     "caller_info": ("Call first on every call: who is calling and what they can do.", {}),
-    "customer_request": ("Send an existing customer's change or service problem to the office.",
+    "customer_request": ("An existing customer's change or service problem, or their answer to the question it asked. "
+                         "status question: ask them its `say`, then call it again with their answer as summary.",
                          {"summary": "Office-ready: the account, exactly what to change, quantities.",
                           "account": "Their account number if known, else empty.", "caller_name": "The caller's name.",
                           "urgent": "yes if it can't wait, else no."}),

@@ -147,3 +147,24 @@ def test_she_greets_known_callers_by_name(desk, monkeypatch, tmp_path):
     out = tools.greeting({"caller_id": "+19075556513", "called_number": "+18668278398"})
     assert out["conversation_config_override"]["agent"]["first_message"] == "Hi Scott, it's Donna. What's the phrase?"
     assert out["type"] == "conversation_initiation_client_data" and out["dynamic_variables"]["caller_name"] == "Scott"
+
+
+def test_a_customer_on_the_866_line_gets_the_same_question_a_text_would(desk, monkeypatch):
+    make, leads = desk
+    p = make()
+    asked = []
+    unclear = SimpleNamespace(questions=["What color 3x10 mat? (3x10 mats come in confetti grey and blue.)"])
+    clear = SimpleNamespace(questions=[])
+    p.customer_check = lambda call, turn: asked.append(turn.summary) or (None, unclear if len(asked) == 1 else clear, None)
+    recorded = []
+    p.record = lambda sid, call, turn: recorded.append(turn.summary)
+    import threading
+    monkeypatch.setattr(threading, "Thread", lambda target, args=(), daemon=None: SimpleNamespace(start=lambda: target(*args)))
+    tools = phone_agent.PhoneTools(p)
+    jane = {"conversation_id": "j1", "caller": "+19075551234", "called": "+18668278398"}
+    r = tools.handle("customer_request", {**jane, "summary": "add one 3x10 mat"})
+    assert r == {"status": "question", "say": "What color 3x10 mat? (3x10 mats come in confetti grey and blue.)"}
+    assert not recorded
+    r = tools.handle("customer_request", {**jane, "summary": "confetti grey"})
+    assert r["status"] == "sent" and "The customer answered: confetti grey" in recorded[0]
+    assert "add one 3x10 mat" in recorded[0]
