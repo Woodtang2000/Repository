@@ -87,6 +87,16 @@ class Alliant:
     by_barcode: dict[str, dict] = field(default_factory=dict)  # barcode -> its garments_in_service row
     price_type: dict[str, dict[str, str]] = field(default_factory=dict)  # account -> item -> Alliant price type code
     scans: dict[str, list[tuple]] = field(default_factory=dict)  # barcode -> (datetime, status, text, scan type), 60 days
+    retired: dict[str, str] = field(default_factory=dict)  # barcode -> one line about it, garments_retired.csv (2 years)
+    stops: list[dict] = field(default_factory=list)  # route_stops.csv: branch, route, day, sequence, account, name, city...
+    route_names: dict[tuple[str, str], str] = field(default_factory=dict)  # (branch, route) -> area, routes.csv
+
+    def garment(self, barcode: str) -> dict | None:
+        """A garment in service by barcode, as typed or as Alliant pads it (zeros to 12 digits: 537456 -> 000000537456)."""
+        return self.by_barcode.get(barcode) or self.by_barcode.get(barcode.zfill(12))
+
+    def retired_line(self, barcode: str) -> str:
+        return self.retired.get(barcode) or self.retired.get(barcode.zfill(12)) or ""
 
     def on_hold(self, account: str | None, item: str | None = None, sku: str | None = None) -> list[dict]:
         """Holds on this account, or on this item / SKU on it."""
@@ -120,6 +130,10 @@ class Alliant:
         if f("customer_cards.csv"):
             with open(f("customer_cards.csv"), newline="") as fh:
                 data.cards = {row["account"]: row for row in csv.DictReader(fh)}
+            for c in data.customers:  # the cards are refreshed nightly; customers.csv can lag behind
+                r = (data.cards.get(c.account, {}).get("route") or "").strip()
+                if r:
+                    c.route = r
         if f("garments_in_service.csv"):
             with open(f("garments_in_service.csv"), newline="", encoding="utf-8-sig") as fh:
                 for row in csv.DictReader(fh):
@@ -127,6 +141,26 @@ class Alliant:
                     data.in_service.setdefault((row.get("cust_code", ""), row.get("wearer", "")), []).append(row)
                     if row.get("barcode"):
                         data.by_barcode[row["barcode"]] = row
+        if f("garments_retired.csv"):  # one short line each, not whole rows: 30,000+ garments
+            with open(f("garments_retired.csv"), newline="", encoding="utf-8-sig") as fh:
+                for row in csv.DictReader(fh):
+                    b = (row.get("barcode") or "").strip()
+                    if b:
+                        g = lambda k: (row.get(k) or "").strip()
+                        data.retired[b] = (
+                            f"{b} {g('description') or g('sku')} {g('sizes')}: {(g('retired_as') or 'retired').lower()} "
+                            f"{g('retired_date')} after {g('weeks_in_service') or '?'} weeks, {g('washes') or '?'} washes, "
+                            f"{g('repairs') or 0} repairs; was {g('cust_code')} {g('customer_name')}, wearer #{g('wearer')} "
+                            f"{g('wearer_name')}" + (f"; reason {g('reason_code')}" if g('reason_code') else "")
+                            + ("; marked ABUSED" if g('abused').upper() == "Y" else ""))
+        if f("route_stops.csv"):
+            with open(f("route_stops.csv"), newline="", encoding="utf-8-sig") as fh:
+                data.stops = [{k.strip(): (v or "").strip() for k, v in row.items() if k} for row in csv.DictReader(fh)]
+        if f("routes.csv"):
+            with open(f("routes.csv"), newline="", encoding="utf-8-sig") as fh:
+                for row in csv.DictReader(fh):
+                    data.route_names[((row.get("branch") or "").strip(), (row.get("route") or "").strip())] = \
+                        (row.get("area") or row.get("name") or "").strip()
         if f("garment_scans.csv"):
             with open(f("garment_scans.csv"), newline="", encoding="utf-8-sig") as fh:
                 for row in csv.DictReader(fh):
@@ -281,12 +315,22 @@ def _num(v: str) -> int:
 
 
 def garment_line(r: dict) -> str:
-    """One barcoded garment: what it is, its last scan, washes and last delivery."""
-    st = GARMENT_STATUS.get(r.get("status", ""), f"status {r.get('status', '')}")
+    """One barcoded garment: what it is, its last scan, wear (weeks, washes against the SKU's limit), repairs and
+    last delivery."""
+    st = (r.get("status_desc") or "").lower() or GARMENT_STATUS.get(r.get("status", ""), f"status {r.get('status', '')}")
     txt = f' "{r["scan_text"]}"' if r.get("scan_text") else ""
     when = r.get("scan_date") or r.get("status_date", "")
     size = " ".join(x for x in (r.get("size_a"), r.get("size_b")) if x)
-    extra = [f"{r['washes']} washes" if r.get("washes") else "", f"{r['repairs']} repairs" if _num(r.get("repairs")) else "",
+    washes = (f"{r['washes']} of {r['max_washes']} washes" if r.get("washes") and _num(r.get("max_washes"))
+              else f"{r['washes']} washes" if r.get("washes") else "")
+    repair = (f"last repair {r.get('repair_desc') or r.get('repair_code')} {r.get('repair_date', '')}".rstrip()
+              if r.get("repair_desc") or r.get("repair_code") else "")
+    extra = [washes, f"{r['repairs']} repairs" if _num(r.get("repairs")) else "", repair,
+             f"{r['weeks_in_service']} weeks in service" if r.get("weeks_in_service") else "",
+             f"{r['rewashes']} rewashes" if _num(r.get("rewashes")) else "",
+             f"before that {r['previous_status'].lower()} {r.get('previous_status_date', '')}".rstrip() if r.get("previous_status") else "",
+             "marked ABUSED" if (r.get("abused") or "").upper() == "Y" else "",
+             f"note: {r['cancel_note']}" if r.get("cancel_note") else "",
              f"in service since {r['in_service_date']}" if r.get("in_service_date") else "",
              f"last delivered {r['last_delivered']}" if r.get("last_delivered") else ""]
     return (f"{r.get('barcode', '')} {r.get('description') or r.get('sku', '')} {size}: {st}{txt} {when}".rstrip()
@@ -297,12 +341,15 @@ def barcode_facts(alliant: "Alliant", barcodes: list[str]) -> str:
     """Garments looked up by barcode, with whose they are and their recent scans (garment_scans.csv)."""
     out = []
     for b in barcodes:
-        r = alliant.by_barcode.get(b)
+        r = alliant.garment(b)
         if not r:
+            if alliant.retired_line(b):
+                out.append(f"Garment no longer in service: {alliant.retired_line(b)}")
             continue
         acct, wr = r.get("cust_code", ""), r.get("wearer", "")
-        cust = next((c.name for c in alliant.customers if c.account == acct), "")
-        w = next((w.name for w in alliant.wearers.get(acct, []) if w.employee == wr), "")
+        cust = r.get("customer_name") or next((c.name for c in alliant.customers if c.account == acct), "")
+        w = r.get("wearer_name") or next((w.name for w in alliant.wearers.get(acct, []) if w.employee == wr), "")
+        b = r.get("barcode", b)
         out.append(f"Garment {garment_line(r)}\n  Belongs to: {acct} {cust}, wearer #{wr} {w}".rstrip())
         scans = alliant.scans.get(b, [])
         if scans:
@@ -366,6 +413,8 @@ def route_facts(alliant: "Alliant", route: str, today: datetime | None = None) -
     often than weekly."""
     today = (today or datetime.now(ALASKA)).astimezone(ALASKA)
     day = DAYS[today.weekday()]
+    if getattr(alliant, "stops", None):
+        return _route_stop_facts(alliant, route, today, day)
     custs = [c for c in alliant.customers if c.route == route]
     if not custs:
         return ""
@@ -399,6 +448,45 @@ def route_facts(alliant: "Alliant", route: str, today: datetime | None = None) -
         out.append("Customers (account name: delivery days; stop numbers; items not weekly):")
         out += lines
     return "\n".join(out)
+
+def _route_stop_facts(alliant: "Alliant", route: str, today: datetime, day: str) -> str:
+    """route_facts from route_stops.csv (every stop per service day in driving order, per company). Stops sharing a
+    sequence number aren't ordered in Alliant yet: they're listed as "order not set"."""
+    rows = [r for r in alliant.stops if r.get("route", "").lstrip("0") == route.lstrip("0")]
+    if not rows:
+        return ""
+    out = [f"Today is {today.strftime('%A %B')} {today.day}, {today.year} ({day}). Branch 1 is Snow White Linen, branch 2 "
+           f"The Laundry Group; each company has its own route {route}. Stop counts, first and last stops are worked out "
+           "already: use them as given. Stops with the same number have no order set in Alliant."]
+    for branch, company in (("1", "Snow White Linen"), ("2", "The Laundry Group")):
+        mine = [r for r in rows if r.get("branch", "1").lstrip("0") == branch]
+        if not mine:
+            continue
+        area = alliant.route_names.get((branch, route)) or alliant.route_names.get((branch, route.zfill(2))) or ""
+        out.append(f"\n{company} route {route}" + (f" ({area})" if area else "")
+                   + f": {len({r.get('account') for r in mine})} customers")
+        by_day: dict[str, list[dict]] = {}
+        for r in mine:
+            by_day.setdefault(r.get("day", "")[:3].title(), []).append(r)
+        for d in [day] + [x for x in DAYS if x != day]:
+            stops = sorted(by_day.get(d, []), key=lambda r: _num(r.get("sequence")))
+            if not stops:
+                if d == day:
+                    out.append(f"TODAY ({d}): no stops on {company} route {route}.")
+                continue
+            seqs = [_num(r.get("sequence")) for r in stops]
+            unset = len(seqs) - len(set(seqs))
+            label = f"TODAY ({d})" if d == day else d
+            first, last = stops[0], stops[-1]
+            out.append(f"{label}: {len(stops)} stops; first {first.get('account')} {first.get('name')}, last "
+                       f"{last.get('account')} {last.get('name')}" + (f" ({unset + 1} share a stop number: order not set)"
+                                                                      if unset else "") + ". Order: "
+                       + ", ".join(f"{r.get('sequence')}. {r.get('name')} ({r.get('city')})".replace(" ()", "") for r in stops))
+            notes = [f"{r.get('name')}: {r['delivery_notes']}" for r in stops if r.get("delivery_notes")]
+            if notes and d == day:
+                out.append("Delivery notes today: " + "; ".join(notes))
+    return "\n".join(out)
+
 
 def group_totals(alliant: "Alliant", accounts: list[str], question: str = "") -> list[str]:
     """Totals across a group of accounts, added up in code (never by the model): each item (by SKU) with its

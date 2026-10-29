@@ -667,7 +667,8 @@ class Desk:
                       and float(h["ts"]) - float(b["ts"]) < 900), None)
         if asked:
             text = f"{meta(asked)['q']}\nDonna asked: {asked.get('text', '')}\nAnswer: {text}"
-        codes = [b for b in re.findall(r"\b\d{5,14}\b", text) if b in self.alliant.by_barcode]
+        codes = [b for b in re.findall(r"\b\d{5,14}\b", text)
+                 if self.alliant.garment(b) or getattr(self.alliant, "retired_line", lambda b: "")(b)]
         if codes:  # "how many washes on 1234567?"
             from .context import barcode_facts
             ans = answer_lookup(self.claude, text, barcode_facts(self.alliant, codes[:10]),

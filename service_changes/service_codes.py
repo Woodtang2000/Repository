@@ -35,7 +35,7 @@ def review(parsed, alliant: Alliant) -> tuple[list[str], str, list[str]]:
     kind = f.kind if f.kind in KINDS else "other"
     icon, label = KINDS[kind]
     lines, questions, target = [], [], ""
-    found = [(b, alliant.by_barcode.get(b)) for b in f.barcodes]
+    found = [(b, alliant.garment(b)) for b in f.barcodes]
     for _, row in found:  # the barcode tells us whose garment it is
         if row and not parsed.account_number:
             parsed.account_number = row.get("cust_code")

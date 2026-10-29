@@ -492,3 +492,30 @@ def test_lookup_and_item_match_run_with_their_models():
     parser.answer_lookup(client, "how many mats", "facts")
     parser.match_items(client, ["mops"], ["MOP WET"], model="claude-sonnet-5-5")
     assert seen == [parser.MODEL, "claude-sonnet-5-5"]
+
+
+def test_new_feed_files_routes_garments_retired(tmp_path):
+    from datetime import datetime
+    from .context import ALASKA, Alliant, barcode_facts, route_facts
+    (tmp_path / "customers.csv").write_text("account,name,route,service_days\n1205-1-00004,MIDAS #4,4,Mon\n")
+    (tmp_path / "route_stops.csv").write_text(
+        "branch,route,day,sequence,account,name,address1,city,delivery_notes\n"
+        "1,4,Mon,2,1205-1-00004,MIDAS #4,1 A St,Fairbanks,back door\n1,4,Mon,1,1300-1-00001,COSTCO DELI,2 B St,Fairbanks,\n"
+        "2,4,Mon,1,7000-2-00001,PROVIDENCE,3 C St,Anchorage,\n")
+    (tmp_path / "routes.csv").write_text("branch,route,name,type,area,active\n1,4,R4,,RTE 4 (VALLEY),Y\n")
+    (tmp_path / "garments_in_service.csv").write_text(
+        "barcode,cust_code,wearer,sku,description,status,status_desc,washes,max_washes,weeks_in_service,repair_desc,"
+        "repair_date,customer_name,wearer_name\n000000537456,1205-1-00004,7,6-01-55,SHIRT,O,OUT CLEAN,40,75,52,"
+        "BUTTON,2026-10-01,MIDAS #4,JOEY SMITH\n")
+    (tmp_path / "garments_retired.csv").write_text(
+        "barcode,cust_code,customer_name,wearer,wearer_name,sku,description,sizes,in_service_date,retired_date,retired_as,"
+        "weeks_in_service,washes,repairs,last_delivered,reason_code,abused\n000000111222,1205-1-00004,MIDAS #4,7,JOEY SMITH,"
+        "6-01-55,SHIRT,L,2024-08-01,2026-10-27,Ragged out,118,74,3,2026-10-20,,\n")
+    data = Alliant.from_dir(str(tmp_path))
+    facts = route_facts(data, "4", datetime(2026, 10, 26, 9, 0, tzinfo=ALASKA))  # a Monday
+    assert "Snow White Linen route 4 (RTE 4 (VALLEY))" in facts and "1. COSTCO DELI (Fairbanks), 2. MIDAS #4" in facts
+    assert "first 1300-1-00001 COSTCO DELI, last 1205-1-00004 MIDAS #4" in facts and "MIDAS #4: back door" in facts
+    assert "The Laundry Group route 4" in facts and "PROVIDENCE" in facts
+    g = barcode_facts(data, ["537456"])  # typed without Alliant's padding zeros
+    assert "out clean" in g and "40 of 75 washes" in g and "last repair BUTTON 2026-10-01" in g and "JOEY SMITH" in g
+    assert "ragged out 2026-10-27 after 118 weeks" in barcode_facts(data, ["111222"])
