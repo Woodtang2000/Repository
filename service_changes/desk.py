@@ -959,14 +959,15 @@ class Desk:
         """Scott (or Bill) said yes: the ticket(s) in #service-desk, queued for her workstation (unless DONNA_ALLIANT=off)."""
         owner = p["user"]
         first = self.name(owner).split()[0] if self.name(owner) else "Scott"
-        if not channel:  # by voice: his private messages with her keep the record and get her readback
-            channel = self.slack.conversations_open(users=owner)["channel"]["id"]
         if typed:
             src = {**typed, "user": owner, "text": p["text"].split("\n")[0]}
             where = f"{first}, in a private message"
-        else:
-            note = self.post(channel, f"🎙️ You asked me: _{_short(p['text'].splitlines()[0], 300)}_", {"kind": "voice_change"})
-            src = {**note, "user": owner, "text": p["text"].splitlines()[0]}
+        else:  # by voice: his private messages with her keep the record and get her readback. Posting to his user id
+            # opens that conversation with the chat:write the app has (conversations.open would need im:write).
+            r = _post(self.slack, channel or owner, f"🎙️ You asked me: _{_short(p['text'].splitlines()[0], 300)}_",
+                      {"kind": "voice_change"})
+            channel = r.get("channel") or channel or owner
+            src = {"ts": r["ts"], "user": owner, "text": p["text"].splitlines()[0]}
             where = f"{first}, by voice"
         tickets = [self.post_ticket(where, channel, src, self.name(owner), part, r, [], False, [])
                    for part, r in zip(p["parts"], p["results"])]

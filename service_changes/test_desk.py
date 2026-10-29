@@ -760,7 +760,9 @@ def test_scott_tells_donna_a_change_by_voice(setup, monkeypatch, tmp_path):
     monkeypatch.setenv("DONNA_ALLIANT", "on")
     slack.users["U4KFSQCDQ"] = "Scott Woodland"
     slack.msgs["DS"] = []
-    slack.conversations_open = lambda users: {"channel": {"id": "DS"}}
+    real = slack.chat_postMessage  # a post to a user id lands in their private conversation with the bot (no im:write)
+    slack.chat_postMessage = lambda channel, text, **kw: {**real({"U4KFSQCDQ": "DS"}.get(channel, channel), text, **kw),
+                                                          "channel": {"U4KFSQCDQ": "DS"}.get(channel, channel)}
     queued = []
     d._jobs = type("J", (), {"add": lambda self, ts, user: queued.append((ts, user))})()
     assert d.voice("more mats at wendys", "c") == "How many 3x10 mats should Wendy's have in total?"
@@ -792,7 +794,11 @@ def test_bill_by_voice_gets_the_business_not_scotts_briefing(setup, monkeypatch)
     monkeypatch.setenv("DONNA_ALLIANT", "on")
     slack.users.update({"U4KFSQCDQ": "Scott Woodland", "U9SGPJP0C": "Bill Dubinsky"})
     slack.msgs["DB"] = []
-    slack.conversations_open = lambda users: {"channel": {"id": "DB" if users == "U9SGPJP0C" else "DS"}}
+    real = slack.chat_postMessage
+    dm = {"U9SGPJP0C": "DB", "U4KFSQCDQ": "DS"}
+    slack.msgs["DS"] = []
+    slack.chat_postMessage = lambda channel, text, **kw: {**real(dm.get(channel, channel), text, **kw),
+                                                          "channel": dm.get(channel, channel)}
     queued, chats = [], []
     d._jobs = type("J", (), {"add": lambda self, ts, user: queued.append((ts, user))})()
     d.pulse = lambda: (_ for _ in ()).throw(AssertionError("Bill never gets the read of Slack and email"))

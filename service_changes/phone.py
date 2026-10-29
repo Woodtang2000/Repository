@@ -509,11 +509,11 @@ class Phone:
         for part, result in zip(c["parts"], c["results"]):
             cust = next((x for x in data.customers if x.account == part.account_number), None)
             where = self.channel_id(f"route-{cust.route}") if cust and part.account_number.split("-")[1:2] == ["1"] else None
-            if where is None:  # no route channel for it: their private messages with Donna
-                where = self.slack.conversations_open(users=driver)["channel"]["id"]
-            note = self.slack.chat_postMessage(channel=where, text=f"📞 <@{driver}> called this in: _{c['text'].splitlines()[0][:300]}_",
+            note = self.slack.chat_postMessage(channel=where or driver,  # no route channel: their private messages
+                                               text=f"📞 <@{driver}> called this in: _{c['text'].splitlines()[0][:300]}_",
                                                unfurl_links=False,
                                                metadata={"event_type": "service_desk", "event_payload": {"kind": "phone_change"}})
+            where = note.get("channel") or where or driver
             link = self.slack.chat_getPermalink(channel=where, message_ts=note["ts"])["permalink"]
             lines = ticket(result, data, with_readback=False).splitlines()
             text = "\n".join(lines + ["", "> " + c["text"].splitlines()[0][:300],
