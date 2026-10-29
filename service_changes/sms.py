@@ -223,6 +223,11 @@ def caller_id_lines(cid: dict, match_name: str = "") -> list[str]:
     return out
 
 
+def owner_numbers() -> set[str]:
+    """Scott's own numbers (OWNER_PHONES), 10 digits each."""
+    return {d[-10:] for d in (re.sub(r"\D", "", x) for x in os.environ.get("OWNER_PHONES", "").split(",")) if len(d) >= 10}
+
+
 def plain(text: str) -> str:
     """Slack markup to plain text for a phone."""
     text = re.sub(r"<@\w+>\s*", "", text)
@@ -572,6 +577,8 @@ class TextDesk:
         if contact_key(phone) in blocked(self.data_dir):  # the office blocked them: no answer, nothing about any account
             self.log(phone, "blocked: ignored")
             return
+        if self.word == "text" and key in owner_numbers():  # Scott's own phone: any account, after his code phrase
+            return self.owner_text(phone, body)
         cmd = demo.COMMAND.match(body)
         if cmd and demo.allowed(key, self.key):
             return self.demo_command(phone, cmd.group(1))
@@ -664,6 +671,68 @@ class TextDesk:
                     todo="own")
         self.send(phone, GOT_IT.format(how="text" if self.word == "text" else "email"))
         self.state["convos"].pop(self.key(phone), None)
+
+    # ---- Scott texting from his own phone -----------------------------------------------------------------------
+
+    def owner_text(self, phone: str, body: str) -> None:
+        """Scott's own number (OWNER_PHONES) texting: the same Donna as his Donna app (desk.voice, any account, his yes
+        before anything changes), once he's texted his code phrase (OWNER_PHONE_SECRET) on its own; a text's caller ID
+        can be faked. Good for OWNER_TEXT_HOURS (12); 3 wrong tries locks it until tomorrow and tells him in Slack.
+        A request sent before the phrase is held and answered right after it. The phrase itself is never logged."""
+        from .phone_agent import secret, secret_matches
+        key, real, now = self.key(phone), secret(), time.time()
+        st = self.state.setdefault("owner", {}).setdefault(key, {"until": 0, "tries": 0, "day": "", "held": ""})
+        today = datetime.now(ALASKA).strftime("%Y-%m-%d")
+        if st["day"] != today:
+            st.update(day=today, tries=0)
+        if not real:
+            self.log(phone, "owner number, but no code phrase is set")
+            return self.send(phone, "Donna: texting changes isn't set up yet (no code phrase on file).")
+        if st["until"] < now:
+            if st["tries"] >= 3:
+                self.log(phone, "owner number: locked for today")
+                return
+            if not secret_matches(body, real):
+                if st.get("asked"):  # we already asked for the phrase: this was a wrong try
+                    st["tries"] += 1
+                    self.log(phone, f"owner number: wrong code phrase ({st['tries']} of 3)")
+                    if st["tries"] >= 3:
+                        st["held"] = ""
+                        self.save()
+                        owner = os.environ.get("OWNER_SLACK_ID", "U4KFSQCDQ").split(",")[0].strip()
+                        self.slack.chat_postMessage(channel=owner, text=f"⚠️ Someone texting from your number {self.masked(phone)} got "
+                                                                        "the code phrase wrong 3 times. Texting changes is locked until tomorrow.")
+                        return
+                    self.save()
+                    return self.send(phone, "Donna: that's not it. Text just your code phrase.")
+                st.update(asked=True, held=body[:1000])  # answered right after the phrase
+                self.log(phone, "owner number: asked for the code phrase")
+                self.save()
+                return self.send(phone, "Donna: hi Scott! Text me your code phrase first, then I'll take care of that.")
+            hours = float(os.environ.get("OWNER_TEXT_HOURS", "12") or 12)
+            held = st["held"]
+            st.update(until=now + hours * 3600, tries=0, held="", asked=False)
+            self.save()
+            self.log(phone, "owner number: verified")
+            if not held:
+                return self.send(phone, "Donna: got it, Scott. What can I do?")
+            body = held
+        self.log(phone, "owner text")
+        self.send(phone, "Donna: " + self.ask_desk(body, key))
+
+    def ask_desk(self, text: str, key: str) -> str:
+        """desk.voice on 127.0.0.1 (desk.serve_voice), the way the phone agent's ask_donna does."""
+        import urllib.request
+        owner = os.environ.get("OWNER_SLACK_ID", "U4KFSQCDQ").split(",")[0].strip()
+        req = urllib.request.Request(f"http://127.0.0.1:{os.environ.get('DESK_VOICE_PORT', '8091')}/voice",
+                                     data=json.dumps({"text": text, "convo": "sms-" + key, "user": owner}).encode(),
+                                     headers={"Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=110) as r:
+                return r.read().decode("utf-8", "replace").strip() or "Got it."
+        except Exception as e:
+            print(time.strftime("%H:%M"), "owner text: desk not reached:", str(e)[:200], flush=True)
+            return "I can't reach the office data right now. Text me again in a minute."
 
     # ---- demo mode: a made-up business for showing Donna on a sales call (demo.py) ---------------------------
 

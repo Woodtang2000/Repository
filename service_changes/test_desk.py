@@ -862,3 +862,17 @@ def test_her_workstation_question_answered_by_voice(setup, monkeypatch):
     said = d.voice("6", "app-convo", "U4KFSQCDQ")  # answered by voice, not in the private messages
     assert said.endswith("Want me to put that in?") and "Donna asked: How many 3x10 mats in total?" in CALLS[-1]
 
+
+
+def test_scotts_texted_change_gets_its_readback_by_text(setup, monkeypatch):
+    import service_changes.sms as sms
+    slack, d = setup
+    sent = []
+    monkeypatch.setattr(sms, "send_sms", lambda to, body: sent.append((to, body)))
+    t = d.post("D1", "*W1* WENDY'S #4412\n➕ *Add 200* shop towels", {
+        "kind": "ticket", "src_channel": "DSCOTT", "src_ts": "1.1", "readback": "✅ W1 WENDY'S #4412 – 200 shop towels added",
+        "driver": "Scott", "driver_id": "U4KFSQCDQ", "account": "W1", "msgs": [], "owner_sms": "+19072306513"})
+    slack.react("D1", t["ts"], "U2", "white_check_mark")
+    assert d.run_once()["readback"] == 1
+    assert sent and sent[0][0] == "+19072306513" and sent[0][1].startswith("Donna: ✅ W1 WENDY'S #4412 – 200 shop towels added")
+    assert "DSCOTT" not in slack.msgs  # by text only, the way he asked

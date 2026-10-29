@@ -508,7 +508,8 @@ class Desk:
         expect = expectations(result) if parsed.category in ACTIONABLE and not result.questions else []
         new = self.post(self.desk_id, text, {"kind": "ticket", "src_channel": channel, "src_ts": src["ts"],
                                              "readback": rb, "driver": author, "driver_id": src.get("user"),
-                                             "account": parsed.account_number or "", "msgs": replies, "expect": expect},
+                                             "account": parsed.account_number or "", "msgs": replies, "expect": expect,
+                                             **({"owner_sms": src["owner_sms"]} if src.get("owner_sms") else {})},
                         todo="own")
         for old_ts in replaces:
             old = self.desk_msgs.get(old_ts)
@@ -1019,14 +1020,15 @@ class Desk:
         questions = list(dict.fromkeys(q for r in results for q in r.questions))
         if questions:
             asked = " ".join(questions[:2])
-            pending[key] = {"text": text, "asked": asked, "at": now, "user": owner}
+            pending[key] = {"text": text, "asked": asked, "at": now, "user": owner, "key": key}
             return asked
         said = []
         for r in results:
             rb = re.sub(r"^✅\s*(\d{4}-\d-\d{5}\s*)?", "", readback(r)).strip()
             name, _, what = rb.partition(" – ")
             said.append(f"{string.capwords(name)}: {what}" if what else rb)
-        pending[key] = {"text": text, "parts": parts, "results": results, "confirm": True, "at": now, "user": owner}
+        pending[key] = {"text": text, "parts": parts, "results": results, "confirm": True, "at": now, "user": owner,
+                        "key": key}
         return "; ".join(said) + ". Want me to put that in?"
 
     def owner_enter(self, p: dict, channel: str | None, typed: dict | None) -> str:
@@ -1038,11 +1040,14 @@ class Desk:
             where = f"{first}, in a private message"
         else:  # by voice: his private messages with her keep the record and get her readback. Posting to his user id
             # opens that conversation with the chat:write the app has (conversations.open would need im:write).
-            r = _post(self.slack, channel or owner, f"🎙️ You asked me: _{_short(p['text'].splitlines()[0], 300)}_",
-                      {"kind": "voice_change"})
+            texted = re.search(r":sms-(\d{10})$", p.get("key", ""))  # by text from his own phone (sms.py owner_text)
+            r = _post(self.slack, channel or owner, f"{'📱 You texted me' if texted else '🎙️ You asked me'}: "
+                      f"_{_short(p['text'].splitlines()[0], 300)}_", {"kind": "voice_change"})
             channel = r.get("channel") or channel or owner
             src = {"ts": r["ts"], "user": owner, "text": p["text"].splitlines()[0]}
-            where = f"{first}, by voice"
+            if texted:  # he hears back the way he asked: by text
+                src["owner_sms"] = "+1" + texted.group(1)
+            where = f"{first}, by {'text' if texted else 'voice'}"
         tickets = [self.post_ticket(where, channel, src, self.name(owner), part, r, [], False, [])
                    for part, r in zip(p["parts"], p["results"])]
         if os.environ.get("DONNA_ALLIANT", "off").strip().lower() == "off":
@@ -1292,6 +1297,9 @@ class Desk:
             bird.send(p["email_to"], subject if subject.lower().startswith("re:") else "Re: " + subject,
                       plain(customer) + "\n\n" + bird.signature(company), in_reply_to=p.get("email_msgid", ""), company=company,
                       key=f"readback/{t['ts']}")
+        elif p.get("owner_sms"):  # Scott texted it in from his own phone: the readback goes back by text
+            from .sms import send_sms
+            send_sms(p["owner_sms"], "Donna: " + re.sub(r"^<@\w+>\s*", "", msg))
         else:
             self.post(p["src_channel"], msg, {"kind": "readback", "src_ts": p["src_ts"], "driver_id": p.get("driver_id"),
                                               "msgs": p.get("msgs", [])})
@@ -1339,6 +1347,9 @@ class Desk:
             return "customer"
         if str(p.get("src_channel", "")).startswith("D"):  # Scott told her himself (owner_change): ask him there
             self.post(p["src_channel"], f"Quick check from Donna: {q}", {"kind": "question", "src_ts": p.get("src_ts")})
+            if p.get("owner_sms"):  # he texted it in: ask by text too (his answer finds this question by his user id)
+                from .sms import send_sms
+                send_sms(p["owner_sms"], f"Donna: Quick check: {q}")
             self.__dict__.setdefault("changes", {})[p["src_channel"]] = {
                 "text": " ".join(said) or todo_bar.body(t), "asked": q, "at": time.time(), "user": p.get("driver_id"),
                 "workstation": True}

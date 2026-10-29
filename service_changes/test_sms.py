@@ -351,3 +351,37 @@ def test_caller_id_lookup_is_cached(tmp_path, monkeypatch):
     assert sms.caller_id(str(tmp_path), "+19072292058")["name"] == "CHILIS GRILL"
     assert sms.caller_id(str(tmp_path), "(907) 229-2058")["kind"] == "landline" and len(calls) == 1  # once, then cached
     assert "Fields=caller_name,line_type_intelligence" in calls[0]
+
+
+def test_scott_texts_changes_after_his_code_phrase(desk, monkeypatch):
+    td, slack, texts, seen = desk
+    monkeypatch.setenv("OWNER_PHONES", "907-230-6513")
+    monkeypatch.setenv("OWNER_PHONE_SECRET", "bar mops in the snow")
+    asked = []
+    monkeypatch.setattr(sms.TextDesk, "ask_desk", lambda self, text, key: asked.append((text, key)) or "Homer Golf Course: "
+                        "20 bib aprons added. Want me to put that in?")
+    me = "+19072306513"
+    td.handle(me, "add 20 bib aprons to homer golf course", "S1")
+    assert texts[-1][1].startswith("Donna: hi Scott! Text me your code phrase") and not asked  # held, nothing done yet
+    td.handle(me, "wrong words", "S2")
+    assert "not it" in texts[-1][1] and not asked
+    td.handle(me, "Bar mops in the snow.", "S3")
+    assert asked == [("add 20 bib aprons to homer golf course", "9072306513")]  # the held request, right after
+    assert texts[-1] == (me, "Donna: Homer Golf Course: 20 bib aprons added. Want me to put that in?")
+    td.handle(me, "yes", "S4")
+    assert asked[-1] == ("yes", "9072306513")  # verified now: straight to the desk
+    assert "pending" not in td.state or "9072306513" not in td.state["pending"]  # never signed up as a customer
+
+
+def test_three_wrong_phrases_lock_scotts_number(desk, monkeypatch):
+    td, slack, texts, seen = desk
+    monkeypatch.setenv("OWNER_PHONES", "9072306513")
+    monkeypatch.setenv("OWNER_PHONE_SECRET", "bar mops in the snow")
+    monkeypatch.setattr(sms.TextDesk, "ask_desk", lambda self, text, key: (_ for _ in ()).throw(AssertionError("no")))
+    posted = []
+    slack.chat_postMessage = lambda channel, text, **kw: posted.append((channel, text))
+    me = "+19072306513"
+    for i, said in enumerate(["what does chili's owe", "guess one", "guess two", "guess three", "bar mops in the snow"]):
+        td.handle(me, said, f"S{i}")
+    assert posted and posted[0][0] == "U4KFSQCDQ" and "3 times" in posted[0][1]
+    assert len(texts) == 3  # asked for the phrase, then two "not it"; nothing after the lock, not even the right phrase
