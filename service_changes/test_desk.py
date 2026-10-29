@@ -872,11 +872,12 @@ def test_whoever_asked_on_staff_gets_a_done_text(monkeypatch, tmp_path):
     slack = SimpleNamespace(users_info=lambda user: {"user": {"profile": {"phone": "(907) 555-0101" if user == "U4KFSQCDQ" else ""}}})
     d = SimpleNamespace(data_dir=str(tmp_path), slack=slack, name=lambda u: "Scott Woodland")
     d.cell = lambda u: desk.Desk.cell(d, u)
-    p = {"driver_id": "U4KFSQCDQ", "readback": "✅ 5045-1-00000 HOMER GOLF COURSE – 20 white bib aprons added, weekly on Tuesdays"}
+    p = {"driver_id": "U4KFSQCDQ", "spoken": True, "readback": "✅ 5045-1-00000 HOMER GOLF COURSE – 20 white bib aprons added, weekly on Tuesdays"}
     assert desk.Desk.done_text(d, p, "Donna")
     assert sent == [("+19075550101", "Donna: Scott, done ✅ HOMER GOLF COURSE – 20 white bib aprons added, weekly on "
                                      "Tuesdays (entered by Donna)")]
     assert not desk.Desk.done_text(d, p, "Scott Woodland")  # he entered it himself
+    assert not desk.Desk.done_text(d, {**p, "spoken": False}, "Donna")  # asked in Slack: the Slack mention is enough
     assert not desk.Desk.done_text(d, {**p, "driver_id": "UNOPHONE"}, "Sonja")  # no cell on file: nothing
     assert not desk.Desk.done_text(d, {**p, "driver_id": "", "sms_to": "+19075551234"}, "Sonja")  # a customer's: their own readback
     monkeypatch.setenv("DONE_TEXTS", "owners")

@@ -508,7 +508,8 @@ class Desk:
         expect = expectations(result) if parsed.category in ACTIONABLE and not result.questions else []
         new = self.post(self.desk_id, text, {"kind": "ticket", "src_channel": channel, "src_ts": src["ts"],
                                              "readback": rb, "driver": author, "driver_id": src.get("user"),
-                                             "account": parsed.account_number or "", "msgs": replies, "expect": expect},
+                                             "account": parsed.account_number or "", "msgs": replies, "expect": expect,
+                                             **({"spoken": True} if src.get("spoken") else {})},
                         todo="own")
         for old_ts in replaces:
             old = self.desk_msgs.get(old_ts)
@@ -1041,7 +1042,7 @@ class Desk:
             r = _post(self.slack, channel or owner, f"🎙️ You asked me: _{_short(p['text'].splitlines()[0], 300)}_",
                       {"kind": "voice_change"})
             channel = r.get("channel") or channel or owner
-            src = {"ts": r["ts"], "user": owner, "text": p["text"].splitlines()[0]}
+            src = {"ts": r["ts"], "user": owner, "text": p["text"].splitlines()[0], "spoken": True}
             where = f"{first}, by voice"
         tickets = [self.post_ticket(where, channel, src, self.name(owner), part, r, [], False, [])
                    for part, r in zip(p["parts"], p["results"])]
@@ -1321,13 +1322,15 @@ class Desk:
         return re.sub(r"\D", "", ((r.get("user") or {}).get("profile") or {}).get("phone", ""))[-10:]
 
     def done_text(self, p: dict, who: str) -> bool:
-        """The person who asked hears it's done by text (the Donna app and a busy Slack don't buzz a phone), whoever
-        entered it. Only their own requests, never everyone's. DONE_TEXTS: "all" (default: anyone on staff who asked
+        """Staff hear it's done the way they asked: Slack gets the @mention readback (send_readback), and a request
+        made out loud (the Donna app, or a call to the employee line: "spoken" on the ticket) also gets a text, since
+        neither buzzes a phone later. Whoever entered it; only their own requests. DONE_TEXTS: "all" (default: anyone on staff who asked
         from Slack, the app or the employee line), "owners" (Scott and Bill only) or "off". Customers hear by their
         own text or email, and the account's contact by change_email."""
         mode = os.environ.get("DONE_TEXTS", "all").lower()
         user = p.get("driver_id") or ""
-        if mode == "off" or not user or (mode != "all" and user not in AR_USERS) or p.get("sms_to") or p.get("email_to"):
+        if mode == "off" or not user or not p.get("spoken") or (mode != "all" and user not in AR_USERS) \
+                or p.get("sms_to") or p.get("email_to"):
             return False
         num = self.cell(user)
         if len(num) != 10 or (who and self.name(user) == who):  # they entered it themselves: they know

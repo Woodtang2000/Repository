@@ -545,7 +545,7 @@ class Phone:
                 metadata={"event_type": "service_desk", "event_payload": {
                     "kind": "ticket", "src_channel": where, "src_ts": note["ts"], "readback": readback(result),
                     "driver": name, "driver_id": driver, "account": part.account_number or "", "msgs": [],
-                    "expect": expectations(result)}})
+                    "expect": expectations(result), "spoken": True}})
         print(time.strftime("%H:%M"), f"phone: {name}'s change sent ({len(c['parts'])} ticket(s))", flush=True)
 
     def customer_check(self, call: dict, turn: Turn):
