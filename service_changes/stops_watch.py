@@ -206,7 +206,10 @@ class StopsWatch:
         intro = ("A friendly reminder: we're still looking for" if reminder else
                  "Thank you for being our customer! Our records show these were recently stopped on your account, and "
                  "we'd like to get them back:")
-        body = (f"{intro} {name} ({acct}).\n\n" if reminder else f"{intro}\n\n{name} ({acct})\n") + "\n".join(lines) + (
+        exact = ("\n\nEach garment has its own barcode on the label inside. We're looking for these exact ones: if a "
+                 "different garment comes back in its place, the one listed here still counts as out. A quick check of "
+                 "the labels before they go back saves a surprise on your invoice.") if wearers else ""
+        body = (f"{intro} {name} ({acct}).\n\n" if reminder else f"{intro}\n\n{name} ({acct})\n") + "\n".join(lines) + exact + (
             f"\n\nPlease hand them to your driver at your next delivery. Anything we haven't gotten back by "
             f"{nice(due)} is billed as a loss, and we'd much rather have them back than charge you for them.\n\n"
             "If they've already gone back to us, thank you, and please ignore this note. Questions? Just reply, "

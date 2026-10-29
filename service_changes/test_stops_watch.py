@@ -53,6 +53,7 @@ def test_a_stopped_wearers_garments_email_the_customer_only(tmp_path, monkeypatc
     [(to, subject, body)] = mails
     assert "Dave Smith's garments (stopped October 28):" in body and "barcode 000000111222" in body
     assert "000000111223" not in body and "Wednesday, November 11" in body and not posts  # staff aren't told
+    assert "We're looking for these exact ones" in body  # Bobby's coveralls: a different garment back doesn't count
     run(d, monkeypatch, mails, date(2026, 11, 7))  # day 10, one still out: one friendly reminder
     assert len(mails) == 2 and mails[1][1] == "a reminder about items to send back" and "friendly reminder" in mails[1][2]
     run(d, monkeypatch, mails, date(2026, 11, 8))
