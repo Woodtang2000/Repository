@@ -528,3 +528,13 @@ def test_skus_csv_with_a_byte_order_mark(tmp_path):
     data = Alliant.from_dir(str(tmp_path))
     facts = sku_facts(data, "how much does a bath blanket weigh")
     assert "7-00-02" in facts and "weight 30 oz (= 1.88 lb)" in facts and "4.10" not in facts
+
+
+def test_usual_sku_from_the_catalog_and_grey_or_gray():
+    from .checks import usual_sku
+    from .context import Alliant
+    data = Alliant(sku_counts={("6-03-30", "MAT 3X10 CONFETTI GREY"): 4},
+                   skus={"6-03-31": {"description": "MAT 4X6 CONFETTI GRAY"}, "6-03-40": {"description": "MAT 3X5 BLUE", "active": "N"}})
+    assert usual_sku(data, "3x10 confetti gray mat") == ("6-03-30", "MAT 3X10 CONFETTI GREY", 4)  # gray = grey
+    assert usual_sku(data, "4x6 confetti grey mat") == ("6-03-31", "MAT 4X6 CONFETTI GRAY", 0)  # nobody has it: catalog
+    assert usual_sku(data, "3x5 blue mat") is None  # discontinued in the catalog

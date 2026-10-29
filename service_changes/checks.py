@@ -427,15 +427,20 @@ def usual_sku(alliant: Alliant, item: str | None) -> tuple[str, str, int] | None
     words = [w.rstrip("s") for w in re.findall(r"[a-z0-9]{2,}", (item or "").lower()) if w not in ("the", "and", "more", "new")]
     if not words:
         return None
+    same = {"gray": "gr[ae]y", "grey": "gr[ae]y", "x": "x"}  # Alliant spells it both ways
+    pat = lambda w: same.get(w, re.escape(w))
     every: dict[tuple[str, str], int] = dict(alliant.sku_counts)  # company-wide, also on a customer's narrowed copy
     if not every:
         for key, sku in alliant.sku.items():
             if len(key) == 2 and sku:
                 every[(sku, key[1])] = every.get((sku, key[1]), 0) + 1
     counts = {(sku, name): n for (sku, name), n in every.items()
-              if all(re.search(rf"\b{re.escape(w)}", name.lower()) for w in words)}
-    if not counts:
-        return None
+              if all(re.search(rf"\b{pat(w)}", name.lower()) for w in words)}
+    if not counts:  # nobody has it yet: the SKU catalog (skus.csv), active items only
+        hits = [(sku, d.get("description", "")) for sku, d in (getattr(alliant, "skus", None) or {}).items()
+                if (d.get("active") or "Y").upper() != "N"
+                and all(re.search(rf"\b{pat(w)}", d.get("description", "").lower()) for w in words)]
+        return (hits[0][0], hits[0][1], 0) if len(hits) == 1 else None
     ranked = sorted(counts.items(), key=lambda kv: -kv[1])
     (sku, name), n = ranked[0]
     if len(ranked) > 1 and ranked[1][1] * 2 > n:  # two SKUs about as common: let a person pick
@@ -475,13 +480,16 @@ def ticket(result: Result, alliant: Alliant, with_readback: bool = True) -> str:
             if not cc.alliant_item:  # a new item: the SKU most other accounts use for it, so nobody has to look it up
                 usual = usual_sku(alliant, ch.item)
                 if usual:
-                    what += f" · usual: *{usual[1]}* `{usual[0]}` ({usual[2]} accounts)"
+                    what += f" · usual: *{usual[1]}* `{usual[0]}` " + (f"({usual[2]} accounts)" if usual[2] else
+                                                                        "(from the SKU catalog; no account has it yet)")
         bits = [f"{ICONS.get(ch.action, '✏️')} *{_do(ch)}*  {what}" + (f" `{sku}`" if sku else "")]
         if cc.current is not None and cc.new_total is not None:
             bits.append(("inventory " if ch.inventory else "") + f"{cc.current} → *{cc.new_total}*")
         elif cc.new_total is not None and ch.action != Action.set:
             bits.append(f"new total *{cc.new_total}*")
         freq = _freq_words(ch.frequency) if ch.frequency else frequency_label(cc.frequency_now)
+        if not freq and not cc.alliant_item and not ch.wearer and ch.action in (Action.add, Action.set):
+            freq = "weekly (not said: the usual)"  # a new item goes out every delivery unless they say otherwise
         if freq:
             bits.append(freq)
         if ch.effective:
