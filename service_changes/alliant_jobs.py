@@ -186,13 +186,14 @@ class Jobs:
 
     def signed_out(self) -> None:
         """Alliant signed her out: say so where people will see it (the office channel, and Scott directly), at most once
-        an hour; a ticket thread alone is easy to miss. She never signs in herself."""
+        an hour; a ticket thread alone is easy to miss. She clicks Reconnect and a filled-in Sign in herself; this is
+        when that wasn't enough (an empty field, a code or phone approval, another account)."""
         if time.time() - getattr(self, "warned", 0) < 3600:
             return
         self.warned = time.time()
         text = ("⚠️ *Alliant signed Donna out* on her workstation, so she can't enter tickets. Please sign her back in "
-                "(Chrome Remote Desktop → the Alliant tab in her Claude group → sign in → \"Stay signed in? Yes\"). Tickets "
-                "she sends back meanwhile are marked for a person.")
+                "(Chrome Remote Desktop → the Alliant tab in her Claude group → sign in → \"Stay signed in? Yes\"), then tap "
+                "*Have Donna do it* again on the waiting ticket.")
         self.desk.slack.chat_postMessage(channel=self.desk.desk_id, text=text)
         owner = os.environ.get("OWNER_SLACK_ID", "U4KFSQCDQ").split(",")[0].strip()
         try:
