@@ -172,3 +172,22 @@ def test_an_owners_own_address_and_a_forged_staff_sender(desk, monkeypatch):
     assert [t["meta"]["email_to"] for t in tickets] == ["bill@dubinsky.com", "scotty@snowwhitelinen.com",
                                                         "bill@thelaundrygroup.com"]  # the sister company's staff too
     assert "couldn't be verified" not in str(tickets[0]) and "couldn't be verified" in str(tickets[1])
+
+
+def test_the_laundry_groups_customers_hear_from_its_own_address(monkeypatch):
+    from . import bird
+    calls = []
+    monkeypatch.setattr(bird, "_call", lambda method, path, body=None, key="": calls.append(body))
+    monkeypatch.setenv("EMAIL_FROM", "donna@mail.snowwhitelinen.com")
+    monkeypatch.setenv("EMAIL_REPLY_TO", "service@snowwhitelinen.com")
+    monkeypatch.delenv("EMAIL_FROM_TLG", raising=False)
+    monkeypatch.delenv("EMAIL_REPLY_TO_TLG", raising=False)
+    bird.send("a@b.com", "Hi", "Hello", company="The Laundry Group")
+    assert calls[-1]["from"]["email"] == "donna@mail.snowwhitelinen.com"  # not set up yet: the one address
+    monkeypatch.setenv("EMAIL_FROM_TLG", "donna@mail.thelaundrygroup.com")
+    monkeypatch.setenv("EMAIL_REPLY_TO_TLG", "donna@thelaundrygroup.com")
+    bird.send("a@b.com", "Hi", "Hello", company="The Laundry Group")
+    assert calls[-1]["from"] == {"email": "donna@mail.thelaundrygroup.com", "name": "Donna – The Laundry Group"}
+    assert calls[-1]["reply_to"] == ["donna@thelaundrygroup.com"]
+    bird.send("a@b.com", "Hi", "Hello", company="Snow White Linen")
+    assert calls[-1]["from"]["email"] == "donna@mail.snowwhitelinen.com" and calls[-1]["reply_to"] == ["service@snowwhitelinen.com"]

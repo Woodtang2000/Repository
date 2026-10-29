@@ -61,13 +61,16 @@ def _html(text: str) -> str:
 
 def send(to: str, subject: str, text: str, in_reply_to: str = "", key: str = "", company: str = "") -> None:
     """From Donna (EMAIL_FROM, e.g. donna@mail.snowwhitelinen.com), named for the customer's company; replies go to
-    EMAIL_REPLY_TO (service@), which comes back to the desk."""
+    EMAIL_REPLY_TO (service@), which comes back to the desk. The Laundry Group's customers: EMAIL_FROM_TLG and
+    EMAIL_REPLY_TO_TLG when set (donna@mail.thelaundrygroup.com, donna@thelaundrygroup.com), else the same as above."""
     company = company or ("The Laundry Group" if "The Laundry Group" in text[-200:] else "Snow White Linen")
-    body = {"from": {"email": os.environ.get("EMAIL_FROM", "service@mail.snowwhitelinen.com"),
-                     "name": f"Donna \u2013 {company}"},
+    tlg = company == "The Laundry Group"  # its customers hear from Donna at The Laundry Group's own address, once set
+    sender = (tlg and os.environ.get("EMAIL_FROM_TLG")) or os.environ.get("EMAIL_FROM", "service@mail.snowwhitelinen.com")
+    reply_to = (tlg and os.environ.get("EMAIL_REPLY_TO_TLG")) or os.environ.get("EMAIL_REPLY_TO")
+    body = {"from": {"email": sender, "name": f"Donna \u2013 {company}"},
             "to": [to], "subject": subject, "text": text, "html": _html(text), "category": "transactional"}
-    if os.environ.get("EMAIL_REPLY_TO"):
-        body["reply_to"] = [os.environ["EMAIL_REPLY_TO"]]
+    if reply_to:
+        body["reply_to"] = [reply_to]
     if in_reply_to:
         body["headers"] = {"In-Reply-To": in_reply_to, "References": in_reply_to}
     _call("POST", "/v1/email/messages", body=body, key=key)
