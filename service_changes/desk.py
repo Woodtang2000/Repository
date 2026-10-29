@@ -508,8 +508,7 @@ class Desk:
         expect = expectations(result) if parsed.category in ACTIONABLE and not result.questions else []
         new = self.post(self.desk_id, text, {"kind": "ticket", "src_channel": channel, "src_ts": src["ts"],
                                              "readback": rb, "driver": author, "driver_id": src.get("user"),
-                                             "account": parsed.account_number or "", "msgs": replies, "expect": expect,
-                                             **({"spoken": True} if src.get("spoken") else {})},
+                                             "account": parsed.account_number or "", "msgs": replies, "expect": expect},
                         todo="own")
         for old_ts in replaces:
             old = self.desk_msgs.get(old_ts)
@@ -1042,7 +1041,7 @@ class Desk:
             r = _post(self.slack, channel or owner, f"🎙️ You asked me: _{_short(p['text'].splitlines()[0], 300)}_",
                       {"kind": "voice_change"})
             channel = r.get("channel") or channel or owner
-            src = {"ts": r["ts"], "user": owner, "text": p["text"].splitlines()[0], "spoken": True}
+            src = {"ts": r["ts"], "user": owner, "text": p["text"].splitlines()[0]}
             where = f"{first}, by voice"
         tickets = [self.post_ticket(where, channel, src, self.name(owner), part, r, [], False, [])
                    for part, r in zip(p["parts"], p["results"])]
@@ -1300,46 +1299,10 @@ class Desk:
             self.change_email(p, customer)
         except Exception as e:  # the email is extra: never hold up the ticket over it
             print(time.strftime("%H:%M"), "change email not sent:", e, flush=True)
-        try:
-            self.done_text(p, who)
-        except Exception as e:  # the text is extra too
-            print(time.strftime("%H:%M"), "done text not sent:", e, flush=True)
         self.slack.chat_update(channel=self.desk_id, ts=t["ts"], text="",
                                attachments=shrink(self.slack, self.desk_id, t, GREEN, stamp(who, "Entered") + " · readback sent"),
                                metadata={"event_type": KIND, "event_payload": {**p, "kind": "done", "done_at": time.time(),
                                                                                "entered_by": who}})
-
-    def cell(self, user: str) -> str:
-        """A staff member's cell: employee_phones.csv (phone,slack_id,name), else the phone in their Slack profile."""
-        import csv
-        path = os.path.join(self.data_dir, "employee_phones.csv")
-        if os.path.exists(path):
-            with open(path, newline="", encoding="utf-8-sig") as f:
-                for row in csv.DictReader(f):
-                    if (row.get("slack_id") or "").strip() == user:
-                        return re.sub(r"\D", "", row.get("phone", ""))[-10:]
-        r = self.slack.users_info(user=user)
-        return re.sub(r"\D", "", ((r.get("user") or {}).get("profile") or {}).get("phone", ""))[-10:]
-
-    def done_text(self, p: dict, who: str) -> bool:
-        """Staff hear it's done the way they asked: Slack gets the @mention readback (send_readback), and a request
-        made out loud (the Donna app, or a call to the employee line: "spoken" on the ticket) also gets a text, since
-        neither buzzes a phone later. Whoever entered it; only their own requests. DONE_TEXTS: "all" (default: anyone on staff who asked
-        from Slack, the app or the employee line), "owners" (Scott and Bill only) or "off". Customers hear by their
-        own text or email, and the account's contact by change_email."""
-        mode = os.environ.get("DONE_TEXTS", "all").lower()
-        user = p.get("driver_id") or ""
-        if mode == "off" or not user or not p.get("spoken") or (mode != "all" and user not in AR_USERS) \
-                or p.get("sms_to") or p.get("email_to"):
-            return False
-        num = self.cell(user)
-        if len(num) != 10 or (who and self.name(user) == who):  # they entered it themselves: they know
-            return False
-        from .sms import send_sms
-        first = (self.name(user) or "").split()[0] if self.name(user) else ""
-        what = re.sub(r"^✅\s*\S+\s*", "", p.get("readback") or "").strip(" –-") or "your change is in"
-        send_sms("+1" + num, f"Donna: {first + ', ' if first else ''}done ✅ {what} (entered by {who or 'the office'})")
-        return True
 
     def ask_requester(self, t: dict, question: str) -> str | None:
         """Donna (at her Alliant workstation) can't tell what was meant: ask whoever asked, the same way she asks a
