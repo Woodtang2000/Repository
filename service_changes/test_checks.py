@@ -662,3 +662,17 @@ def test_stopping_an_item_asks_what_the_inventory_should_be():
     assert not r.questions and "inventory stays *10* for now (STI" in ticket(r, a)
     r = check(p(stop("MAT CONFETTI GREY 3X10"), Change(action=Action.set, item="MAT CONFETTI GREY 3X10", quantity=0, inventory=True)), a)
     assert not r.questions and "inventory 10 → *0*" in ticket(r, a)
+
+
+def test_stop_all_the_mats_means_each_mat_on_the_account():
+    from .checks import check, ticket
+    from .context import Alliant, Customer
+    from .schema import Action, Category, Change, ParsedMessage
+    a = Alliant(customers=[Customer("4000-1-00400", "SAFEWAY 1739AS (P)", "4", ["Tue"])],
+                items={"4000-1-00400": {"MAT CONFETTI GREY 3X10": 10, "MAT CONFETTI GREY 3X5": 8, "TOWEL BAR MOP": 60}},
+                autocount={"4000-1-00400": {"MAT CONFETTI GREY 3X10": 5, "MAT CONFETTI GREY 3X5": 4, "TOWEL BAR MOP": 60}})
+    r = check(ParsedMessage(category=Category.item_change, account_number="4000-1-00400", summary="s",
+                            changes=[Change(action=Action.stop, item="all mats")]), a)
+    assert [c.alliant_item for c in r.changes] == ["MAT CONFETTI GREY 3X10", "MAT CONFETTI GREY 3X5"]
+    assert len(r.questions) == 1 and "(10 in inventory) and MAT CONFETTI GREY 3X5 (8 in inventory)" in r.questions[0]
+    assert "not on account yet" not in ticket(r, a) and "usual" not in ticket(r, a)

@@ -257,10 +257,33 @@ def split_by_account(parsed: ParsedMessage) -> list[ParsedMessage]:
     return parts
 
 
+ALL_OF = re.compile(r"^\s*(?:all|every|each)\s+(?:of\s+)?(?:the\s+|their\s+|our\s+)?(.+?)\s*$", re.I)
+
+
+def expand_all(parsed: ParsedMessage, alliant: Alliant) -> None:
+    """"Stop all the mats": one change per mat line on the account (MAT CONFETTI GREY 3X10, MAT CONFETTI GREY 3X5),
+    each checked on its own, instead of an item called "all mats" that matches nothing."""
+    items = alliant.items.get(parsed.account_number or "", {})
+    out = []
+    for ch in parsed.changes:
+        m = ALL_OF.match(ch.item or "")
+        if not m or ch.wearer or ch.action not in (Action.stop, Action.decrease, Action.set, Action.restart) or not items:
+            out.append(ch)
+            continue
+        words = [w.rstrip("s") if len(w) > 3 else w for w in re.findall(r"[a-z0-9]+", m.group(1).lower())]
+        hits = [it for it in items if all(re.search(rf"\b{re.escape(w)}s?\b", it.lower()) for w in words)]
+        if not hits:
+            out.append(ch)
+            continue
+        out += [ch.model_copy(update={"item": it, "alliant_item": it}) for it in sorted(hits)]
+    parsed.changes = out
+
+
 def check(parsed: ParsedMessage, alliant: Alliant, asker: str = "staff") -> Result:
     """`asker`: "staff" (drivers, the office, Scott and Bill) or "customer" (their own text, email or call): who a
     question is worded for."""
     who = parsed.customer_as_written or "this customer"
+    expand_all(parsed, alliant)
     out = []
     for ch in parsed.changes:
         cc = CheckedChange(ch)
@@ -693,7 +716,8 @@ def ticket(result: Result, alliant: Alliant, with_readback: bool = True) -> str:
         else:
             what = cc.alliant_item or f"{ch.item} _(not on account yet)_"
             sku = alliant.sku.get((acct, cc.alliant_item)) if cc.alliant_item else None
-            if not cc.alliant_item and not bare(alliant, ch.item):  # a new item: the SKU most accounts use for it
+            if not cc.alliant_item and ch.action in (Action.add, Action.restart) and not bare(alliant, ch.item):
+                # a new item: the SKU most accounts use for it (never for a stop or decrease: it's not there)
                 usual = usual_sku(alliant, ch.item)
                 if usual:
                     what += f" · usual: *{usual[1]}* `{usual[0]}` " + (f"({usual[2]} accounts)" if usual[2] else
