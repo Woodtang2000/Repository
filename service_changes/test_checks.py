@@ -578,3 +578,24 @@ def test_tablecloths_colors_and_sizes_with_a_matching_suggestion():
     assert OPTIONS_Q.search(asked) and not OPTIONS_Q.search("add 50 bar mops to Midas")
     facts = options_facts(data, asked)
     assert "white, black and ivory" in facts and "54x54, 72x72 and 90x90" in facts and "1.10" not in facts
+
+
+def test_what_items_are_for_and_core_mat_sizes():
+    from types import SimpleNamespace
+    from .checks import options_facts
+    from .context import Alliant, product_notes
+    from . import parser
+    assert "yellow for restaurants, blue for industrial" in product_notes("what's the difference between utility towels")
+    assert "bib apron for full coverage" in product_notes("which apron should we get?")
+    assert product_notes("how many bar mops does Midas get") and not product_notes("when is my delivery")
+    data = Alliant(sku_counts={("10-1", "MAT CHARCOAL 3X5"): 200, ("10-2", "MAT CHARCOAL 4X6"): 90, ("10-3", "MAT CHARCOAL 3X7"): 2,
+                               ("10-4", "MAT CHARCOAL 3X10"): 60, ("10-5", "MAT TEAL 3X5"): 1})
+    facts = options_facts(data, "what sizes do mats come in")
+    assert "3x5, 4x6 and 3x10" in facts and "3x7" not in facts and "Other mat sizes are custom." in facts
+    assert "teal" not in facts  # one customer's color isn't worth offering
+    assert "A scraper mat goes outside a doorway" in facts
+    seen = []
+    client = SimpleNamespace(beta=SimpleNamespace(messages=SimpleNamespace(
+        parse=lambda **kw: seen.append(kw["messages"][0]["content"]) or SimpleNamespace(parsed_output=None))))
+    parser.answer_lookup(client, "what's a waterhog mat?", "no facts")
+    assert "heavy-duty mat that holds a lot of water" in seen[0]

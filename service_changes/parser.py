@@ -141,7 +141,10 @@ class Answer(BaseModel):
 
 def answer_lookup(client: anthropic.Anthropic, question: str, facts: str, asker: str = "route driver") -> Answer:
     """Answer a driver's (or the customer's own) question about one account from its Alliant data."""
-    prompt = (f"Alliant data for one customer account:\n{facts}\n\nA {asker} asks:\n{question}\n\n"
+    from .context import product_notes
+    notes = product_notes(question)  # what the items it mentions are for, to explain or suggest
+    prompt = (f"Alliant data for one customer account:\n{facts}\n\n" + (notes + "\n\n" if notes else "")
+              + f"A {asker} asks:\n{question}\n\n"
               + (f"Answer in one or two short lines a {asker.split()[-1]} can read on a phone, with the numbers they need "
                  "(per-delivery count and how often). " if "office" not in asker else
                  "Answer in a few short lines for the office. For garment questions say where each garment is from "

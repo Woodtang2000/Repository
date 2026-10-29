@@ -249,7 +249,9 @@ class PhoneTools:
     def item_options(self, c: dict, body: dict, said: str) -> dict:
         """"What colors do tablecloths come in?": the catalog's colors and sizes (no prices), on either line."""
         from .checks import options_facts
-        return {"options": options_facts(self.phone.alliant(), said) or "Nothing by that name in the catalog."}
+        from .context import product_notes
+        return {"options": options_facts(self.phone.alliant(), said) or product_notes(said)
+                or "Nothing by that name in the catalog."}
 
     def handheld_help(self, c: dict, body: dict, said: str) -> dict:
         helper = getattr(self.phone, "helper", None)
@@ -357,7 +359,8 @@ FIELDS = {  # tool -> (description, {property: description}); every tool also ge
     "driver_change": ("A known employee's customer change, their answer to your question, or their yes/no/correction "
                       "to your read-back.", {"said": "Exactly what the caller said."}),
     "handheld_help": ("How to do something on the handheld or in Alliant mobile.", {"question": "Their question."}),
-    "item_options": ("What colors and sizes an item comes in (tablecloths, mats, aprons...). No prices.",
+    "item_options": ("What colors and sizes an item comes in, or what an item is for (bar mops, utility towels, apron "
+                     "styles, mat sizes and kinds). No prices.",
                      {"question": "What they asked, with the item."}),
     "verify_owner": ("Check Scott's secret phrase, only when caller_info says owner_candidate.",
                      {"pin": "Exactly the words or numbers he said."}),

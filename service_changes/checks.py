@@ -498,8 +498,14 @@ def item_options(alliant: Alliant, item: str) -> tuple[str, list[str], list[str]
         for z in size:
             sizes[z] = sizes.get(z, 0) + c
     order = lambda z: [float(x) for x in re.findall(r"\d+(?:\.\d+)?", z)] or [0.0]
-    return (" ".join(kind), [c for c, _ in sorted(colors.items(), key=lambda kv: -kv[1])][:8],
-            sorted(sizes, key=order)[:8])
+    sizes_out = sorted(sizes, key=order)[:8]
+    if "mat" in kind:  # five standard mat sizes; anything else is custom (and costs more): never suggested
+        from .context import CORE_MAT_SIZES
+        sizes_out = [z for z in CORE_MAT_SIZES if z in sizes or not sizes]
+    # the common colors only: something a handful of customers use isn't worth offering unless they ask
+    ranked = sorted(colors.items(), key=lambda kv: -kv[1])
+    top = ranked[0][1] if ranked else 0
+    return (" ".join(kind), [c for c, n in ranked if not top or n * 20 >= top][:6], sizes_out)
 
 
 def _join(xs: list[str]) -> str:
@@ -511,9 +517,12 @@ def options_facts(alliant: Alliant, question: str) -> str:
     kind, colors, sizes = item_options(alliant, question)
     if not kind:
         return ""
+    from .context import product_notes
+    notes = product_notes(question + " " + kind)
     return (f"Item options (from the catalog and what customers use; no prices): {kind}s come in "
             + (f"these colors: {_join(colors)}" if colors else "")
-            + ("; " if colors and sizes else "") + (f"these sizes: {_join(sizes)}" if sizes else "") + ".")
+            + ("; " if colors and sizes else "") + (f"these sizes: {_join(sizes)}" if sizes else "") + "."
+            + (" Other mat sizes are custom." if "mat" in kind.split() else "") + ("\n" + notes if notes else ""))
 
 
 def _which_color(item: str, options: list[tuple[str, str, int]], have: dict[str, int], who: str) -> str:
@@ -561,6 +570,8 @@ def _which_one(item: str, alliant: Alliant, have: dict[str, int], who: str) -> s
             q += f" {who} has {other.title()} now, so {match[0]} would match."
     q += f" {kind.title()}s come in" + (f" {_join(colors)}" if need_color else "") + (
         f"{',' if need_color else ''} in {_join(sizes)}" if need_size else "") + "."
+    if need_size and "mat" in kind.split():
+        q += " (A 3x5 is the standard doorway mat; a 3x10 runner covers a walkway.)"
     return q
 
 

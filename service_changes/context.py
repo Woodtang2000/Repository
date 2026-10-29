@@ -18,6 +18,32 @@ ALASKA = ZoneInfo("America/Anchorage")
 DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 
+# What the items are for, in Scott's words (Oct 29, 2026): Donna uses it to explain and to suggest. Keyed by the words
+# that bring each note up. Suggest the common, core items; custom ones only when asked (and they cost more).
+PRODUCT_NOTES = {
+    ("bar mop", "barmop"): "Bar mops are cotton towels for cleaning up, used in the front and the back of the house.",
+    ("utility towel", "utility"): "Utility towels come in yellow or blue: yellow for restaurants, blue for industrial "
+                                  "settings. They're a lighter-weight towel, used in the back of the house.",
+    ("shop towel",): "Shop towels are for shops (automotive, industrial), not for food service.",
+    ("apron", "bib", "bistro", "4-way", "4 way", "waist"): "Aprons come in three styles: a bib apron for full coverage, a "
+                                                          "4-way waist apron, and a bistro, a long waist apron.",
+    ("mat", "runner", "scraper", "comfort flow", "waterhog", "logo"):
+        "Mats come in five standard sizes, in feet: 2x3 for a teller stand or a small spot where someone stands; 3x5, a "
+        "standard doorway mat; 4x6 for many needs; 3x10, often called a runner, for walkways; and 4x8 to cover larger "
+        "traffic areas. Any other size is custom and costs more, like a logo mat. A scraper mat goes outside a doorway; a "
+        "comfort flow is usually a kitchen mat; a Waterhog is a heavy-duty mat that holds a lot of water, for wet areas "
+        "and entrances. Suggest the standard sizes; custom only if they ask.",
+}
+CORE_MAT_SIZES = ["2x3", "3x5", "4x6", "3x10", "4x8"]
+
+
+def product_notes(text: str) -> str:
+    """The notes for the items a question or request mentions ("what's a scraper mat?"), else empty."""
+    low = text.lower()
+    notes = [n for keys, n in PRODUCT_NOTES.items() if any(re.search(rf"\b{re.escape(k)}", low) for k in keys)]
+    return ("About our items:\n" + "\n".join(notes)) if notes else ""
+
+
 def feed_stamp(data_dir: str) -> float:
     """When the Alliant feed last finished (feed_done.txt's time; 0 without one). The feed refreshes hourly at :05 from
     6 AM to 10 PM and at 3:45 AM; each service reloads its data when this changes, without a restart."""
