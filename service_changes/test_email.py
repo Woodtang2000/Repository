@@ -166,7 +166,9 @@ def test_an_owners_own_address_and_a_forged_staff_sender(desk, monkeypatch):
     monkeypatch.setenv("EMAIL_TRUSTED", "bill@dubinsky.com")
     inbox.append(mail(1, "Bill@Dubinsky.com", "Fwd: Costco wants 200 more bar mops", name="Bill"))
     inbox.append(mail(2, "scotty@snowwhitelinen.com", "Fwd: Costco wants 200 more bar mops", spf=False, name="Scott"))
+    inbox.append(mail(3, "Bill@TheLaundryGroup.com", "Fwd: Costco wants 200 more bar mops", name="Bill"))
     ed.run_once()
     tickets = [p for p in slack.posts if p["meta"].get("kind") == "ticket"]
-    assert [t["meta"]["email_to"] for t in tickets] == ["bill@dubinsky.com", "scotty@snowwhitelinen.com"]
+    assert [t["meta"]["email_to"] for t in tickets] == ["bill@dubinsky.com", "scotty@snowwhitelinen.com",
+                                                        "bill@thelaundrygroup.com"]  # the sister company's staff too
     assert "couldn't be verified" not in str(tickets[0]) and "couldn't be verified" in str(tickets[1])

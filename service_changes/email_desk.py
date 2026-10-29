@@ -13,7 +13,7 @@ first), ✅ approves; or type `add jane@acme.com to <account or name>` / `remove
 only ever sees the sender's own accounts, and every reply goes to the address on file, never anywhere else.
 
 Email senders can be forged, so a ticket from a message whose SPF and DKIM both failed to pass is marked for the
-office to confirm by phone. Staff (our own domain, or an address in EMAIL_TRUSTED such as an owner's own) forwarding
+office to confirm by phone. Staff (our own domains, Snow White's and The Laundry Group's, or an address in EMAIL_TRUSTED such as an owner's own) forwarding
 a customer's email get a ticket read against every account, with the readback emailed to them. Needs BIRD_API_KEY and BIRD_INBOUND_ADDRESS_ID.
 """
 import argparse
@@ -32,7 +32,9 @@ from .todo import attachment
 EMAIL = r"([A-Za-z0-9._%+'-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})"
 ADD_EMAIL = re.compile(rf"^\s*(?:add|approve)\s+<?(?:mailto:)?{EMAIL}(?:\|[^>]*)?>?\s+(?:to|for)\s+(.+?)\s*$", re.I | re.S)
 REMOVE_EMAIL = re.compile(rf"^\s*(?:remove|delete)\s+<?(?:mailto:)?{EMAIL}(?:\|[^>]*)?>?\s*$", re.I)
-OWN_DOMAIN = os.environ.get("EMAIL_OWN_DOMAIN", "snowwhitelinen.com")
+# Our own staff's domains (both companies): mail from them is staff forwarding a customer's email.
+OWN_DOMAINS = tuple("@" + d.strip().lower() for d in os.environ.get("EMAIL_OWN_DOMAIN", "snowwhitelinen.com,thelaundrygroup.com").split(",")
+                    if d.strip())
 AUTO = re.compile(r"^(mailer-daemon|postmaster|no-?reply|do-?not-?reply|bounce)", re.I)
 AUTO_SUBJECT = re.compile(r"^(automatic reply|auto(matic)?[- ]?reply|out of (the )?office|undeliverable|delivery status|"
                           r"returned mail|read:|accepted:|declined:)", re.I)
@@ -346,7 +348,7 @@ class EmailDesk(TextDesk):
 
     def handle(self, addr: str, body: str, sid: str) -> None:
         trusted = {email_key(x) for x in os.environ.get("EMAIL_TRUSTED", "").split(",") if "@" in x}  # e.g. Bill's own
-        if email_key(addr).endswith("@" + OWN_DOMAIN) or email_key(addr) in trusted:
+        if email_key(addr).endswith(OWN_DOMAINS) or email_key(addr) in trusted:
             return self.from_staff(addr, body, sid)
         super().handle(addr, body, sid)
 
