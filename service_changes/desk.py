@@ -754,7 +754,8 @@ class Desk:
         return True
 
     def notices_pass(self) -> None:
-        """Once per Alliant feed: garment-arrival and welcome emails to customers (notices.py)."""
+        """Once per Alliant feed: garment-arrival and welcome emails to customers (notices.py), and stopped items
+        still out at the customer (stops_watch.py)."""
         if getattr(self, "_notices_for", None) is self.alliant:
             return
         self._notices_for = self.alliant
@@ -765,6 +766,13 @@ class Desk:
                 print(time.strftime("%H:%M"), "customer notices:", out, flush=True)
         except Exception as e:
             print(time.strftime("%H:%M"), "customer notices error:", str(e)[:200], flush=True)
+        try:  # stopped items still out at the customer: their email, the driver's and the office's reminders
+            from .stops_watch import StopsWatch
+            out = StopsWatch(self).pass_()
+            if any(out.values()):
+                print(time.strftime("%H:%M"), "stopped items:", out, flush=True)
+        except Exception as e:
+            print(time.strftime("%H:%M"), "stopped items error:", str(e)[:200], flush=True)
 
     def link_contact(self, payload: dict) -> str:
         """A sign-up card's button: office or owner only. Marks the card approved for that account (moving the number

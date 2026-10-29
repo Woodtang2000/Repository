@@ -146,6 +146,7 @@ class Alliant:
     retired: dict[str, str] = field(default_factory=dict)  # barcode -> one line about it, garments_retired.csv (2 years)
     stops: list[dict] = field(default_factory=list)  # route_stops.csv: branch, route, day, sequence, account, name, city...
     route_names: dict[tuple[str, str], str] = field(default_factory=dict)  # (branch, route) -> area, routes.csv
+    stopped_wearers: dict[tuple[str, str], dict] = field(default_factory=dict)  # (account, wearer#) -> name, stopped date
 
     def garment(self, barcode: str) -> dict | None:
         """A garment in service by barcode, as typed or as Alliant pads it (zeros to 12 digits: 537456 -> 000000537456)."""
@@ -284,7 +285,10 @@ class Alliant:
         if wearers_csv:
             with open(wearers_csv, newline="", encoding="utf-8-sig") as f:
                 for row in csv.DictReader(f):
-                    if (row.get("stopped_date") or "").strip():  # the feed lists stopped wearers too
+                    if (row.get("stopped_date") or "").strip():  # the feed lists stopped wearers too: kept apart
+                        data.stopped_wearers[(row["account"], row["employee"])] = {
+                            "name": f'{row.get("first", "").strip()} {row.get("last", "").strip()}'.strip(),
+                            "stopped": row["stopped_date"].strip()}
                         continue
                     data.wearers.setdefault(row["account"], []).append(
                         Wearer(row["employee"], row["first"].strip(), row["last"].strip(), row.get("department", "").strip()))
