@@ -21,6 +21,9 @@ from .todo import GOLD, GREY, body, restyle, stamp
 
 FILE = "alliant_jobs.json"
 ACTION = "donna_enter"
+# Her rules give her one phrase for it ("Alliant needs signing in"); a note that merely mentions a session isn't one.
+SIGNED_OUT = re.compile(r"alliant needs signing in|needs? (?:to )?sign(?:ing)? in|sign-?in (?:page|screen|prompt)|"
+                        r"password (?:page|screen|prompt)|pick an account|signed (?:me |her )?out", re.I)
 STALE_MINUTES = 30  # a job "working" longer than this goes back in the queue (the workstation lost it)
 
 
@@ -168,7 +171,7 @@ class Jobs:
                                                                 f"· their answer makes a new ticket"),
                                             metadata={"event_type": KIND, "event_payload": {**p, "kind": "asked", "donna": "asked"}})
                 return f"asked the {who}"
-        if re.search(r"sign(ing|ed)? ?in|log(ged)? ?(in|out)|password|disconnected|session", note, re.I):
+        if SIGNED_OUT.search(note):
             # Only Alliant's sign-in stopped her: the button comes back, so one tap re-sends it once she's signed in
             a = restyle(t, GOLD, status="🔒 Waiting for Alliant sign-in · tap below once she's signed back in")[0]
             a["blocks"] = [b for b in a.get("blocks") or [] if b.get("block_id") != "donna"] + [button(job_id)]
