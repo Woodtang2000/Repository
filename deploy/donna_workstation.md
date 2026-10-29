@@ -65,3 +65,21 @@ launchctl list | grep com.donna.worker     # running? (a line with com.donna.wor
 ```
 
 Stop: `launchctl unload ~/Library/LaunchAgents/com.donna.worker.plist`. Start again: the same with `load`.
+
+## After a restart (or if she's stopped working)
+
+1. **Log in as Donna** (user alliantoperator): at the Mac, or with LogMeIn (Chrome Remote Desktop only connects once
+   someone is logged in). With auto-login on, the Mac does this itself.
+2. **Chrome:** it opens at login (Login Items). Click the Claude icon and check it shows **Donna's** account.
+3. **Alliant:** open the Windows App link, click Connect, sign in if asked ("Stay signed in? Yes"), and leave Alliant
+   on Customer Center.
+4. **Her loop and her Claude login**, in Terminal:
+   ```
+   launchctl list | grep donna; claude -p "reply with just: ok"
+   ```
+   A line ending in `com.donna.worker`, then `ok`. No line: `launchctl load ~/Library/LaunchAgents/com.donna.worker.plist`.
+   Not logged in: `claude`, choose the subscription login, sign in as donna@snowwhitelinen.com, `/exit`.
+5. **Not paused:** in Scott's private messages with @Donna, "Donna resume" (harmless if she wasn't paused).
+6. **After a macOS update:** System Settings → General → Software Update → Automatic updates: "Install macOS updates"
+   still off; Energy: prevent sleeping, start up after a power failure.
+7. **Test:** ask Donna for a small Homer Golf Course change, say yes, and watch `tail -f ~/Donna/logs/$(date +%F).log`.
