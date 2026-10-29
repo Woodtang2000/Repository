@@ -519,3 +519,12 @@ def test_new_feed_files_routes_garments_retired(tmp_path):
     g = barcode_facts(data, ["537456"])  # typed without Alliant's padding zeros
     assert "out clean" in g and "40 of 75 washes" in g and "last repair BUTTON 2026-10-01" in g and "JOEY SMITH" in g
     assert "ragged out 2026-10-27 after 118 weeks" in barcode_facts(data, ["111222"])
+
+
+def test_skus_csv_with_a_byte_order_mark(tmp_path):
+    """The Mac export can start a CSV with a byte-order mark: the first column must still be "sku"."""
+    from .context import Alliant, sku_facts
+    (tmp_path / "skus.csv").write_bytes("﻿sku,description,weight_oz,price\n7-00-02,BATH BLANKET,30,4.10\n".encode("utf-8"))
+    data = Alliant.from_dir(str(tmp_path))
+    facts = sku_facts(data, "how much does a bath blanket weigh")
+    assert "7-00-02" in facts and "weight 30 oz (= 1.88 lb)" in facts and "4.10" not in facts

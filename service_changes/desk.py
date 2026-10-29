@@ -53,8 +53,9 @@ PULSE = re.compile(r"\b(how('?s| is| are)? (things|everything|it|we|the team|bus
                    r"what am i missing|happening)\b", re.I)
 BRIEF_HOUR = int(os.environ.get("OWNER_BRIEF_HOUR", "7"))  # Donna's morning read for Scott, weekdays from this hour
 VOICE_PORT = int(os.environ.get("DESK_VOICE_PORT", "8091"))  # Donna's voice (desk.voice), on 127.0.0.1 only
-SKU_Q = re.compile(r"\b(weigh\w*|pounds?|lbs?|dimensions?|materials?|fabric|made of|blend|sku|how big|"
-                   r"case pack|pack size|\d-\d\d-\d\d)\b", re.I)  # questions about what an item is, not who has it
+SKU_Q = re.compile(r"\b(weigh\w*|pounds?|lbs?|ounces?|oz|dimensions?|materials?|fabric|made of|blend|skus?|how big|"
+                   r"case pack|pack size|packs? of|bundles?|specs?|discontinued|"
+                   r"\d-\d\d-\d\d)\b", re.I)  # questions about what an item is, not who has it
 AR_Q = re.compile(r"\b(owes?|owing|balance|past due|overdue|paid us|last paid|last payment|pay(s|ing)? us|"
                   r"credit hold|collections?|receivables?|a/?r|pric(?:e|es|ed|ing)|charg(?:e|es|ing)|rates?|contracts?|"
                   r"expir\w*|terms|sales ?rep|bill.?to|invoices?|minimum charge|insurance|replacement cost)\b", re.I)
@@ -719,6 +720,15 @@ class Desk:
                     f"{w.name} (#{w.employee}) at {acct} {names.get(acct, '')}" for acct, w in found),
                     {"kind": "office_ask", "user": user, "q": text})
                 return True
+        if not parsed.account_number and getattr(self.alliant, "skus", None):
+            # No customer in it: "what's a bath blanket made of?" is about the item itself
+            from .context import sku_facts
+            facts = sku_facts(self.alliant, text)
+            if facts:
+                ans = answer_lookup(self.claude, text, "SKU details from Alliant (no prices):\n" + facts, asker=self.asker(user))
+                if ans.found:
+                    say(f"<@{user}> {ans.answer}"[:3900], {"kind": "answer", "skus": True})
+                    return True
         if not parsed.account_number:
             qs = parsed.questions_for_driver or ["Which customer? Add the account number or location."]
             say(f"<@{user}> " + " ".join(qs), {"kind": "office_ask", "user": user, "q": text})

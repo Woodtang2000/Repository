@@ -134,11 +134,11 @@ class Alliant:
         if data.exported_at:
             data.as_of = data.exported_at.astimezone(ALASKA).strftime("%b %-d, %-I:%M %p")
         if f("holds.csv"):
-            with open(f("holds.csv"), newline="") as fh:
+            with open(f("holds.csv"), newline="", encoding="utf-8-sig") as fh:
                 for row in csv.DictReader(fh):
                     data.holds.setdefault(row["account"].strip(), []).append({k: (v or "").strip() for k, v in row.items()})
         if f("customer_cards.csv"):
-            with open(f("customer_cards.csv"), newline="") as fh:
+            with open(f("customer_cards.csv"), newline="", encoding="utf-8-sig") as fh:
                 data.cards = {row["account"]: row for row in csv.DictReader(fh)}
             for c in data.customers:  # the cards are refreshed nightly; customers.csv can lag behind
                 r = (data.cards.get(c.account, {}).get("route") or "").strip()
@@ -193,12 +193,12 @@ class Alliant:
     def _autocount_from_cards(self, items_csv: str, card_lines_csv: str) -> None:
         """Take each item's autocount from the record cards (record_cards.py), matched on account, SKU and
         inventory. This replaces any autocount the Item Usage converter guessed by line order."""
-        with open(card_lines_csv, newline="") as f:
+        with open(card_lines_csv, newline="", encoding="utf-8-sig") as f:
             cards: dict[tuple[str, str, int], list[int]] = {}
             for row in csv.DictReader(f):
                 if not row["wearer"]:
                     cards.setdefault((row["account"], row["sku"], int(row["inventory"])), []).append(int(row["autocount"]))
-        with open(items_csv, newline="") as f:
+        with open(items_csv, newline="", encoding="utf-8-sig") as f:
             for row in csv.DictReader(f):
                 found = cards.get((row["account"].strip(), row["sku"].strip(), int(row["quantity"])))
                 if found:
@@ -208,7 +208,7 @@ class Alliant:
         """Nicknames the office keeps in aliases.csv (account, also_called)."""
         import os
         if path and os.path.exists(path):
-            with open(path, newline="") as f:
+            with open(path, newline="", encoding="utf-8-sig") as f:
                 for row in csv.DictReader(f):
                     self.aliases.setdefault(row["account"].strip(), []).append(row["also_called"].strip())
 
@@ -226,7 +226,7 @@ class Alliant:
              garments_csv: str | None = None, wearers_csv: str | None = None) -> "Alliant":
         data = cls()
         if garments_csv:
-            with open(garments_csv, newline="") as f:
+            with open(garments_csv, newline="", encoding="utf-8-sig") as f:
                 for row in csv.DictReader(f):
                     label = f'{row["item"].strip()} {row["size"].strip()}'.strip()
                     g = data.garments.setdefault((row["account"], row["employee"]), {})
@@ -234,21 +234,21 @@ class Alliant:
                     if row.get("sku"):
                         data.sku[(row["account"], row["employee"], label)] = row["sku"].strip()
         if wearers_csv:
-            with open(wearers_csv, newline="") as f:
+            with open(wearers_csv, newline="", encoding="utf-8-sig") as f:
                 for row in csv.DictReader(f):
                     if (row.get("stopped_date") or "").strip():  # the feed lists stopped wearers too
                         continue
                     data.wearers.setdefault(row["account"], []).append(
                         Wearer(row["employee"], row["first"].strip(), row["last"].strip(), row.get("department", "").strip()))
         if customers_csv:
-            with open(customers_csv, newline="") as f:
+            with open(customers_csv, newline="", encoding="utf-8-sig") as f:
                 for row in csv.DictReader(f):
                     if re.match(r"99\d{4}-", row["account"].strip()):  # route placeholder accounts ("RTE 1 (DOWNTOWN)")
                         continue
                     days = [d.strip()[:3].title() for d in re.split(r"[;,/ ]+", row.get("service_days", "")) if d.strip()]
                     data.customers.append(Customer(row["account"].strip(), row["name"].strip(), row["route"].strip(), days))
         if items_csv:
-            with open(items_csv, newline="") as f:
+            with open(items_csv, newline="", encoding="utf-8-sig") as f:
                 for row in csv.DictReader(f):
                     acct, item = row["account"].strip(), row["item"].strip()
                     # The same item can sit on several lines of one account (240 + 160 bath towels): add them up.
@@ -271,7 +271,7 @@ class Alliant:
         self.ar = {}
         if not path:
             return
-        with open(path, newline="") as f:
+        with open(path, newline="", encoding="utf-8-sig") as f:
             for row in csv.DictReader(f):
                 acct = (row.get("account") or "").strip()
                 if acct:
@@ -283,7 +283,7 @@ class Alliant:
         self.skus = {}
         if not path:
             return
-        with open(path, newline="") as f:
+        with open(path, newline="", encoding="utf-8-sig") as f:
             for row in csv.DictReader(f):
                 sku = (row.get("sku") or "").strip()
                 if sku:
