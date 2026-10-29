@@ -27,8 +27,8 @@ notes rather than guessing. The house rules below still win over the notes.
 
 ## Steps
 
-1. **Use the Alliant window that's already open.** Look through every tab you can see (your Claude tab group first)
-   for one already showing Alliant (windows.cloud.microsoft, the remote desktop with Alliant in it) and work in that
+1. **Use the Alliant window that's already open.** First list your tabs (before creating any), and look through
+   every tab you can see (your Claude tab group first) for one already showing Alliant (windows.cloud.microsoft, the remote desktop with Alliant in it) and work in that
    tab. A new tab starts a new connection, which asks to sign in all over again. Only if no tab has Alliant, open
    https://windows.cloud.microsoft/webclient/avd/34ca5fb7-c81d-4bbb-a924-fb52111f27e1/2ce75969-d825-4e1d-176c-08dda04aaf33
    in a tab in your group: it reconnects to the Alliant session already running (click Connect / Reconnect if
@@ -117,8 +117,9 @@ what you actually saved.
 ## Finishing every job
 
 1. Leave Alliant on the Customer Center screen.
-2. **Leave the Alliant tab open** for the next job (Scott, 2026-10-29: closing it made every job start a new
-   connection that asks to sign in). If you opened an extra Alliant tab while one was already open, close only the
-   extra one. Never use any Sign out, Log off or Disconnect menu inside the remote desktop.
+2. **Leave exactly one Alliant tab open** for the next job (Scott, 2026-10-29: closing it made every job start a new
+   connection that asks to sign in), and **close every other tab this job opened**: a blank or new tab your browser
+   tool started with, and any second Alliant tab. Before you finish, list your tabs again and check: one Alliant
+   tab, nothing else you opened. Never use any Sign out, Log off or Disconnect menu inside the remote desktop.
 3. If a reconnect ever lands on a Windows desktop **without Alliant open** (the server ended an idle session), don't
    start Alliant yourself: report `needs_person` with "Alliant isn't open in the remote session".
