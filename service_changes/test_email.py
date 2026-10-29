@@ -191,3 +191,18 @@ def test_the_laundry_groups_customers_hear_from_its_own_address(monkeypatch):
     assert calls[-1]["reply_to"] == ["donna@thelaundrygroup.com"]
     bird.send("a@b.com", "Hi", "Hello", company="Snow White Linen")
     assert calls[-1]["from"]["email"] == "donna@mail.snowwhitelinen.com" and calls[-1]["reply_to"] == ["service@snowwhitelinen.com"]
+
+
+def test_replies_come_from_the_customers_own_company(desk, monkeypatch):
+    from . import bird
+    ed, slack, sent, inbox, seen = desk
+    calls = []
+    monkeypatch.setattr(bird, "send", lambda to, subject, text, in_reply_to="", key="", company="": calls.append((to, company, text)))
+    (ed.data_dir and open(f"{ed.data_dir}/customer_emails.csv", "a").write("tom@kobuk.com,5100-2-00001,Tom at Kobuk\n"))
+    ed.state["threads"]["tom@kobuk.com"] = {"subject": "Mats"}
+    ed.state["threads"]["new@lodge.com"] = {"subject": "Hello", "to_tlg": True}
+    ed._send("tom@kobuk.com", "Got it")  # branch 2 customer
+    ed._send("jane@acme.com", "Got it")  # branch 1 (M4)
+    ed._send("new@lodge.com", "Who are you?")  # not on file yet: wrote to donna@thelaundrygroup.com
+    assert [c[1] for c in calls] == ["The Laundry Group", "Snow White Linen", "The Laundry Group"]
+    assert "The Laundry Group" in calls[0][2] and "Snow White Linen" in calls[1][2]  # the signature matches

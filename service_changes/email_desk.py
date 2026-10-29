@@ -236,6 +236,8 @@ class EmailDesk(TextDesk):
             self.state["threads"][sender] = {
                 "subject": subject, "msgid": m.get("message_id") or "", "name": (m.get("from") or {}).get("name") or "",
                 "verified": bool(m.get("spf_pass") or m.get("dkim_pass")),
+                "to_tlg": any("thelaundrygroup.com" in (a.get("email") or "").lower() for a in
+                              (m.get("to") or []) + (m.get("cc") or []) if isinstance(a, dict)),
                 "bulk": any(BULK.match(n) for n in names) or (m.get("precedence") or "").lower() in ("bulk", "list")}
             out.append({"id": m["id"], "from": sender,
                         "body": (f"Subject: {subject}\n" if subject and not subject.lower().startswith("re:") else "")
@@ -251,11 +253,21 @@ class EmailDesk(TextDesk):
             return []
         return ["⚠️ _The sender's email couldn't be verified (SPF/DKIM). Confirm by phone before entering._"]
 
+    def company(self, addr: str) -> str:
+        """Who answers: the company of the sender's own accounts (branch 2 is The Laundry Group); someone not on file
+        yet, by the address they wrote to."""
+        from .context import company_for
+        accounts = self.contacts().get(email_key(addr), {}).get("accounts") or []
+        if accounts:
+            return company_for(accounts[0])
+        return "The Laundry Group" if self.state["threads"].get(email_key(addr), {}).get("to_tlg") else "Snow White Linen"
+
     def _send(self, to: str, body: str) -> None:
         t = self.state["threads"].get(email_key(to), {})
-        subject = t.get("subject") or "Your Snow White Linen request"
+        company = self.company(to)
+        subject = t.get("subject") or f"Your {company} request"
         bird.send(email_key(to), subject if subject.lower().startswith("re:") else "Re: " + subject,
-                  plain(body) + "\n\n" + bird.signature(), in_reply_to=t.get("msgid", ""))
+                  plain(body) + "\n\n" + bird.signature(company), in_reply_to=t.get("msgid", ""), company=company)
 
     def sign_up(self, addr: str, body: str, sid: str, n: int) -> None:
         """An unknown sender: the email itself usually says who they are, so the office gets a card straight away and
