@@ -24,7 +24,7 @@ from .phone import CUSTOMER_RULES, DRIVER_RULES, EMPLOYEE_LINE, EMPLOYEE_RULES, 
     office_open
 
 TOOLS = ("caller_info", "customer_request", "new_lead", "employee_message", "driver_change", "handheld_help",
-         "verify_owner", "ask_donna")
+         "verify_owner", "ask_donna", "item_options")
 WORDS = {"zero": "0", "oh": "0", "one": "1", "two": "2", "to": "2", "too": "2", "three": "3", "four": "4", "for": "4",
          "five": "5", "six": "6", "seven": "7", "eight": "8", "ate": "8", "nine": "9"}
 
@@ -246,6 +246,11 @@ class PhoneTools:
             print(time.strftime("%H:%M"), "phone agent: ask_donna failed:", str(e)[:200], flush=True)
             return {"answer": "I can't reach the office data right now. Try me again in a minute."}
 
+    def item_options(self, c: dict, body: dict, said: str) -> dict:
+        """"What colors do tablecloths come in?": the catalog's colors and sizes (no prices), on either line."""
+        from .checks import options_facts
+        return {"options": options_facts(self.phone.alliant(), said) or "Nothing by that name in the catalog."}
+
     def handheld_help(self, c: dict, body: dict, said: str) -> dict:
         helper = getattr(self.phone, "helper", None)
         if c["line"] != "employees" or not helper:
@@ -285,6 +290,8 @@ CUSTOMER_TOOLS_NOTE = """Your tools on this line:
   call customer_request again with summary = their answer. Otherwise it tells you whether they'll be texted or called
   back; say so.
 - new_lead: a new business. Fill caller_name, business, town, best_time; summary = what they need.
+- item_options: when they ask what colors or sizes something comes in, or seem unsure which one they want. Offer a color
+  that goes with what they already have (caller_info's account facts), and remember they may just be asking.
 """
 
 EMPLOYEE_TOOLS_NOTE = """Your tools on this line:
@@ -294,6 +301,7 @@ EMPLOYEE_TOOLS_NOTE = """Your tools on this line:
   and ask if you should send it; then call driver_change with their yes, no or correction, word for word), "sent",
   "cancelled", "not_a_change" or "not_allowed". Never say a change is sent unless status is "sent".
 - handheld_help: how to do something on the handheld or in Alliant mobile. Say the answer simply, step by step.
+- item_options: what colors and sizes an item comes in.
 """
 
 
@@ -349,14 +357,17 @@ FIELDS = {  # tool -> (description, {property: description}); every tool also ge
     "driver_change": ("A known employee's customer change, their answer to your question, or their yes/no/correction "
                       "to your read-back.", {"said": "Exactly what the caller said."}),
     "handheld_help": ("How to do something on the handheld or in Alliant mobile.", {"question": "Their question."}),
+    "item_options": ("What colors and sizes an item comes in (tablecloths, mats, aprons...). No prices.",
+                     {"question": "What they asked, with the item."}),
     "verify_owner": ("Check Scott's secret phrase, only when caller_info says owner_candidate.",
                      {"pin": "Exactly the words or numbers he said."}),
     "ask_donna": ("Harvey mode only (after verify_owner): anything Scott asks or tells you about the business, people, "
                   "Slack, email, balances, or a change, and his yes or no to a change you read back.",
                   {"question": "Exactly what Scott said."}),
 }
-LINE_TOOLS = {"customers": ("caller_info", "customer_request", "new_lead", "verify_owner", "ask_donna"),
-              "employees": ("caller_info", "employee_message", "driver_change", "handheld_help", "verify_owner", "ask_donna")}
+LINE_TOOLS = {"customers": ("caller_info", "customer_request", "new_lead", "item_options", "verify_owner", "ask_donna"),
+              "employees": ("caller_info", "employee_message", "driver_change", "handheld_help", "item_options",
+                            "verify_owner", "ask_donna")}
 SYSTEM = {"caller": "system__caller_id", "called": "system__called_number", "conversation_id": "system__conversation_id"}
 
 

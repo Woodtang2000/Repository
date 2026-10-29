@@ -1009,6 +1009,13 @@ class Desk:
     def sku_answer(self, text: str, user: str | None = None) -> str:
         """A question about an item itself ("how much does a bath blanket weigh?"), answered from skus.csv; empty if
         it isn't one. Without the file yet, says so rather than guessing."""
+        from .checks import OPTIONS_Q, options_facts
+        if OPTIONS_Q.search(text):  # "what colors do tablecloths come in?": the catalog's colors and sizes, no prices
+            facts = options_facts(self.alliant, text)
+            if facts:
+                from .parser import answer_lookup
+                return answer_lookup(self.claude, text, facts, asker=self.asker(user) if user else
+                                     "office staff member").answer
         if not SKU_Q.search(text):
             return ""
         from .context import sku_facts

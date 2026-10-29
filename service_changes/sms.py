@@ -243,6 +243,14 @@ def only(alliant: Alliant, accounts: list[str]) -> Alliant:
         holds={a: v for a, v in alliant.holds.items() if a in keep},
         ar={},  # balances never travel with a customer's data
         sku_counts=sku_counts(alliant),  # how many accounts use each SKU (no account in it): the ticket's "usual" SKU
+        # the feed's garment, order and route data: their own accounts only; the SKU catalog (skus) stays, no prices
+        in_service={k: v for k, v in alliant.in_service.items() if k[0] in keep},
+        by_barcode={b: r for b, r in alliant.by_barcode.items() if r.get("cust_code") in keep},
+        scans={b: v for b, v in alliant.scans.items() if (alliant.by_barcode.get(b) or {}).get("cust_code") in keep},
+        orders={a: v for a, v in alliant.orders.items() if a in keep},
+        price_type={a: v for a, v in alliant.price_type.items() if a in keep},
+        retired={},
+        stops=[r for r in alliant.stops if r.get("account") in keep],
     )
 
 
@@ -430,7 +438,12 @@ class TextDesk:
             q = "Which location is this for? " + " / ".join(names)
             return self.ask(phone, lines, [q], convo)
         if parsed.category == Category.lookup:
-            ans = answer_lookup(self.claude, parsed.summary or body, customer_facts(mine, acct), asker="customer")
+            from .checks import OPTIONS_Q, options_facts
+            facts = customer_facts(mine, acct)
+            if OPTIONS_Q.search(body):  # "what colors do you have in tablecloths?": the catalog, never prices
+                facts += "\n" + options_facts(mine, body) + ("\nSuggest a color that goes with what they already have, "
+                                                             "and ask what they'd like; they may just be asking.")
+            ans = answer_lookup(self.claude, parsed.summary or body, facts, asker="customer")
             self.send(phone, ans.answer)
             self.state["convos"].pop(self.key(phone), None)
             if not ans.found:

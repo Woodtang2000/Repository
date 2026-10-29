@@ -319,7 +319,8 @@ def check(parsed: ParsedMessage, alliant: Alliant) -> Result:
                 # A new item with no clear usual: ask which one now, while they're still here, not at the workstation
                 options = sku_choices(alliant, ch.item, limit=6)
                 if len(options) > 1:
-                    cc.questions.append(_which_color(ch.item, options, alliant.items.get(parsed.account_number, {}), who))
+                    cc.questions.append(_which_one(ch.item, alliant, alliant.items.get(parsed.account_number, {}), who)
+                                        or _which_color(ch.item, options, alliant.items.get(parsed.account_number, {}), who))
                 elif not options and (alliant.sku_counts or getattr(alliant, "skus", None)):
                     cc.questions.append(f"Which {ch.item} exactly? I can't find one by that name in Alliant.")
         out.append(cc)
@@ -444,6 +445,77 @@ def sku_choices(alliant: Alliant, item: str | None, limit: int = 4) -> list[tupl
             if (d.get("active") or "Y").upper() != "N" and hit(d.get("description", ""))][:limit]
 
 
+SIZE_WORD = re.compile(r"\d+(?:\.\d+)?(?:x\d+(?:\.\d+)?)?(?:\"|''|in|ft)?|\d+'|x{0,3}s|m|x{0,3}l|\dxl|small|medium|"
+                       r"large|reg|regular|tall|long|short", re.I)
+OPTIONS_Q = re.compile(r"\b(?:what|which)\s+(?:colou?rs?|sizes?|kinds?|styles?)\b|\b(?:colou?rs?|sizes?)\s+(?:do|does|are|is|"
+                       r"come|available|options)\b|\bcome in\b|\boptions\b|\bdo you (?:have|carry|offer)\b|"
+                       r"\bavailable\b", re.I)
+_STOP = {"the", "and", "for", "what", "which", "colors", "color", "colours", "sizes", "size", "come", "does", "you", "have",
+         "carry", "offer", "your", "our", "any", "some", "need", "want", "would", "like", "options", "available", "kind",
+         "kinds", "style", "styles", "with", "are", "there", "can", "get", "they", "them", "this", "that", "new", "more"}
+
+
+def _names(alliant: Alliant) -> dict[str, int]:
+    """Every item name we know, with how many accounts use it: account items (sku_counts) and the catalog's active SKUs."""
+    out: dict[str, int] = {}
+    for (_, name), n in dict(alliant.sku_counts).items():
+        out[name] = out.get(name, 0) + n
+    for d in (getattr(alliant, "skus", None) or {}).values():
+        if (d.get("active") or "Y").upper() != "N" and d.get("description"):
+            out.setdefault(d["description"], 0)
+    return out
+
+
+def _has(name: str, word: str) -> bool:
+    w = "gr[ae]y" if word in ("gray", "grey") else re.escape(word)
+    return bool(re.search(rf"\b{w}", name.lower()))
+
+
+def item_options(alliant: Alliant, item: str) -> tuple[str, list[str], list[str]]:
+    """(kind, colors, sizes) the item comes in, from every name we know matching the item's words ("tablecloth" ->
+    white, black, ivory; 54x54, 72x72), most-used colors first, sizes small to large. Never prices."""
+    names = _names(alliant)
+    words = [w.rstrip("s") for w in re.findall(r"[a-z0-9]+", item.lower()) if w not in _STOP and len(w) > 1]
+    sizes_said = [w for w in words if SIZE_WORD.fullmatch(w)]
+    kind = [w for w in words if not SIZE_WORD.fullmatch(w) and any(_has(n, w) for n in names)]
+    # the kind of item is the words every match shares; a color or size the person gave narrows it
+    hits = {n: c for n, c in names.items() if kind and all(_has(n, w) for w in kind)}
+    while kind and not hits:
+        kind = kind[1:]
+        hits = {n: c for n, c in names.items() if kind and all(_has(n, w) for w in kind)}
+    if not hits:
+        return "", [], []
+    if sizes_said:
+        hits = {n: c for n, c in hits.items() if all(_has(n, w) for w in sizes_said)} or hits
+    colors: dict[str, int] = {}
+    sizes: dict[str, int] = {}
+    for n, c in hits.items():
+        toks = re.findall(r"[a-z0-9.'\"]+", n.lower())
+        size = [t for t in toks if SIZE_WORD.fullmatch(t)]
+        color = " ".join(t for t in toks if not SIZE_WORD.fullmatch(t) and not any(t.rstrip("s") == k for k in kind))
+        if color:
+            colors[color] = colors.get(color, 0) + c
+        for z in size:
+            sizes[z] = sizes.get(z, 0) + c
+    order = lambda z: [float(x) for x in re.findall(r"\d+(?:\.\d+)?", z)] or [0.0]
+    return (" ".join(kind), [c for c, _ in sorted(colors.items(), key=lambda kv: -kv[1])][:8],
+            sorted(sizes, key=order)[:8])
+
+
+def _join(xs: list[str]) -> str:
+    return xs[0] if len(xs) == 1 else ", ".join(xs[:-1]) + " and " + xs[-1]
+
+
+def options_facts(alliant: Alliant, question: str) -> str:
+    """"What colors do tablecloths come in?" for an answer: the colors and sizes from the catalog, no prices."""
+    kind, colors, sizes = item_options(alliant, question)
+    if not kind:
+        return ""
+    return (f"Item options (from the catalog and what customers use; no prices): {kind}s come in "
+            + (f"these colors: {_join(colors)}" if colors else "")
+            + ("; " if colors and sizes else "") + (f"these sizes: {_join(sizes)}" if sizes else "") + ".")
+
+
 def _which_color(item: str, options: list[tuple[str, str, int]], have: dict[str, int], who: str) -> str:
     """"What color 3x10 mat? Homer Golf Course has charcoal heather mats now. (3x10 mats come in confetti grey,
     charcoal heather and blue.)" Drivers and the office know items by color, so ask the color, and say what color
@@ -462,6 +534,33 @@ def _which_color(item: str, options: list[tuple[str, str, int]], have: dict[str,
         q += f" {who} has {' and '.join(owned[:2])} {plural} now."
     if colors:
         q += f" ({item.rstrip('s')}s come in {', '.join(colors[:-1])}{' and ' if len(colors) > 1 else ''}{colors[-1]}.)"
+    return q
+
+
+def _which_one(item: str, alliant: Alliant, have: dict[str, int], who: str) -> str:
+    """"What color and size tablecloth? You have black napkins now, so black would match. Tablecloths come in white,
+    black and ivory, in 54x54, 72x72 and 90x90." Asks only what wasn't said (a size given: just the color), and suggests
+    a color the account already uses: in the same kind of item first, else any of its items in a color this one comes in."""
+    kind, colors, sizes = item_options(alliant, item)
+    if not kind:
+        return ""
+    said = item.lower()
+    need_color = len(colors) > 1
+    need_size = len(sizes) > 1 and not any(SIZE_WORD.fullmatch(w) for w in re.findall(r"[a-z0-9.]+", said))
+    if not need_color and not need_size:
+        return ""
+    ask = " and ".join(x for x in ("color" if need_color else "", "size" if need_size else "") if x)
+    q = f"What {ask} {item}?"
+    if need_color:
+        same = [n for n in have if all(_has(n, w) for w in kind.split())]
+        match = list(dict.fromkeys(c for c in colors if any(_has(n, w) for n in (same or have) for w in c.split())))
+        if same and match:
+            q += f" {who} has {_join(match[:2])} {kind}s now."
+        elif match:
+            other = next(n for n in have if any(_has(n, w) for w in match[0].split()))
+            q += f" {who} has {other.title()} now, so {match[0]} would match."
+    q += f" {kind.title()}s come in" + (f" {_join(colors)}" if need_color else "") + (
+        f"{',' if need_color else ''} in {_join(sizes)}" if need_size else "") + "."
     return q
 
 

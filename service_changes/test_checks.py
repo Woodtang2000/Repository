@@ -553,6 +553,28 @@ def test_a_vague_new_item_asks_which_one_up_front():
                                    changes=[Change(action=Action.add, item=item, quantity=1)])
     r = check(p("3x10 mat"), data)
     assert r.questions == ["What color 3x10 mat? this customer has charcoal heather mats now. "
-                           "(3x10 mats come in confetti grey, charcoal heather and blue.)"]
+                           "Mats come in confetti grey, charcoal heather and blue."]
     assert not check(p("3x10 confetti gray mat"), data).questions  # clear: the ticket carries 10-10-02
     assert check(p("3x10 purple mat"), data).questions == ["Which 3x10 purple mat exactly? I can't find one by that name in Alliant."]
+
+
+def test_tablecloths_colors_and_sizes_with_a_matching_suggestion():
+    """A customer who's never had tablecloths: what color and size, a color that matches their napkins, and what
+    tablecloths come in; and "what colors do you have" answered from the catalog with no prices."""
+    from .checks import OPTIONS_Q, check, options_facts
+    from .context import Alliant, Customer
+    from .schema import Action, Category, Change, ParsedMessage
+    data = Alliant(customers=[Customer("5040-1-00000", "CHILIS", "3", ["Wed"])],
+                   items={"5040-1-00000": {"NAPKIN BLACK": 200, "TOWEL BAR MOP": 100}},
+                   sku_counts={("12-01-01", "TABLECLOTH WHITE 54X54"): 30, ("12-01-02", "TABLECLOTH BLACK 54X54"): 20,
+                               ("12-01-03", "TABLECLOTH WHITE 72X72"): 25, ("12-01-04", "TABLECLOTH IVORY 90X90"): 5},
+                   skus={"12-01-01": {"description": "TABLECLOTH WHITE 54X54", "price": "1.10"}})
+    r = check(ParsedMessage(category=Category.item_change, account_number="5040-1-00000", customer_as_written="Chili's",
+                            summary="tablecloths", changes=[Change(action=Action.add, item="tablecloths")]), data)
+    q = r.questions[-1]
+    assert q.startswith("What color and size tablecloths? Chili's has Napkin Black now, so black would match.")
+    assert "Tablecloths come in white, black and ivory, in 54x54, 72x72 and 90x90." in q
+    asked = "what colors do you have in tablecloths?"
+    assert OPTIONS_Q.search(asked) and not OPTIONS_Q.search("add 50 bar mops to Midas")
+    facts = options_facts(data, asked)
+    assert "white, black and ivory" in facts and "54x54, 72x72 and 90x90" in facts and "1.10" not in facts
