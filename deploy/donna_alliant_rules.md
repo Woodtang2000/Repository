@@ -27,7 +27,9 @@ notes rather than guessing. The house rules below still win over the notes.
 
 ## Steps
 
-1. Find Alliant in your Claude tab group. If the group has no Alliant tab (a new session gets a new group), open
+1. **Use the Alliant window that's already open.** Look through every tab you can see (your Claude tab group first)
+   for one already showing Alliant (windows.cloud.microsoft, the remote desktop with Alliant in it) and work in that
+   tab. A new tab starts a new connection, which asks to sign in all over again. Only if no tab has Alliant, open
    https://windows.cloud.microsoft/webclient/avd/34ca5fb7-c81d-4bbb-a924-fb52111f27e1/2ce75969-d825-4e1d-176c-08dda04aaf33
    in a tab in your group: it reconnects to the Alliant session already running (click Connect / Reconnect if
    asked, and choose to reconnect to the existing session). If the Alliant tab says **Disconnected** or offers
@@ -82,10 +84,11 @@ notes rather than guessing. The house rules below still win over the notes.
 - Never touch the **Locking** box, Stop Customer, Seasonal, or New Business on Customer Entry.
 - Never change an account the ticket doesn't name, and never more than the ticket asks.
 - Never type, paste or change a password or MFA code (clicking Sign in on Chrome's filled-in box, step 1, is the
-  only sign-in you do). Never sign out of Windows or close the Alliant program inside the remote desktop (closing
-  your own browser tab at the end, see Reporting, only disconnects it; Alliant keeps running for the next job).
+  only sign-in you do). Never sign out of Windows, close the Alliant program inside the remote desktop, or close the
+  Alliant tab: it stays open for the next job.
 - Never put prices, balances, invoice amounts or anything from A/R in your note: notes are read in Slack.
-- Work only in the Alliant tab in your Claude tab group; never open other sites or other browsers.
+- Work only in the Alliant tab; never open other sites or other browsers, and never open a second Alliant tab when
+  one is already open.
 - If a ticket has open questions (❓), a ⚠️ warning, or asks for something these rules don't cover (putting an account
   or item on hold or taking it off, a special order, a new customer, pricing): `needs_person` with why.
 - A ⏸️ "on hold" note in a ticket comes from the latest Alliant export (up to an hour old). Check the hold on Alliant's own screen: if the
@@ -114,9 +117,8 @@ what you actually saved.
 ## Finishing every job
 
 1. Leave Alliant on the Customer Center screen.
-2. After your report is sent, **close the Alliant tab you opened** in your Claude tab group (Scott approved this on
-   2026-10-28). That only disconnects this browser tab: the Windows session and Alliant keep running on the server,
-   and the next job reconnects to them. Don't use any Sign out, Log off or Disconnect menu inside the remote desktop;
-   just close the browser tab.
+2. **Leave the Alliant tab open** for the next job (Scott, 2026-10-29: closing it made every job start a new
+   connection that asks to sign in). If you opened an extra Alliant tab while one was already open, close only the
+   extra one. Never use any Sign out, Log off or Disconnect menu inside the remote desktop.
 3. If a reconnect ever lands on a Windows desktop **without Alliant open** (the server ended an idle session), don't
    start Alliant yourself: report `needs_person` with "Alliant isn't open in the remote session".
