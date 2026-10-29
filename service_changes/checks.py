@@ -572,6 +572,8 @@ def _which_one(item: str, alliant: Alliant, have: dict[str, int], who: str) -> s
         f"{',' if need_color else ''} in {_join(sizes)}" if need_size else "") + "."
     if need_size and "mat" in kind.split():
         q += " (A 3x5 is the standard doorway mat; a 3x10 runner covers a walkway.)"
+    elif need_size and re.search(r"table ?cloth|table linen", kind + " " + item, re.I):
+        q += " (A 90-inch round fits a table for 8; a 120-inch round a table for 10.)"
     return q
 
 

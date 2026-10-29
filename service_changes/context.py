@@ -33,6 +33,20 @@ PRODUCT_NOTES = {
         "traffic areas. Any other size is custom and costs more, like a logo mat. A scraper mat goes outside a doorway; a "
         "comfort flow is usually a kitchen mat; a Waterhog is a heavy-duty mat that holds a lot of water, for wet areas "
         "and entrances. Suggest the standard sizes; custom only if they ask.",
+    ("napkin",): "Napkins are where the color choices are: many colors, while tablecloths come in fewer. Alaska "
+                 "restaurants are mostly napkin customers rather than table linen customers.",
+    ("table linen", "tablecloth", "table cloth", "banquet", "round", "8 top", "10 top", "eight top", "ten top"):
+        "Table linen (tablecloths) is for higher-end restaurants, hotels, catering and events, not bars or casual dining. "
+        "Tablecloths come in squares, rectangles and rounds; a 90-inch round fits a table for 8 and a 120-inch round a "
+        "table for 10, mostly banquet tables. Fewer colors than napkins.",
+    ("microfiber", "micro fiber"): "Microfibers come in colors by use: yellow and white for restaurants, blue for detail "
+                                   "shops. There are also medical microfiber items for hospitals and clinics.",
+    ("chef coat", "chef"): "Chef coats come in black or white, with pearl buttons or knotted buttons.",
+    ("cook shirt",): "Cook shirts come in black or white.",
+    ("butcher coat", "butcher"): "Butcher coats are for food processing jobs and businesses.",
+    ("lab coat",): "Lab coats are for medical and clinical customers.",
+    ("coverall", "fr shirt", "fr pant", "fr ", "flame", "fire resistant", "fire retardant"):
+        "Coveralls come standard or FR (flame retardant), and so do most work shirts and pants.",
 }
 CORE_MAT_SIZES = ["2x3", "3x5", "4x6", "3x10", "4x8"]
 

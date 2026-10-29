@@ -124,7 +124,7 @@ class Chat:
                    "(no prices shown; it goes straight to Bill). Offer it when they want a quote on specific items, and "
                    "still help here if they'd rather chat.")
         from .context import PRODUCT_NOTES
-        items = ("" if site != "sw" else "\n\nABOUT OUR ITEMS (the owner's own words: use them to explain what something is "
+        items = ("\n\nABOUT OUR ITEMS (the owner's own words: use them to explain what something is "
                  "for and to help a visitor pick; suggest the standard items and sizes first, custom ones only if they ask; "
                  "never prices):\n" + "\n".join(PRODUCT_NOTES.values()))
         return (c["rules"] + "\n\n" + SAFE.replace("{next_time}", next_time).replace("{portal}", portal) + items

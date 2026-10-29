@@ -408,4 +408,4 @@ def test_website_chat_knows_what_items_are_for():
     chat.facts = {"sw": "facts", "tlg": "facts"}
     sw, tlg = chat.system("sw"), chat.system("tlg")
     assert "ABOUT OUR ITEMS" in sw and "3x10, often called a runner" in sw and "yellow for restaurants" in sw
-    assert "ABOUT OUR ITEMS" not in tlg  # The Laundry Group's site is hospitals and hotels
+    assert "medical microfiber" in tlg and "120-inch round" in tlg  # hotels, events and clinics: The Laundry Group too

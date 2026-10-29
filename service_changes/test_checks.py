@@ -599,3 +599,13 @@ def test_what_items_are_for_and_core_mat_sizes():
         parse=lambda **kw: seen.append(kw["messages"][0]["content"]) or SimpleNamespace(parsed_output=None))))
     parser.answer_lookup(client, "what's a waterhog mat?", "no facts")
     assert "heavy-duty mat that holds a lot of water" in seen[0]
+
+
+def test_napkins_table_linen_microfiber_and_uniform_notes():
+    from .context import product_notes
+    assert "90-inch round fits a table for 8" in product_notes("what size tablecloth for a round 8 top?")
+    assert "mostly napkin customers" in product_notes("do you have napkins in red?")
+    assert "blue for detail shops" in product_notes("which microfiber for a detail shop")
+    assert "pearl buttons or knotted buttons" in product_notes("what chef coats do you have")
+    assert "FR (flame retardant)" in product_notes("do you have FR coveralls")
+    assert "flame" not in product_notes("how many shirts does Joey have")  # an ordinary shirt question
