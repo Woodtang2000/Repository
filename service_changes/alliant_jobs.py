@@ -167,7 +167,7 @@ class Jobs:
             who = self.desk.ask_requester(t, question)
             if who:
                 self.desk.slack.chat_update(channel=self.desk.desk_id, ts=job_id, text="",
-                                            attachments=restyle(t, GREY, status=f"❓ Donna asked the {who}: {question.strip()[:200]} "
+                                            attachments=restyle(t, GREY, status=f"❓ Donna asked {who if who not in ('driver', 'customer', 'owner') else 'the ' + who}: {question.strip()[:200]} "
                                                                 f"· their answer makes a new ticket"),
                                             metadata={"event_type": KIND, "event_payload": {**p, "kind": "asked", "donna": "asked"}})
                 return f"asked the {who}"

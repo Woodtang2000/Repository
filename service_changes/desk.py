@@ -979,8 +979,18 @@ class Desk:
         pending = self.__dict__.setdefault("changes", {})
         now = time.time()
         p = pending.get(key)
+        if p is None and user:  # her workstation asked in his private messages: answered by voice (or the other way)
+            other = next((k for k, v in pending.items() if v.get("user") == user and v.get("workstation")
+                          and now - v["at"] < 7200), None)
+            if other:
+                p = pending[key] = pending.pop(other)
         if p and now - p["at"] > (900 if p.get("confirm") else 7200):
             p = pending.pop(key)
+            p = None
+        if p and not p.get("confirm") and not p.get("workstation") and CHANGE_Q.search(text) and len(text.split()) > 4 and (
+                not YES.match(text) and not NO.match(text)):
+            # "Can you add a mat to Homer Golf Course?" is a request of its own, not the answer to an old question
+            pending.pop(key, None)
             p = None
         if p and p.get("confirm"):
             if YES.match(text):
@@ -1330,7 +1340,8 @@ class Desk:
         if str(p.get("src_channel", "")).startswith("D"):  # Scott told her himself (owner_change): ask him there
             self.post(p["src_channel"], f"Quick check from Donna: {q}", {"kind": "question", "src_ts": p.get("src_ts")})
             self.__dict__.setdefault("changes", {})[p["src_channel"]] = {
-                "text": " ".join(said) or todo_bar.body(t), "asked": q, "at": time.time(), "user": p.get("driver_id")}
+                "text": " ".join(said) or todo_bar.body(t), "asked": q, "at": time.time(), "user": p.get("driver_id"),
+                "workstation": True}
             return self.name(p.get("driver_id")).split()[0] if p.get("driver_id") else "owner"
         if p.get("src_channel") in self.routes.values() and p.get("src_ts"):
             who = f"<@{p['driver_id']}> " if p.get("driver_id") else ""

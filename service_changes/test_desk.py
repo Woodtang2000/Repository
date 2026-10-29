@@ -845,3 +845,18 @@ def test_a_driver_asks_about_an_item_itself(setup, monkeypatch):
     [a] = slack.bot_posts("C1", "answer")
     assert a["text"] == "<@U1> A bath blanket weighs 30 oz, about 1.9 lb."
     d.alliant.skus = {}
+
+
+def test_her_workstation_question_answered_by_voice(setup, monkeypatch):
+    """The workstation asks in Scott's private messages; he answers in the Donna app: the answer finishes that request."""
+    slack, d = setup
+    monkeypatch.setenv("DONNA_ALLIANT", "on")
+    slack.users["U4KFSQCDQ"] = "Scott Woodland"
+    slack.msgs["DS"] = []
+    t = {"ts": "9.1", "metadata": {"event_type": desk.KIND, "event_payload": {"src_channel": "DS", "src_ts": "8.1",
+                                                                              "driver_id": "U4KFSQCDQ", "kind": "ticket"}},
+         "attachments": [{"blocks": [{"type": "section", "text": {"type": "mrkdwn", "text": "> more mats at wendys"}}]}]}
+    assert d.ask_requester(t, "How many 3x10 mats in total?") == "Scott"
+    d._jobs = type("J", (), {"add": lambda self, ts, user: None})()
+    said = d.voice("6", "app-convo", "U4KFSQCDQ")  # answered by voice, not in the private messages
+    assert said.endswith("Want me to put that in?") and "Donna asked: How many 3x10 mats in total?" in CALLS[-1]
