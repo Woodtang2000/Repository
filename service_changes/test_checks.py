@@ -656,6 +656,8 @@ def test_stopping_an_item_asks_what_the_inventory_should_be():
     c = check(p(stop("MAT CONFETTI GREY 3X10")), a, asker="customer")
     assert not c.questions and "inventory stays *10* for now" in ticket(c, a)  # told, not asked; the office sees STI
     assert stop_notice(c).startswith("Once they're stopped, you have two weeks to turn all of them in")
+    w = check(p(Change(action=Action.stop, item="shirts", wearer="Dave Smith")), a, asker="customer")
+    assert not w.questions and stop_notice(w)  # a wearer's garments: never asked about inventory, still told
     r = check(p(stop("MAT CONFETTI GREY 3X10", keep_inventory=True)), a)
     assert not r.questions and "inventory stays *10* for now (STI" in ticket(r, a)
     r = check(p(stop("MAT CONFETTI GREY 3X10"), Change(action=Action.set, item="MAT CONFETTI GREY 3X10", quantity=0, inventory=True)), a)

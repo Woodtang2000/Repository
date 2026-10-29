@@ -341,9 +341,11 @@ STOP_NOTICE = ("Once they're stopped, you have two weeks to turn all of them in 
 
 
 def stop_notice(result: Result) -> str:
-    """What a customer is told when they stop items they have some of (Scott, 2026-10-29: told, not asked)."""
-    return STOP_NOTICE if any(c.change.action == Action.stop and c.change.keep_inventory and (stop_inventory(c) or 0) > 0
-                              for c in getattr(result, "changes", [])) else ""
+    """What a customer is told when they stop items they have some of, or a wearer's garments (Scott, 2026-10-29:
+    told, not asked; garments come back through barcode scanning, but the loss schedule is the same)."""
+    return STOP_NOTICE if any(c.change.action == Action.stop and (
+        c.change.wearer or c.wearer_number or (c.change.keep_inventory and (stop_inventory(c) or 0) > 0))
+        for c in getattr(result, "changes", [])) else ""
 
 
 def stop_inventory(cc: CheckedChange) -> int | None:
