@@ -752,6 +752,19 @@ class Desk:
         say(f"<@{user}> *{acct}* {name}: {ans.answer}{as_of}", {"kind": "answer", "account": acct})
         return True
 
+    def notices_pass(self) -> None:
+        """Once per Alliant feed: garment-arrival and welcome emails to customers (notices.py)."""
+        if getattr(self, "_notices_for", None) is self.alliant:
+            return
+        self._notices_for = self.alliant
+        try:
+            from .notices import Notices
+            out = Notices(self).pass_()
+            if any(out.values()):
+                print(time.strftime("%H:%M"), "customer notices:", out, flush=True)
+        except Exception as e:
+            print(time.strftime("%H:%M"), "customer notices error:", str(e)[:200], flush=True)
+
     def announcer(self):
         """Messages to many customers at once, sent only when the office taps Send (announce.py)."""
         if "_announcer" not in self.__dict__:
@@ -1446,6 +1459,7 @@ class Desk:
         counts = {"asked": 0, "ticket": 0, "read": 0, "readback": 0, "answered": 0}
         self.check_stale(now)
         self.verify_pass(now)
+        self.notices_pass()
         open_t = self.desk_pass(now - ticket_days * 86400, counts)
         for name, cid in sorted(self.routes.items()):
             if only is None or cid in only:
@@ -1601,6 +1615,7 @@ class Desk:
                     self.verify_pass(now)
                     self.stockroom_pass(now)
                     self.owner_brief_pass(now)
+                    self.notices_pass()
                     # Route passes share an office pass from the last few seconds: during a burst of drivers they
                     # don't queue up behind each other here. Office events (✅, "done") always get a fresh one.
                     if ch not in names or time.time() - fresh["at"] > 3:
