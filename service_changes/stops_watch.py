@@ -95,6 +95,15 @@ class StopsWatch:
                 out[f"{acct}\t{item}"] = [a.autocount.get(acct, {}).get(item, inv), inv]
         return out
 
+    def account_stopped(self, acct: str) -> bool:
+        """The whole account is stopped: gone from the customer list, or nothing left going out (no item with a
+        per-delivery count, no active wearer)."""
+        a = self.desk.alliant
+        if not any(c.account == acct for c in a.customers):
+            return True
+        counts = a.autocount.get(acct) or a.items.get(acct) or {}
+        return not any(v > 0 for v in counts.values()) and not a.wearers.get(acct)
+
     def out_garments(self, acct: str, wearer: str) -> list[dict]:
         return [r for r in self.desk.alliant.in_service.get((acct, wearer), [])
                 if (r.get("status") or "").upper() in AT_CUSTOMER and r.get("barcode")]
@@ -190,25 +199,38 @@ class StopsWatch:
     def email(self, acct: str, to: list[str], items: list[dict], wearers: list[dict], reminder: bool = False) -> None:
         a = self.desk.alliant
         name = next((c.name for c in a.customers if c.account == acct), acct).title()
+        closed = self.account_stopped(acct)
         lines, dues = [], []
         for it in items:
             stopped = date.fromisoformat(it["stopped"])
             dues.append(stopped + timedelta(days=LOSS_DAYS))
-            lines.append(f"- {it['inventory']} {title(it['item'])} (stopped {stopped:%B} {stopped.day})")
+            lines.append(f"- {it['inventory']} {title(it['item'])}" + ("" if closed else f" (stopped {stopped:%B} {stopped.day})"))
+        totals: dict[str, int] = {}
         for w in wearers:
             stopped = date.fromisoformat(w["stopped"])
             dues.append(stopped + timedelta(days=LOSS_DAYS))
             gs = self.out_garments(acct, w["wearer"])
+            label = lambda g: (f"{title(g.get('description') or g.get('sku', ''))} "
+                               f"{g.get('size_a') or g.get('sizes') or ''}").rstrip()
+            if closed:  # the whole account stopped: totals by garment, not every barcode (Scott, 2026-10-29)
+                for g in gs:
+                    totals[label(g)] = totals.get(label(g), 0) + 1
+                continue
             lines.append(f"- {w['name'].title() or 'Wearer #' + w['wearer']}'s garments (stopped {stopped:%B} {stopped.day}):")
-            lines += [f"    {title(g.get('description') or g.get('sku', ''))} {g.get('size_a') or g.get('sizes') or ''}"
-                      .rstrip() + f", barcode {g['barcode']}" for g in gs]
+            lines += [f"    {label(g)}, barcode {g['barcode']}" for g in gs]
+        lines += [f"- {n} {what}" for what, n in sorted(totals.items())]
         due = min(dues)
-        intro = ("A friendly reminder: we're still looking for" if reminder else
-                 "Thank you for being our customer! Our records show these were recently stopped on your account, and "
-                 "we'd like to get them back:")
+        if closed:
+            intro = ("A friendly reminder: we're still looking for our items from" if reminder else
+                     "Thank you for your business with us! Now that your service has ended, we'd like to get our items "
+                     "back:")
+        else:
+            intro = ("A friendly reminder: we're still looking for" if reminder else
+                     "Thank you for being our customer! Our records show these were recently stopped on your account, "
+                     "and we'd like to get them back:")
         exact = ("\n\nEach garment has its own barcode on the label inside. We're looking for these exact ones: if a "
                  "different garment comes back in its place, the one listed here still counts as out. A quick check of "
-                 "the labels before they go back saves a surprise on your invoice.") if wearers else ""
+                 "the labels before they go back saves a surprise on your invoice.") if wearers and not closed else ""
         body = (f"{intro} {name} ({acct}).\n\n" if reminder else f"{intro}\n\n{name} ({acct})\n") + "\n".join(lines) + exact + (
             f"\n\nPlease hand them to your driver at your next delivery. Anything we haven't gotten back by "
             f"{nice(due)} is billed as a loss, and we'd much rather have them back than charge you for them.\n\n"

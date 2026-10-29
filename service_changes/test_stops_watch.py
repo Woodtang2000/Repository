@@ -22,7 +22,8 @@ def run(d, monkeypatch, mails, day, hour=8):
 
 
 def test_a_stopped_mat_gets_an_email_a_driver_and_an_office_reminder(tmp_path, monkeypatch):
-    d, posts, mails = make(tmp_path, {"4000-1-00400": {"MAT CONFETTI GREY 3X10": 10}}, {"4000-1-00400": {"MAT CONFETTI GREY 3X10": 5}})
+    d, posts, mails = make(tmp_path, {"4000-1-00400": {"MAT CONFETTI GREY 3X10": 10, "TOWEL BAR MOP": 60}},
+                           {"4000-1-00400": {"MAT CONFETTI GREY 3X10": 5, "TOWEL BAR MOP": 60}})  # still a customer
     assert "baseline" in run(d, monkeypatch, mails, date(2026, 10, 27))  # first look: history, nothing sent
     d.alliant.autocount["4000-1-00400"]["MAT CONFETTI GREY 3X10"] = 0  # stopped in Alliant, inventory left
     assert run(d, monkeypatch, mails, date(2026, 10, 29))["items"] == 1
@@ -43,7 +44,7 @@ def test_a_stopped_mat_gets_an_email_a_driver_and_an_office_reminder(tmp_path, m
 
 
 def test_a_stopped_wearers_garments_email_the_customer_only(tmp_path, monkeypatch):
-    d, posts, mails = make(tmp_path, {"4000-1-00400": {}}, {})
+    d, posts, mails = make(tmp_path, {"4000-1-00400": {"TOWEL BAR MOP": 60}}, {"4000-1-00400": {"TOWEL BAR MOP": 60}})
     run(d, monkeypatch, mails, date(2026, 10, 27))
     d.alliant.stopped_wearers[("4000-1-00400", "7")] = {"name": "DAVE SMITH", "stopped": "10/28/2026"}
     d.alliant.in_service[("4000-1-00400", "7")] = [
@@ -58,3 +59,20 @@ def test_a_stopped_wearers_garments_email_the_customer_only(tmp_path, monkeypatc
     assert len(mails) == 2 and mails[1][1] == "a reminder about items to send back" and "friendly reminder" in mails[1][2]
     run(d, monkeypatch, mails, date(2026, 11, 8))
     assert len(mails) == 2 and not posts
+
+
+def test_a_whole_account_stopped_gets_totals_not_barcodes(tmp_path, monkeypatch):
+    from .context import Wearer
+    d, posts, mails = make(tmp_path, {"4000-1-00400": {"MAT CONFETTI GREY 3X10": 10}}, {"4000-1-00400": {"MAT CONFETTI GREY 3X10": 5}})
+    d.alliant.wearers["4000-1-00400"] = [Wearer("7", "DAVE", "SMITH"), Wearer("8", "ANA", "LEE")]
+    run(d, monkeypatch, mails, date(2026, 10, 27))
+    d.alliant.autocount["4000-1-00400"]["MAT CONFETTI GREY 3X10"] = 0  # the account is stopped: everything
+    d.alliant.wearers["4000-1-00400"] = []
+    for w, name in (("7", "DAVE SMITH"), ("8", "ANA LEE")):
+        d.alliant.stopped_wearers[("4000-1-00400", w)] = {"name": name, "stopped": "10/29/2026"}
+        d.alliant.in_service[("4000-1-00400", w)] = [{"barcode": f"0000{w}{i}", "description": "SHIRT COOK BLACK",
+                                                       "size_a": "XL", "status": "V"} for i in range(3)]
+    run(d, monkeypatch, mails, date(2026, 10, 29))
+    [(to, subject, body)] = mails
+    assert "Now that your service has ended" in body and "- 10 Mat Confetti Grey 3x10\n- 6 Shirt Cook Black XL" in body
+    assert "barcode" not in body and "exact ones" not in body
