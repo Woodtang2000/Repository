@@ -472,6 +472,10 @@ def test_balances_only_for_scott_and_bill_in_private(monkeypatch, tmp_path):
     assert "Open invoices (1" in seen[-1] and "TOWEL BAR MOP" not in seen[-1]  # only what a balance question needs
     ask("U4KFSQCDQ", "voice", "what do we charge Midas 4 for bar mops")  # Scott by voice: prices aren't filtered here
     assert said[-1][1] == "answered" and "price 0.42" in seen[-1] and "CHARCOAL" not in seen[-1]
+    from .desk import AR_Q
+    for q in ("what does Chili's pay for bar mops", "how much do we get for mats at Midas", "what are bar mops billed at",
+              "what does a bath blanket cost Chili's", "has Midas paid"):
+        assert AR_Q.search(q), q
     ask("U4KFSQCDQ", "D1", "when does the Midas 4 contract expire")
     assert "contract expiry 2027-03-31" in seen[-1]
     d.office_group = lambda t, p: ["1205-1-00004", "1205-1-00007"]

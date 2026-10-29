@@ -56,7 +56,8 @@ VOICE_PORT = int(os.environ.get("DESK_VOICE_PORT", "8091"))  # Donna's voice (de
 SKU_Q = re.compile(r"\b(weigh\w*|pounds?|lbs?|ounces?|oz|dimensions?|materials?|fabric|made of|blend|skus?|how big|"
                    r"case pack|pack size|packs? of|bundles?|specs?|discontinued|"
                    r"\d-\d\d-\d\d)\b", re.I)  # questions about what an item is, not who has it
-AR_Q = re.compile(r"\b(owes?|owing|balance|past due|overdue|paid us|last paid|last payment|pay(s|ing)? us|"
+AR_Q = re.compile(r"\b(owes?|owing|balance|past due|overdue|paid|last payment|pays?|paying|payments?|costs?|"
+                  r"billed|billing|bill (?:them|him|her|for)|how much (?:do|does|did) (?:we|they) (?:get|make|charge)|"
                   r"credit hold|collections?|receivables?|a/?r|pric(?:e|es|ed|ing)|charg(?:e|es|ing)|rates?|contracts?|"
                   r"expir\w*|terms|sales ?rep|bill.?to|invoices?|minimum charge|insurance|replacement cost)\b", re.I)
 AR_USERS = {u.strip() for u in os.environ.get("AR_SLACK_IDS", "U4KFSQCDQ,U9SGPJP0C").split(",") if u.strip()}  # Scott, Bill
