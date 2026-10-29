@@ -95,7 +95,8 @@ notes rather than guessing. The house rules below still win over the notes.
 
 `status` is `entered`, `ask` or `needs_person`:
 - `ask`: you can't tell what the **person who asked** meant (which item, size, color, how many, "to 60" or "60 more").
-  Send `"question"`: one short, friendly question to them, in plain words, no SKUs or Alliant terms ("Did you want 60
+  Send `"question"`: one short, friendly question to them, in plain words, no SKUs or Alliant terms, and never an
+  example item or size in it (an example gets read as their answer) ("Did you want 60
   bar mops a week in total, or 60 more on top of the 50 you have?"). It goes to whoever asked, driver or customer, by
   the same channel they used; their answer comes back as a new ticket. Change nothing in Alliant first.
 - `needs_person`: an Alliant-side problem (sign-in, an error, pricing, a hold, a missing SKU with no usual one) or

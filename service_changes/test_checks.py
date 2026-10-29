@@ -609,3 +609,14 @@ def test_napkins_table_linen_microfiber_and_uniform_notes():
     assert "pearl buttons or knotted buttons" in product_notes("what chef coats do you have")
     assert "FR (flame retardant)" in product_notes("do you have FR coveralls")
     assert "flame" not in product_notes("how many shirts does Joey have")  # an ordinary shirt question
+
+
+def test_just_a_mat_asks_which_instead_of_picking_the_most_common():
+    from .checks import check
+    from .context import Alliant, Customer
+    from .schema import Action, Category, Change, ParsedMessage
+    data = Alliant(customers=[Customer("5045-1-00000", "HOMER GOLF COURSE", "5", ["Tue"])], items={"5045-1-00000": {"TOWEL BAR MOP": 60}},
+                   sku_counts={("10-10-02", "MAT CONFETTI GREY 3X10"): 143, ("10-10-05", "MAT CHARCOAL HEATHER 3X5"): 40})
+    r = check(ParsedMessage(category=Category.item_change, account_number="5045-1-00000", summary="mat",
+                            changes=[Change(action=Action.add, item="mat", quantity=1)]), data)
+    assert r.questions and r.questions[-1].startswith("What color and size mat?")

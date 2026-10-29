@@ -315,7 +315,7 @@ def check(parsed: ParsedMessage, alliant: Alliant) -> Result:
             cc.notes.append("Not on this account in Alliant" + (" (may already be stopped)" if ch.action == Action.stop else "; check by hand"))
             if ch.action in (Action.decrease, Action.set, Action.stop):
                 _not_here(cc, parsed.account_number, alliant)
-            elif ch.action in (Action.add, Action.restart) and not usual_sku(alliant, ch.item):
+            elif ch.action in (Action.add, Action.restart) and (not usual_sku(alliant, ch.item) or bare(alliant, ch.item)):
                 # A new item with no clear usual: ask which one now, while they're still here, not at the workstation
                 options = sku_choices(alliant, ch.item, limit=6)
                 if len(options) > 1:
@@ -577,6 +577,14 @@ def _which_one(item: str, alliant: Alliant, have: dict[str, int], who: str) -> s
     return q
 
 
+def bare(alliant: Alliant, item: str | None) -> bool:
+    """Only the kind of item ("a mat", "tablecloths"), when it comes in several colors or sizes: ask which, don't pick
+    the most common one for them."""
+    kind, colors, sizes = item_options(alliant, item or "")
+    words = [w.rstrip("s") for w in re.findall(r"[a-z0-9]+", (item or "").lower()) if w not in _STOP and len(w) > 1]
+    return bool(kind) and set(words) <= set(kind.split()) and (len(colors) > 1 or len(sizes) > 1)
+
+
 def usual_sku(alliant: Alliant, item: str | None) -> tuple[str, str, int] | None:
     """(sku, Alliant item name, how many accounts have it) for the item most accounts use that matches every word of
     `item` ("bar mops" -> 5-01-01 TOWEL BAR MOP GOLD STRIPE). None if nothing matches or it's a close call."""
@@ -633,7 +641,7 @@ def ticket(result: Result, alliant: Alliant, with_readback: bool = True) -> str:
         else:
             what = cc.alliant_item or f"{ch.item} _(not on account yet)_"
             sku = alliant.sku.get((acct, cc.alliant_item)) if cc.alliant_item else None
-            if not cc.alliant_item:  # a new item: the SKU most other accounts use for it, so nobody has to look it up
+            if not cc.alliant_item and not bare(alliant, ch.item):  # a new item: the SKU most accounts use for it
                 usual = usual_sku(alliant, ch.item)
                 if usual:
                     what += f" · usual: *{usual[1]}* `{usual[0]}` " + (f"({usual[2]} accounts)" if usual[2] else
