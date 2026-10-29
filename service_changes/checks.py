@@ -317,10 +317,9 @@ def check(parsed: ParsedMessage, alliant: Alliant) -> Result:
                 _not_here(cc, parsed.account_number, alliant)
             elif ch.action in (Action.add, Action.restart) and not usual_sku(alliant, ch.item):
                 # A new item with no clear usual: ask which one now, while they're still here, not at the workstation
-                options = sku_choices(alliant, ch.item)
+                options = sku_choices(alliant, ch.item, limit=6)
                 if len(options) > 1:
-                    cc.questions.append(f"Which {ch.item}: " + ", ".join(n.title() for _, n, _ in options[:-1])
-                                        + f" or {options[-1][1].title()}?")
+                    cc.questions.append(_which_color(ch.item, options, alliant.items.get(parsed.account_number, {}), who))
                 elif not options and (alliant.sku_counts or getattr(alliant, "skus", None)):
                     cc.questions.append(f"Which {ch.item} exactly? I can't find one by that name in Alliant.")
         out.append(cc)
@@ -443,6 +442,27 @@ def sku_choices(alliant: Alliant, item: str | None, limit: int = 4) -> list[tupl
         return [(sku, name, n) for (sku, name), n in sorted(counts.items(), key=lambda kv: -kv[1])[:limit]]
     return [(sku, d.get("description", ""), 0) for sku, d in sorted((getattr(alliant, "skus", None) or {}).items())
             if (d.get("active") or "Y").upper() != "N" and hit(d.get("description", ""))][:limit]
+
+
+def _which_color(item: str, options: list[tuple[str, str, int]], have: dict[str, int], who: str) -> str:
+    """"What color 3x10 mat? Homer Golf Course has charcoal heather mats now. (3x10 mats come in confetti grey,
+    charcoal heather and blue.)" Drivers and the office know items by color, so ask the color, and say what color
+    the account already has in that kind of item."""
+    said = {w.rstrip("s") for w in re.findall(r"[a-z0-9]+", item.lower())}
+    def color(name: str) -> str:
+        return " ".join(w for w in re.findall(r"[a-z0-9']+", name.lower())
+                        if w.rstrip("s") not in said and not re.fullmatch(r"\d+(x\d+)?|\d+'?", w))
+    kinds = [w for w in said if not re.search(r"\d", w) and all(re.search(rf"\b{w}", n.lower()) for _, n, _ in options)]
+    kind = kinds[0] if kinds else ""
+    colors = list(dict.fromkeys(c for c in (color(n) for _, n, _ in options) if c))
+    owned = list(dict.fromkeys(c for c in (color(n) for n in have if kind and re.search(rf"\b{kind}", n.lower())) if c))
+    plural = (kind + "s") if kind else "of those"
+    q = f"What color {item}?"
+    if owned:
+        q += f" {who} has {' and '.join(owned[:2])} {plural} now."
+    if colors:
+        q += f" ({item.rstrip('s')}s come in {', '.join(colors[:-1])}{' and ' if len(colors) > 1 else ''}{colors[-1]}.)"
+    return q
 
 
 def usual_sku(alliant: Alliant, item: str | None) -> tuple[str, str, int] | None:

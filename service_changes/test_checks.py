@@ -546,12 +546,13 @@ def test_a_vague_new_item_asks_which_one_up_front():
     from .context import Alliant, Customer
     from .schema import Action, Category, Change, ParsedMessage
     data = Alliant(customers=[Customer("5045-1-00000", "HOMER GOLF COURSE", "5", ["Tue"])],
-                   items={"5045-1-00000": {"TOWEL BAR MOP": 60}},
+                   items={"5045-1-00000": {"TOWEL BAR MOP": 60, "MAT CHARCOAL HEATHER 3X5": 2}},
                    sku_counts={("10-10-02", "MAT CONFETTI GREY 3X10"): 143, ("10-10-05", "MAT CHARCOAL HEATHER 3X10"): 120,
                                ("10-10-07", "MAT BLUE 3X10"): 40})
     p = lambda item: ParsedMessage(category=Category.item_change, account_number="5045-1-00000", summary="mat",
                                    changes=[Change(action=Action.add, item=item, quantity=1)])
     r = check(p("3x10 mat"), data)
-    assert r.questions == ["Which 3x10 mat: Mat Confetti Grey 3X10, Mat Charcoal Heather 3X10 or Mat Blue 3X10?"]
+    assert r.questions == ["What color 3x10 mat? this customer has charcoal heather mats now. "
+                           "(3x10 mats come in confetti grey, charcoal heather and blue.)"]
     assert not check(p("3x10 confetti gray mat"), data).questions  # clear: the ticket carries 10-10-02
     assert check(p("3x10 purple mat"), data).questions == ["Which 3x10 purple mat exactly? I can't find one by that name in Alliant."]
