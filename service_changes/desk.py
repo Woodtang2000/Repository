@@ -1299,10 +1299,44 @@ class Desk:
             self.change_email(p, customer)
         except Exception as e:  # the email is extra: never hold up the ticket over it
             print(time.strftime("%H:%M"), "change email not sent:", e, flush=True)
+        try:
+            self.done_text(p, who)
+        except Exception as e:  # the text is extra too
+            print(time.strftime("%H:%M"), "done text not sent:", e, flush=True)
         self.slack.chat_update(channel=self.desk_id, ts=t["ts"], text="",
                                attachments=shrink(self.slack, self.desk_id, t, GREEN, stamp(who, "Entered") + " · readback sent"),
                                metadata={"event_type": KIND, "event_payload": {**p, "kind": "done", "done_at": time.time(),
                                                                                "entered_by": who}})
+
+    def cell(self, user: str) -> str:
+        """A staff member's cell: employee_phones.csv (phone,slack_id,name), else the phone in their Slack profile."""
+        import csv
+        path = os.path.join(self.data_dir, "employee_phones.csv")
+        if os.path.exists(path):
+            with open(path, newline="", encoding="utf-8-sig") as f:
+                for row in csv.DictReader(f):
+                    if (row.get("slack_id") or "").strip() == user:
+                        return re.sub(r"\D", "", row.get("phone", ""))[-10:]
+        r = self.slack.users_info(user=user)
+        return re.sub(r"\D", "", ((r.get("user") or {}).get("profile") or {}).get("phone", ""))[-10:]
+
+    def done_text(self, p: dict, who: str) -> bool:
+        """The person who asked hears it's done by text (the Donna app and a busy Slack don't buzz a phone), whoever
+        entered it. Only their own requests, never everyone's. DONE_TEXTS: "all" (default: anyone on staff who asked
+        from Slack, the app or the employee line), "owners" (Scott and Bill only) or "off". Customers hear by their
+        own text or email, and the account's contact by change_email."""
+        mode = os.environ.get("DONE_TEXTS", "all").lower()
+        user = p.get("driver_id") or ""
+        if mode == "off" or not user or (mode != "all" and user not in AR_USERS) or p.get("sms_to") or p.get("email_to"):
+            return False
+        num = self.cell(user)
+        if len(num) != 10 or (who and self.name(user) == who):  # they entered it themselves: they know
+            return False
+        from .sms import send_sms
+        first = (self.name(user) or "").split()[0] if self.name(user) else ""
+        what = re.sub(r"^✅\s*\S+\s*", "", p.get("readback") or "").strip(" –-") or "your change is in"
+        send_sms("+1" + num, f"Donna: {first + ', ' if first else ''}done ✅ {what} (entered by {who or 'the office'})")
+        return True
 
     def ask_requester(self, t: dict, question: str) -> str | None:
         """Donna (at her Alliant workstation) can't tell what was meant: ask whoever asked, the same way she asks a
@@ -1352,9 +1386,9 @@ class Desk:
 
     def change_email(self, p: dict, customer: str) -> list[str]:
         """The account's invoice contact (who pays the bills; the Alliant card's email) gets an email confirming the
-        change. CHANGE_EMAILS: "customer" (default: changes the customer asked for by text, email or phone), "all"
-        (drivers' too) or "off". Returns who it went to."""
-        mode = os.environ.get("CHANGE_EMAILS", "customer").lower()
+        change. CHANGE_EMAILS: "all" (default: every change, whether the customer, a driver, the office or Scott asked),
+        "customer" (only changes the customer asked for by text, email or phone) or "off". Returns who it went to."""
+        mode = os.environ.get("CHANGE_EMAILS", "all").lower()
         src, acct = p.get("src_channel", ""), p.get("account", "")
         if mode == "off" or not acct or not customer or (mode != "all" and src not in ("text", "email", "phone")):
             return []
@@ -1370,7 +1404,7 @@ class Desk:
         name = next((c.name for c in self.alliant.customers if c.account == acct), card.get("name", acct)).title()
         company = company_for(acct)
         what = re.sub(r"^All done!\s*", "", plain(customer).split("\nThanks")[0]).strip()
-        how = {"text": "by text", "email": "by email", "phone": "by phone"}.get(src, "through your route driver")
+        how = {"text": "by text", "email": "by email", "phone": "by phone"}.get(src, "through our team")
         from . import bird
         for e in to:
             bird.send(e, f"{company}: a change to your service for {name}",

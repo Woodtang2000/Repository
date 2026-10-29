@@ -743,9 +743,10 @@ def test_change_email_to_the_invoice_contact(monkeypatch):
     assert "Snow White Linen: a change to your service for Homer Golf Course" == sent[0][1]
     assert "requested by text" in sent[0][2] and "bar mops changed from 50 to 60 a week" in sent[0][2]
     assert "Thanks so much" not in sent[0][2]
-    assert desk.Desk.change_email(d, {"src_channel": "C123", "account": "5045-1-00000"}, customer) == []  # a driver's: not by default
-    monkeypatch.setenv("CHANGE_EMAILS", "all")
-    assert desk.Desk.change_email(d, {"src_channel": "C123", "account": "5045-1-00000"}, customer)
+    assert desk.Desk.change_email(d, {"src_channel": "C123", "account": "5045-1-00000"}, customer)  # a driver's too
+    assert "requested through our team" in sent[-1][2]
+    monkeypatch.setenv("CHANGE_EMAILS", "customer")
+    assert desk.Desk.change_email(d, {"src_channel": "C123", "account": "5045-1-00000"}, customer) == []
     monkeypatch.setenv("CHANGE_EMAILS", "off")
     assert desk.Desk.change_email(d, {"src_channel": "text", "account": "5045-1-00000"}, customer) == []
     monkeypatch.delenv("CHANGE_EMAILS")
@@ -860,3 +861,25 @@ def test_her_workstation_question_answered_by_voice(setup, monkeypatch):
     d._jobs = type("J", (), {"add": lambda self, ts, user: None})()
     said = d.voice("6", "app-convo", "U4KFSQCDQ")  # answered by voice, not in the private messages
     assert said.endswith("Want me to put that in?") and "Donna asked: How many 3x10 mats in total?" in CALLS[-1]
+
+
+def test_whoever_asked_on_staff_gets_a_done_text(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+    import service_changes.sms as sms
+    sent = []
+    monkeypatch.setattr(sms, "send_sms", lambda to, body: sent.append((to, body)))
+    monkeypatch.delenv("DONE_TEXTS", raising=False)
+    slack = SimpleNamespace(users_info=lambda user: {"user": {"profile": {"phone": "(907) 555-0101" if user == "U4KFSQCDQ" else ""}}})
+    d = SimpleNamespace(data_dir=str(tmp_path), slack=slack, name=lambda u: "Scott Woodland")
+    d.cell = lambda u: desk.Desk.cell(d, u)
+    p = {"driver_id": "U4KFSQCDQ", "readback": "✅ 5045-1-00000 HOMER GOLF COURSE – 20 white bib aprons added, weekly on Tuesdays"}
+    assert desk.Desk.done_text(d, p, "Donna")
+    assert sent == [("+19075550101", "Donna: Scott, done ✅ HOMER GOLF COURSE – 20 white bib aprons added, weekly on "
+                                     "Tuesdays (entered by Donna)")]
+    assert not desk.Desk.done_text(d, p, "Scott Woodland")  # he entered it himself
+    assert not desk.Desk.done_text(d, {**p, "driver_id": "UNOPHONE"}, "Sonja")  # no cell on file: nothing
+    assert not desk.Desk.done_text(d, {**p, "driver_id": "", "sms_to": "+19075551234"}, "Sonja")  # a customer's: their own readback
+    monkeypatch.setenv("DONE_TEXTS", "owners")
+    assert not desk.Desk.done_text(d, {**p, "driver_id": "U1DRIVER"}, "Donna")
+    monkeypatch.setenv("DONE_TEXTS", "off")
+    assert not desk.Desk.done_text(d, p, "Donna") and len(sent) == 1
