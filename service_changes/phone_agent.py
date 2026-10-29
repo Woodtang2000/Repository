@@ -151,7 +151,8 @@ class PhoneTools:
 
     def customer_request(self, c: dict, body: dict, said: str) -> dict:
         turn = Turn(say="", action="request", summary=said, caller_name=str(body.get("caller_name") or ""),
-                    account=str(body.get("account") or ""), urgent=bool(body.get("urgent")))
+                    account=str(body.get("account") or ""), urgent=str(body.get("urgent") or "").lower() in ("yes", "true", "1"),
+                    business=str(body.get("business") or ""), town=str(body.get("town") or ""))
         c["posted"] += 1
         if c["posted"] > 5:
             return {"result": "Already passed several requests from this call; don't send more."}
@@ -290,6 +291,8 @@ CUSTOMER_TOOLS_NOTE = """Your tools on this line:
   If it returns status "question" (which color, more or total...), ask the customer its `say` in your own words, then
   call customer_request again with summary = their answer. Otherwise it tells you whether they'll be texted or called
   back; say so.
+- A caller whose number isn't on file (caller_info): before customer_request, get their name, their business and which
+  location (the street or town), so the office can match them to the right account in one tap.
 - new_lead: a new business. Fill caller_name, business, town, best_time; summary = what they need.
 - item_options: when they ask what colors or sizes something comes in, or seem unsure which one they want. Offer a color
   that goes with what they already have (caller_info's account facts), and remember they may just be asking.
@@ -348,6 +351,8 @@ FIELDS = {  # tool -> (description, {property: description}); every tool also ge
                          "status question: ask them its `say`, then call it again with their answer as summary.",
                          {"summary": "Office-ready: the account, exactly what to change, quantities.",
                           "account": "Their account number if known, else empty.", "caller_name": "The caller's name.",
+                          "business": "Their business name, as they said it.",
+                          "town": "Which location: the street or town they're calling about.",
                           "urgent": "yes if it can't wait, else no."}),
     "new_lead": ("A new business interested in service: send to Bill.",
                  {"summary": "What they need.", "caller_name": "Their name.", "business": "The business name.",

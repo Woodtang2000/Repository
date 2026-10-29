@@ -186,13 +186,19 @@ class EmailDesk(TextDesk):
         if on_file:
             lines.append(f"On the Alliant card for: " + ", ".join(f"{a} {name(a)}" for a in on_file[:6])
                          + (f" and {len(on_file) - 6} more" if len(on_file) > 6 else ""))
+        current = self.contacts().get(self.key(addr), {}).get("accounts", [])
+        if current:
+            lines.append("This email is now on: " + ", ".join(f"{a} {name(a)}" for a in current))
         if accounts:
             lines.append(f"Best match: *{accounts[0]}* {name(accounts[0])}")
-            lines.append(f"React ✅ to approve the best match, or type `add {email_key(addr)} to <account number(s)>`.")
+            lines.append(f"Tap a button, or type `add {email_key(addr)} to <account number(s)>` for another account.")
         else:
             lines.append(f"I couldn't tell which customer. Type `add {email_key(addr)} to <account number>` to approve.")
-        self.slack.chat_postMessage(channel=self.desk_id, text="", attachments=attachment("\n".join(lines), button=False),
-                                    unfurl_links=False, metadata={
+        from .sms import link_buttons
+        buttons = link_buttons(accounts, current, name)
+        self.slack.chat_postMessage(channel=self.desk_id, text="", unfurl_links=False,
+                                    attachments=attachment("\n".join(lines), button=False, extra=[buttons] if buttons else None),
+                                    metadata={
             "event_type": KIND, "event_payload": {"kind": self.signup_kind, "phone": email_key(addr),
                                                   "accounts": accounts[:1], "name": who}})
 

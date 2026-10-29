@@ -765,6 +765,31 @@ class Desk:
         except Exception as e:
             print(time.strftime("%H:%M"), "customer notices error:", str(e)[:200], flush=True)
 
+    def link_contact(self, payload: dict) -> str:
+        """A sign-up card's button: office or owner only. Marks the card approved for that account (moving the number
+        off its other accounts, or adding this one too); the texting / email desk finishes it (sms.office_pass): links
+        the number, texts them they're set up and handles what they asked for."""
+        user = payload.get("user", {}).get("id")
+        act = next((x for x in payload.get("actions", []) if x.get("action_id", "").startswith("link_")), {})
+        ts = payload.get("container", {}).get("message_ts")
+        if not (self.is_office(user) or self.is_owner(user)):
+            self.slack.chat_postEphemeral(channel=self.desk_id, user=user, text="Only the office can link a number to an account.")
+            return "ignored: not office"
+        r = self.slack.conversations_history(channel=self.desk_id, latest=ts, inclusive=True, limit=1, include_all_metadata=True)
+        m = next((x for x in r.get("messages", []) if x["ts"] == ts), None)
+        p = meta(m) if m else None
+        if not p or not str(p.get("kind", "")).endswith("_signup"):
+            return "not a sign-up card"
+        choice = json.loads(act.get("value") or "{}")
+        who = self.name(user).split()[0] if self.name(user) else "office"
+        a = restyle(m, GOLD, status=f"⏳ {'Moving' if choice.get('m') else 'Adding'} to {choice.get('a')} · {who}")
+        for att in a:
+            att["blocks"] = [b for b in att.get("blocks") or [] if b.get("block_id") != "link"]
+        self.slack.chat_update(channel=self.desk_id, ts=ts, text="", attachments=a, metadata={
+            "event_type": KIND, "event_payload": {**p, "accounts": [choice.get("a")], "approved_by": user,
+                                                  "move": bool(choice.get("m"))}})
+        return f"{'move' if choice.get('m') else 'add'} {p.get('phone')} -> {choice.get('a')}"
+
     def announcer(self):
         """Messages to many customers at once, sent only when the office taps Send (announce.py)."""
         if "_announcer" not in self.__dict__:
@@ -1510,6 +1535,15 @@ class Desk:
                     except Exception as e:
                         print(time.strftime("%H:%M"), "alliant jobs error:", e, flush=True)
                 threading.Thread(target=enter, daemon=True).start()
+                return
+            if req.type == "interactive" and req.payload.get("type") == "block_actions" and any(
+                    x.get("action_id", "").startswith("link_") for x in req.payload.get("actions", [])):
+                def link(p=req.payload):  # "Add to Chili's" / "Move to …" on a number or email sign-up card
+                    try:
+                        print(time.strftime("%H:%M"), "link:", self.link_contact(p), flush=True)
+                    except Exception as e:
+                        print(time.strftime("%H:%M"), "link error:", e, flush=True)
+                threading.Thread(target=link, daemon=True).start()
                 return
             if req.type == "interactive" and req.payload.get("type") == "block_actions" and any(
                     x.get("action_id", "").startswith("announce_") for x in req.payload.get("actions", [])):

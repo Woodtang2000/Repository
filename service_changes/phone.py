@@ -454,6 +454,24 @@ class Phone:
     def office_note(self, call: dict, turn: Turn, verified: bool) -> None:
         from . import todo
         masked = f"…{digits(call['from'])[-4:]}"
+        if not verified and call["line"] == "customers" and len(digits(call["from"])) == 10:
+            # Who they probably are, with "Add to <account>" buttons: one tap links the number and their request
+            # becomes a ticket (sms.office_pass); a number already on another account can be moved or added to
+            try:
+                from .parser import identify_customer
+                from .sms import load_phones, signup_card
+                data = self.alliant()
+                found = identify_customer(self.claude, f"{turn.caller_name}, {turn.business} {turn.town}: {turn.summary}",
+                                          data.customers)
+                current = load_phones(os.path.join(self.data_dir, "customer_phones.csv")).get(digits(call["from"]), {})
+                p = digits(call["from"])
+                signup_card(self.slack, self.channel_id(DESK_CHANNEL), data, call["from"], turn.caller_name or "",
+                            turn.summary, found.accounts, request=turn.summary, current=current.get("accounts", []),
+                            head=f"📞 *Phone request{' · ⚠️ urgent' if turn.urgent else ''}* from ({p[:3]}) {p[3:6]}-{p[6:]}, "
+                                 "a number not on file")
+                return
+            except Exception as e:
+                print(time.strftime("%H:%M"), "phone: sign-up card failed, plain note instead:", str(e)[:200], flush=True)
         text = "\n".join([
             f"📞 *Phone request{' · ⚠️ urgent' if turn.urgent else ''}* from {turn.caller_name or 'a caller'} ({call['from']})",
             turn.summary, "", self.transcript(call), "",

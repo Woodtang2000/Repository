@@ -206,24 +206,50 @@ def person(slack, user: str) -> str:
         return "someone"
 
 
+def link_buttons(accounts: list[str], current: list[str], name) -> dict | None:
+    """The card's buttons: "Add to <best match>" (and the next two), or, when the number is already on other accounts,
+    "Move to <best>" (taken off the others: people change jobs) and "Add <best> too" (owners with several accounts)."""
+    els = []
+    for i, a in enumerate(accounts[:3]):
+        label = (name(a) or a).title()[:40]
+        if current and a not in current and i == 0:
+            els.append({"type": "button", "action_id": "link_move", "style": "primary", "value": json.dumps({"a": a, "m": 1}),
+                        "text": {"type": "plain_text", "text": f"Move to {label}"}})
+            els.append({"type": "button", "action_id": "link_add0", "value": json.dumps({"a": a, "m": 0}),
+                        "text": {"type": "plain_text", "text": f"Add {label} too"}})
+        elif a not in current:
+            els.append({"type": "button", "action_id": f"link_add{i + 1}", "value": json.dumps({"a": a, "m": 0}),
+                        **({"style": "primary"} if i == 0 else {}),
+                        "text": {"type": "plain_text", "text": f"Add to {label}"}})
+    return {"type": "actions", "block_id": "link", "elements": els} if els else None
+
+
 def signup_card(slack, desk_id: str, alliant: Alliant, phone: str, who: str, said: str, accounts: list[str],
-                by: str = "") -> None:
-    """Ask the office to approve a number for an account: ✅ approves the best match."""
+                by: str = "", request: str = "", current: list[str] | None = None, kind: str = "sms_signup",
+                head: str = "") -> None:
+    """Ask the office to approve a number for an account: a button (or ✅) approves. `request`: what they asked for
+    (a call, a text), handled as soon as the number is approved. `current`: accounts the number is already on."""
     name = lambda a: next((c.name for c in alliant.customers if c.account == a), "")
     pretty = f"({phone_key(phone)[:3]}) {phone_key(phone)[3:6]}-{phone_key(phone)[6:]}"
-    head = (f"📱 *{by}* asks to set up {pretty} for texting" if by else f"📱 *New texter* {pretty}")
+    head = head or (f"📱 *{by}* asks to set up {pretty} for texting" if by else f"📱 *New texter* {pretty}")
+    current = [a for a in (current or []) if a]
     lines = [head + (f": {who}" if who else ""), f"_{said[:200]}_"]
+    if current:
+        lines.append("This number is now on: " + ", ".join(f"{a} {name(a)}" for a in current))
     if accounts:
         lines.append(f"Best match: *{accounts[0]}* {name(accounts[0])}")
         if accounts[1:]:
             lines.append("Could also be: " + ", ".join(f"{a} {name(a)}" for a in accounts[1:]))
-        lines.append(f"React ✅ to approve the best match, or type `add {phone_key(phone)} to <account number>`.")
+        lines.append(f"Tap a button, or type `add {phone_key(phone)} to <account number>` for another account."
+                     + (" Their request is handled as soon as it's added." if request else ""))
     else:
         lines.append(f"I couldn't tell which customer. Type `add {phone_key(phone)} to <account number>` to approve.")
-    slack.chat_postMessage(channel=desk_id, text="", attachments=attachment("\n".join(lines), button=False),
-                           unfurl_links=False, metadata={
-        "event_type": KIND, "event_payload": {"kind": "sms_signup", "phone": "+1" + phone_key(phone),
-                                              "accounts": accounts[:1], "name": who}})
+    buttons = link_buttons(accounts, current, name)
+    slack.chat_postMessage(channel=desk_id, text="", unfurl_links=False,
+                           attachments=attachment("\n".join(lines), button=False, extra=[buttons] if buttons else None),
+                           metadata={"event_type": KIND, "event_payload": {
+                               "kind": kind, "phone": "+1" + phone_key(phone), "accounts": accounts[:1], "name": who,
+                               "request": request[:1500]}})
 
 
 def only(alliant: Alliant, accounts: list[str]) -> Alliant:
@@ -313,7 +339,8 @@ class TextDesk:
         return remove_phone(os.path.join(self.data_dir, self.list_file), addr)
 
     def card(self, addr: str, who: str, said: str, accounts: list[str], by: str = "") -> None:
-        signup_card(self.slack, self.desk_id, self.alliant, addr, who, said, accounts, by=by)
+        current = self.contacts().get(self.key(addr), {}).get("accounts", [])
+        signup_card(self.slack, self.desk_id, self.alliant, addr, who, said, accounts, by=by, current=current)
 
     def inbound(self, since: datetime) -> list[dict]:
         """New messages as {"id", "from", "body"}, oldest first."""
@@ -594,13 +621,16 @@ class TextDesk:
             if m["ts"] in done:
                 continue
             if pl.get("kind") == self.signup_kind and pl.get("accounts"):
-                who = next((u for x in m.get("reactions", []) if x.get("name") in DONE_REACTIONS
-                            for u in x.get("users", []) if not m.get("user") or u != m.get("user")), None)
+                who = pl.get("approved_by") or next((u for x in m.get("reactions", []) if x.get("name") in DONE_REACTIONS
+                                                     for u in x.get("users", []) if not m.get("user") or u != m.get("user")), None)
                 if who:
-                    self.approve(pl["phone"], pl["accounts"], pl.get("name", ""))
+                    self.approve(pl["phone"], pl["accounts"], pl.get("name", ""), move=bool(pl.get("move")),
+                                 request=pl.get("request", ""), sid=m["ts"])
+                    did = ("Moved to " if pl.get("move") else "Added to ") + ", ".join(
+                        f"{a} {self.name(self.alliant, a)}" for a in pl["accounts"]) + " · approved"
                     self.slack.chat_update(channel=self.desk_id, ts=m["ts"], text="",
                                            attachments=shrink(self.slack, self.desk_id, m, GREEN,
-                                                              stamp(person(self.slack, who), "Approved"), lines=1),
+                                                              stamp(person(self.slack, who), did), lines=1),
                                            metadata={"event_type": KIND, "event_payload": {**pl, "kind": "sms_approved"}})
                     done.add(m["ts"])
                     changed += 1
@@ -640,10 +670,17 @@ class TextDesk:
         self.state["cmds"] = list(done)[-500:]
         return changed
 
-    def approve(self, phone: str, accounts: list[str], name: str) -> None:
+    def approve(self, phone: str, accounts: list[str], name: str, move: bool = False, request: str = "",
+                sid: str = "") -> None:
+        """Link a number (or email) to accounts. `move`: off its other accounts first (they changed jobs). `request`:
+        what they asked for before being set up (a phone call's), handled now like their held texts."""
         key = self.key(phone)
         p = self.state.get("pending", {}).pop(key, None)
         name = name or (p or {}).get("name", "")
+        if move:
+            self.remove_contact(self.addr(key))
+        if request:
+            p = {**(p or {}), "held": (p or {}).get("held", []) + [[request, sid or f"req-{time.time():.0f}"]]}
         now = self.save_contact(self.addr(key), accounts, name)
         to = (p or {}).get("phone") or self.addr(key)
         names = " and ".join(self.name(self.alliant, a) for a in now)

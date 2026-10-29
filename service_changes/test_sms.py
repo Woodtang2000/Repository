@@ -273,3 +273,31 @@ def test_donnas_workstation_question_and_the_customers_answer(desk, tmp_path, mo
     assert convo["lines"] == ["Customer: change the shop towels to 60", "Snow White asked: 60 in total, or 60 more?"]
     td.handle("+19075551234", "60 total", "S9")  # read together with the request
     assert "Customer: change the shop towels to 60" in seen["text"] and "Customer: 60 total" in seen["text"]
+
+
+def test_a_phone_caller_is_linked_with_a_button_and_their_request_runs(desk):
+    """An unknown caller's card: Add / Move buttons; once tapped (desk.link_contact marks the card) the number is on
+    the account and what they asked for on the call becomes the usual ticket, answered by text."""
+    td, slack, texts, seen = desk
+    sms.signup_card(slack, "D1", td.alliant, "+19075551234", "Jane", "add 200 towels", ["M8"], request="add 200 towels",
+                    current=["M4"], head="📞 *Phone request* from (907) 555-1234, a number not on file")
+    card = slack.posts[-1]
+    els = card["attachments"][0]["blocks"][-1]["elements"]
+    assert [e["text"]["text"] for e in els] == ["Move to Midas #8 (Palmer)", "Add Midas #8 (Palmer) too"]
+    assert "This number is now on: M4 MIDAS #4 (FAIRBANKS)" in card["text"]
+    card["meta"].update(approved_by="U2", move=True)  # "Move to Midas #8" tapped
+    assert td.office_pass() == 1
+    phones = sms.load_phones(td.data_dir + "/customer_phones.csv")
+    assert phones["9075551234"]["accounts"] == ["M8"]  # off Midas #4: they changed jobs
+    assert [c.account for c in seen["alliant"].customers] == ["M8"] and "add 200 towels" in seen["text"]
+    assert any(p["meta"].get("kind") == "ticket" and p["meta"].get("sms_to") == "+19075551234" for p in slack.posts)
+    assert "Moved to M8" in card["text"]
+
+
+def test_an_owner_with_several_accounts_adds_one_more(desk):
+    td, slack, texts, seen = desk
+    sms.signup_card(slack, "D1", td.alliant, "+19075559999", "", "", ["C1"], current=["M4", "M8"])
+    card = slack.posts[-1]
+    card["meta"].update(approved_by="U2", move=False, accounts=["C1"])
+    td.office_pass()
+    assert sms.load_phones(td.data_dir + "/customer_phones.csv")["9075559999"]["accounts"] == ["M4", "M8", "C1"]
