@@ -326,3 +326,28 @@ def test_a_number_asking_about_different_customers_is_flagged(desk):
     warned = [p for p in slack.posts if "⚠️" in p["text"]]
     assert any(p["channel"] == "D1" and "has also asked about or is on: M4" in p["text"] for p in warned)
     assert any(p["channel"] == "U4KFSQCDQ" for p in warned)  # Scott hears about it directly
+
+
+def test_caller_id_name_is_a_hint_with_warnings():
+    lines = sms.caller_id_lines({"name": "CHILIS GRILL", "who": "business", "kind": "landline", "carrier": "GCI"}, "CHILIS")
+    assert lines == ["Caller ID: CHILIS GRILL, landline, GCI"]
+    assert "another linen or uniform company" in sms.caller_id_lines({"name": "ALASKA LINEN SERVICE", "kind": "landline"}, "CHILIS")[-1]
+    assert "throwaway" in sms.caller_id_lines({"name": "", "kind": "nonFixedVoip"}, "CHILIS")[-1]
+    assert "doesn't match Chilis" in sms.caller_id_lines({"name": "MOOSE CAFE", "who": "business", "kind": "landline"}, "CHILIS")[-1]
+    assert sms.caller_id_lines({}, "CHILIS") == []
+    assert not any("another linen" in l for l in sms.caller_id_lines({"name": "SNOW WHITE LINEN", "kind": "mobile"}, ""))
+
+
+def test_caller_id_lookup_is_cached(tmp_path, monkeypatch):
+    import io
+    import json as j
+    import urllib.request
+    calls = []
+    monkeypatch.setenv("TWILIO_ACCOUNT_SID", "AC1")
+    monkeypatch.setenv("TWILIO_AUTH_TOKEN", "t")
+    monkeypatch.setattr(urllib.request, "urlopen", lambda req, timeout: calls.append(req.full_url) or io.BytesIO(j.dumps(
+        {"caller_name": {"caller_name": "CHILIS GRILL", "caller_type": "BUSINESS"},
+         "line_type_intelligence": {"type": "landline", "carrier_name": "GCI"}}).encode()))
+    assert sms.caller_id(str(tmp_path), "+19072292058")["name"] == "CHILIS GRILL"
+    assert sms.caller_id(str(tmp_path), "(907) 229-2058")["kind"] == "landline" and len(calls) == 1  # once, then cached
+    assert "Fields=caller_name,line_type_intelligence" in calls[0]

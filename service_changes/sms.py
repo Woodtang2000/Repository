@@ -167,6 +167,62 @@ def _twilio(method: str, path: str, params: dict | None = None) -> dict:
         return json.loads(r.read())
 
 
+LOOKUPS_FILE = "caller_lookups.json"  # caller ID names already looked up (each about a penny), kept 30 days
+RIVALS = re.compile(r"\b(linen|uniform|laundry|cintas|aramark|vestis|unifirst|alsco|g ?& ?k|textile)\b", re.I)
+
+
+def caller_id(data_dir: str, phone: str) -> dict:
+    """What the phone network says about a number we don't know (Twilio Lookup): {"name", "kind", "carrier"}; {} when
+    it isn't set up or doesn't answer. A hint for the office only: caller ID can be faked, so it never grants access."""
+    key = phone_key(phone)
+    if len(key) != 10 or not os.environ.get("TWILIO_ACCOUNT_SID"):
+        return {}
+    path = os.path.join(data_dir, LOOKUPS_FILE)
+    try:
+        seen = json.load(open(path))
+    except (OSError, ValueError):
+        seen = {}
+    if key in seen and time.time() - seen[key].get("at", 0) < 30 * 86400:
+        return seen[key]
+    sid, token = os.environ["TWILIO_ACCOUNT_SID"], os.environ["TWILIO_AUTH_TOKEN"]
+    req = urllib.request.Request(f"https://lookups.twilio.com/v2/PhoneNumbers/%2B1{key}?Fields=caller_name,line_type_intelligence",
+                                 headers={"Authorization": "Basic " + base64.b64encode(f"{sid}:{token}".encode()).decode()})
+    try:
+        with urllib.request.urlopen(req, timeout=10) as r:
+            d = json.loads(r.read())
+    except Exception as e:
+        print(time.strftime("%H:%M"), "caller ID lookup failed:", str(e)[:150], flush=True)
+        return {}
+    cn, lt = d.get("caller_name") or {}, d.get("line_type_intelligence") or {}
+    out = {"name": (cn.get("caller_name") or "").strip(), "who": (cn.get("caller_type") or "").lower(),
+           "kind": lt.get("type") or "", "carrier": lt.get("carrier_name") or "", "at": time.time()}
+    seen[key] = out
+    with open(path + ".tmp", "w") as f:
+        json.dump(seen, f)
+    os.replace(path + ".tmp", path)
+    return out
+
+
+def caller_id_lines(cid: dict, match_name: str = "") -> list[str]:
+    """The card's caller ID line, and a warning when it looks wrong: a throwaway internet number, another linen or
+    uniform company, or a business name that has nothing to do with the customer they say they are."""
+    if not cid:
+        return []
+    kinds = {"mobile": "cell phone", "landline": "landline", "fixedVoip": "internet phone (business)",
+             "nonFixedVoip": "internet phone (app or throwaway)", "tollFree": "toll-free", "voip": "internet phone"}
+    out = ["Caller ID: " + ", ".join(x for x in (cid.get("name") or "no name listed", kinds.get(cid.get("kind"), cid.get("kind")),
+                                                 cid.get("carrier")) if x)]
+    name = cid.get("name") or ""
+    words = {w for w in re.findall(r"[a-z]{3,}", name.lower())} - {"inc", "llc", "the", "and", "company", "wireless"}
+    if RIVALS.search(name) and not re.search(r"snow ?white|laundry group", name, re.I):
+        out.append(f"⚠️ The caller ID name ({name}) looks like another linen or uniform company.")
+    elif cid.get("kind") == "nonFixedVoip":
+        out.append("⚠️ An app or throwaway internet number: be extra sure it's really them.")
+    elif cid.get("who") == "business" and match_name and words and not words & set(re.findall(r"[a-z]{3,}", match_name.lower())):
+        out.append(f"⚠️ The caller ID name ({name}) doesn't match {match_name.title()}.")
+    return out
+
+
 def plain(text: str) -> str:
     """Slack markup to plain text for a phone."""
     text = re.sub(r"<@\w+>\s*", "", text)
@@ -311,7 +367,7 @@ def link_buttons(accounts: list[str], current: list[str], name) -> dict | None:
 
 def signup_card(slack, desk_id: str, alliant: Alliant, phone: str, who: str, said: str, accounts: list[str],
                 by: str = "", request: str = "", current: list[str] | None = None, kind: str = "sms_signup",
-                head: str = "", data_dir: str = "") -> None:
+                head: str = "", data_dir: str = "", cid: dict | None = None) -> None:
     """Ask the office to approve a number for an account: a button (or ✅) approves. `request`: what they asked for
     (a call, a text), handled as soon as the number is approved. `current`: accounts the number is already on."""
     name = lambda a: next((c.name for c in alliant.customers if c.account == a), "")
@@ -319,6 +375,7 @@ def signup_card(slack, desk_id: str, alliant: Alliant, phone: str, who: str, sai
     head = head or (f"📱 *{by}* asks to set up {pretty} for texting" if by else f"📱 *New texter* {pretty}")
     current = [a for a in (current or []) if a]
     lines = [head + (f": {who}" if who else ""), f"_{said[:200]}_"]
+    lines += caller_id_lines(cid or {}, name(accounts[0]) if accounts else "")
     if current:
         lines.append("This number is now on: " + ", ".join(f"{a} {name(a)}" for a in current))
     others = other_accounts(data_dir, phone, accounts, current) if data_dir else []
@@ -439,7 +496,7 @@ class TextDesk:
     def card(self, addr: str, who: str, said: str, accounts: list[str], by: str = "") -> None:
         current = self.contacts().get(self.key(addr), {}).get("accounts", [])
         signup_card(self.slack, self.desk_id, self.alliant, addr, who, said, accounts, by=by, current=current,
-                    data_dir=self.data_dir)
+                    data_dir=self.data_dir, cid=caller_id(self.data_dir, addr) if not by else None)
 
     def inbound(self, since: datetime) -> list[dict]:
         """New messages as {"id", "from", "body"}, oldest first."""
