@@ -97,6 +97,9 @@ notes rather than guessing. The house rules below still win over the notes.
 
 ## Reporting
 
+**First, close your tabs** (Finishing every job, step 2): the report has to be the very last thing you do, and a
+tab left open piles up on the screen.
+
     curl -s -X POST -H "Authorization: Bearer $(cat ~/.donna_worker_token)" -H "Content-Type: application/json" \
       -d '{"status": "entered", "note": "...", "readback": "..."}' https://chat.snowwhitelinen.com/api/donna/jobs/<id>/result
 
@@ -117,7 +120,8 @@ what you actually saved.
 ## Finishing every job
 
 1. Leave Alliant on the Customer Center screen.
-2. After your report is sent, **close every tab this job opened**, the Alliant tab you opened included (each job gets
+2. **Before you send your report** (the report is your last step, so do this first): **close every tab this job
+   opened**, the Alliant tab you opened included (each job gets
    a new tab group and can't see the last one's tabs, so a tab left open just piles up). Closing the browser tab
    only disconnects it: Alliant keeps running on the server and the next job reconnects. If you worked in an Alliant
    tab that was already open (you didn't open it), leave that one open. Never use any Sign out, Log off or Disconnect menu inside the remote desktop.
