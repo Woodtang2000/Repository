@@ -538,3 +538,20 @@ def test_usual_sku_from_the_catalog_and_grey_or_gray():
     assert usual_sku(data, "3x10 confetti gray mat") == ("6-03-30", "MAT 3X10 CONFETTI GREY", 4)  # gray = grey
     assert usual_sku(data, "4x6 confetti grey mat") == ("6-03-31", "MAT 4X6 CONFETTI GRAY", 0)  # nobody has it: catalog
     assert usual_sku(data, "3x5 blue mat") is None  # discontinued in the catalog
+
+
+def test_a_vague_new_item_asks_which_one_up_front():
+    """"Add one 3 by 10 to Homer": several 3x10 mats, none clearly usual: ask now, with the choices."""
+    from .checks import check
+    from .context import Alliant, Customer
+    from .schema import Action, Category, Change, ParsedMessage
+    data = Alliant(customers=[Customer("5045-1-00000", "HOMER GOLF COURSE", "5", ["Tue"])],
+                   items={"5045-1-00000": {"TOWEL BAR MOP": 60}},
+                   sku_counts={("10-10-02", "MAT CONFETTI GREY 3X10"): 143, ("10-10-05", "MAT CHARCOAL HEATHER 3X10"): 120,
+                               ("10-10-07", "MAT BLUE 3X10"): 40})
+    p = lambda item: ParsedMessage(category=Category.item_change, account_number="5045-1-00000", summary="mat",
+                                   changes=[Change(action=Action.add, item=item, quantity=1)])
+    r = check(p("3x10 mat"), data)
+    assert r.questions == ["Which 3x10 mat: Mat Confetti Grey 3X10, Mat Charcoal Heather 3X10 or Mat Blue 3X10?"]
+    assert not check(p("3x10 confetti gray mat"), data).questions  # clear: the ticket carries 10-10-02
+    assert check(p("3x10 purple mat"), data).questions == ["Which 3x10 purple mat exactly? I can't find one by that name in Alliant."]

@@ -315,6 +315,14 @@ def check(parsed: ParsedMessage, alliant: Alliant) -> Result:
             cc.notes.append("Not on this account in Alliant" + (" (may already be stopped)" if ch.action == Action.stop else "; check by hand"))
             if ch.action in (Action.decrease, Action.set, Action.stop):
                 _not_here(cc, parsed.account_number, alliant)
+            elif ch.action in (Action.add, Action.restart) and not usual_sku(alliant, ch.item):
+                # A new item with no clear usual: ask which one now, while they're still here, not at the workstation
+                options = sku_choices(alliant, ch.item)
+                if len(options) > 1:
+                    cc.questions.append(f"Which {ch.item}: " + ", ".join(n.title() for _, n, _ in options[:-1])
+                                        + f" or {options[-1][1].title()}?")
+                elif not options and (alliant.sku_counts or getattr(alliant, "skus", None)):
+                    cc.questions.append(f"Which {ch.item} exactly? I can't find one by that name in Alliant.")
         out.append(cc)
     cust = next((c for c in alliant.customers if c.account == parsed.account_number), None) if parsed.account_number else None
     return Result(parsed, out, cust.name if cust else None)
@@ -419,6 +427,22 @@ def _do(ch: Change) -> str:
             Action.decrease: f"Remove {q}" if q is not None else "Decrease",
             Action.set: f"Set to {q}",
             Action.stop: "Stop", Action.restart: "Restart", Action.size_change: "Size change"}.get(ch.action, "Change")
+
+
+def sku_choices(alliant: Alliant, item: str | None, limit: int = 4) -> list[tuple[str, str, int]]:
+    """The items whose name has every word of `item` ("3x10 mat"), most-used first, as (sku, name, accounts); from
+    the SKU catalog's active items when no account has one. For asking which one when there's no clear usual."""
+    words = [w.rstrip("s") for w in re.findall(r"[a-z0-9]{2,}", (item or "").lower()) if w not in ("the", "and", "more", "new")]
+    if not words:
+        return []
+    same = {"gray": "gr[ae]y", "grey": "gr[ae]y"}
+    pat = lambda w: same.get(w, re.escape(w))
+    hit = lambda name: all(re.search(rf"\b{pat(w)}", name.lower()) for w in words)
+    counts = {(sku, name): n for (sku, name), n in dict(alliant.sku_counts).items() if hit(name)}
+    if counts:
+        return [(sku, name, n) for (sku, name), n in sorted(counts.items(), key=lambda kv: -kv[1])[:limit]]
+    return [(sku, d.get("description", ""), 0) for sku, d in sorted((getattr(alliant, "skus", None) or {}).items())
+            if (d.get("active") or "Y").upper() != "N" and hit(d.get("description", ""))][:limit]
 
 
 def usual_sku(alliant: Alliant, item: str | None) -> tuple[str, str, int] | None:
