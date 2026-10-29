@@ -644,7 +644,7 @@ class TextDesk:
             return
         if parsed.category in ACTIONABLE:
             fill_item_matches(self.claude, parsed, mine)
-        result = check(parsed, mine)
+        result = check(parsed, mine, asker="customer")
         asks = convo["asks"] if convo else 0
         if parsed.category in ACTIONABLE and result.questions and asks < MAX_ASKS:
             return self.ask(phone, lines, result.questions[:MAX_QUESTIONS], convo)
@@ -787,7 +787,7 @@ class TextDesk:
                                                   asker="customer").answer)
         if parsed.category in ACTIONABLE:
             fill_item_matches(self.claude, parsed, mine)
-        result = check(parsed, mine)
+        result = check(parsed, mine, asker="customer")
         if parsed.category in ACTIONABLE and result.questions and (convo["asks"] if convo else 0) < MAX_ASKS:
             return self.ask(phone, lines, result.questions[:MAX_QUESTIONS], convo)
         rb = readback(result) if parsed.category in ACTIONABLE else f"✅ {parsed.summary}"

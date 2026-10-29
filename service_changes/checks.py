@@ -257,7 +257,9 @@ def split_by_account(parsed: ParsedMessage) -> list[ParsedMessage]:
     return parts
 
 
-def check(parsed: ParsedMessage, alliant: Alliant) -> Result:
+def check(parsed: ParsedMessage, alliant: Alliant, asker: str = "staff") -> Result:
+    """`asker`: "staff" (drivers, the office, Scott and Bill) or "customer" (their own text, email or call): who a
+    question is worded for."""
     who = parsed.customer_as_written or "this customer"
     out = []
     for ch in parsed.changes:
@@ -329,8 +331,37 @@ def check(parsed: ParsedMessage, alliant: Alliant) -> Result:
                 elif not options and (alliant.sku_counts or getattr(alliant, "skus", None)):
                     cc.questions.append(f"Which {ch.item} exactly? I can't find one by that name in Alliant.")
         out.append(cc)
+    _ask_stop_inventory(out, who, asker)
     cust = next((c for c in alliant.customers if c.account == parsed.account_number), None) if parsed.account_number else None
     return Result(parsed, out, cust.name if cust else None)
+
+
+def stop_inventory(cc: CheckedChange) -> int | None:
+    """What's in inventory on an item being stopped (Alliant's inventory number, not the per-delivery count)."""
+    return cc.inventory if cc.inventory is not None else cc.current
+
+
+def _ask_stop_inventory(out: list[CheckedChange], who: str, asker: str) -> None:
+    """A stopped item keeps its inventory until someone lowers it: it shows on the next two invoices as $0.00 "STI"
+    (still in inventory), then each piece still there is billed as a loss. Drivers pick them up, but if the office
+    doesn't lower the inventory by what came back, the customer is billed a loss on all of it (Scott, 2026-10-29).
+    So whoever stops an item says what the inventory should be: zero, cut down, or left for now. One question for
+    all of a request's stops; none when they already said."""
+    said = {c.alliant_item or c.change.item for c in out if c.change.inventory}
+    open_ = [c for c in out if c.change.action == Action.stop and not c.change.wearer and not c.wearer_number
+             and not c.change.keep_inventory and not c.already_done and (stop_inventory(c) or 0) > 0
+             and (c.alliant_item or c.change.item) not in said]
+    if not open_:
+        return
+    items = " and ".join(f"{(c.alliant_item or c.change.item)} ({stop_inventory(c)} in inventory)" for c in open_)
+    if asker == "customer":
+        q = (f"When we stop the {' and '.join((c.alliant_item or c.change.item).lower() for c in open_)}, should your "
+             "driver pick them all up, pick up some (how many?), or leave them with you for now? Anything still with "
+             "you after two weeks may be billed as lost.")
+    else:
+        q = (f"Stopping {items}: what should the inventory be? Zero (picked up), cut down (to how many, or by half), "
+             "or left as is for now? Left in inventory, they bill as lost after two invoices.")
+    open_[0].questions.append(q)
 
 
 VERBS = {Action.add: "added", Action.decrease: "decreased", Action.stop: "stopped", Action.restart: "restarted",
@@ -414,6 +445,10 @@ def _inventory_follows(cc: CheckedChange, alliant: Alliant, acct: str | None, sa
         return ""
     if said and (cc.alliant_item or ch.item) in said:
         return ""  # they said what the inventory should be (its own line): that wins over equal-or-double
+    if ch.action == Action.stop:  # a stop's inventory is never automatic: they said "leave it", or it was asked
+        inv = stop_inventory(cc)
+        return (f"inventory stays *{inv}* for now (STI: billed as lost after two invoices unless it's lowered by what "
+                "the driver picks up)") if ch.keep_inventory and inv else ""
     pt = alliant.price_type.get(acct or "", {}).get(cc.alliant_item or "")
     if pt == "11":
         return ""  # COG: the customer owns it and pays per wash, so the inventory ratio doesn't apply

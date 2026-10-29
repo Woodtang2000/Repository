@@ -44,6 +44,9 @@ class Change(BaseModel):
         "True only when the driver says the change is to the inventory ('fix the inventory, 6 total', 'inventory "
         "should be 20', 'reduce the inventory by half'), not to the per-delivery count. 'Stop the mats and cut the "
         "inventory in half' is two changes per item: a stop, and an inventory decrease."))
+    keep_inventory: bool = Field(False, description=(
+        "For a stop: True when they say to leave the inventory as it is for now ('leave it', 'keep the inventory', "
+        "'don't pick them up yet'). Inventory to zero or cut down is its own inventory change instead."))
     fraction: Optional[float] = Field(None, description=(
         "A share of what's there now instead of a number: 'by half' / 'cut it in half' = 0.5, 'by a third' = 0.33, "
         "'a quarter' = 0.25, with action decrease (quantity null). The office works out the number."))

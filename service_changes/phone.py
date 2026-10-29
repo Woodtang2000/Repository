@@ -567,7 +567,7 @@ class Phone:
         if parsed.account_number is None or parsed.category not in ACTIONABLE:
             return None
         fill_item_matches(self.claude, parsed, mine, model=CHECK_MODEL)
-        return parsed, check(parsed, mine), mine
+        return parsed, check(parsed, mine, asker="customer"), mine
 
     def employee_message(self, call: dict, turn: Turn) -> None:
         from . import todo

@@ -638,3 +638,23 @@ def test_stop_the_mats_and_cut_the_inventory_in_half():
     assert "5 → *0*" in t and "inventory 10 → *5*" in t and "4 → *0*" in t and "inventory 8 → *4*" in t
     assert "→ *0* too" not in t and not r.questions  # the inventory they said wins: no conflicting "inventory → 0 too"
     assert "from 10 to 5" in readback(r)
+
+
+def test_stopping_an_item_asks_what_the_inventory_should_be():
+    from .checks import check, ticket
+    from .context import Alliant, Customer
+    from .schema import Action, Category, Change, ParsedMessage
+    a = Alliant(customers=[Customer("4000-1-00400", "SAFEWAY 1739AS (P)", "4", ["Tue"])],
+                items={"4000-1-00400": {"MAT CONFETTI GREY 3X10": 10, "MAT CONFETTI GREY 3X5": 8}},
+                autocount={"4000-1-00400": {"MAT CONFETTI GREY 3X10": 5, "MAT CONFETTI GREY 3X5": 4}})
+    p = lambda *chs: ParsedMessage(category=Category.item_change, account_number="4000-1-00400", summary="s", changes=list(chs))
+    stop = lambda item, **kw: Change(action=Action.stop, item=item, **kw)
+    r = check(p(stop("MAT CONFETTI GREY 3X10"), stop("MAT CONFETTI GREY 3X5")), a)
+    assert len(r.questions) == 1 and "MAT CONFETTI GREY 3X10 (10 in inventory) and MAT CONFETTI GREY 3X5 (8 in inventory)" in r.questions[0]
+    assert "Zero" in r.questions[0] and "→ *0* too" not in ticket(r, a)  # never an automatic inventory on a stop
+    c = check(p(stop("MAT CONFETTI GREY 3X10")), a, asker="customer").questions[0]
+    assert c.startswith("When we stop the mat confetti grey 3x10, should your driver pick them all up") and "inventory" not in c
+    r = check(p(stop("MAT CONFETTI GREY 3X10", keep_inventory=True)), a)
+    assert not r.questions and "inventory stays *10* for now (STI" in ticket(r, a)
+    r = check(p(stop("MAT CONFETTI GREY 3X10"), Change(action=Action.set, item="MAT CONFETTI GREY 3X10", quantity=0, inventory=True)), a)
+    assert not r.questions and "inventory 10 → *0*" in ticket(r, a)

@@ -66,7 +66,10 @@ notes rather than guessing. The house rules below still win over the notes.
    added since: the ticket says "not on account yet" but it's on the screen) will differ. Then the **customer's own words** (the quoted `> Customer:` lines in the ticket) decide:
    - "to 60", "make it 60", "60 a week", "60 total": set it to **60**.
    - "add 30", "30 more", "another 30": **what's on screen + 30**.
-   - "stop", "take off": stop it.
+   - "stop", "take off": stop it, and set its **inventory exactly as the ticket says**: to 0, cut down to a number,
+     or "inventory stays N for now". A stopped item left in inventory bills as lost after two invoices, so never
+     guess: if the ticket doesn't say what the inventory should be, `ask` ("What should the inventory be on the
+     stopped …: zero, cut down, or left for now?").
    If the screen already shows what the customer asked for, change nothing and report `entered` with "already in
    Alliant: …". If it's the wrong line, two lines could match, or the words don't say which: `needs_person` with what
    you see. Always say in your note what the screen showed and what you set ("screen 50 → set 60, customer said 'to 60'").
