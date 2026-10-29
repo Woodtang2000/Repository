@@ -830,3 +830,18 @@ def test_a_voice_message_is_read_like_a_typed_one(setup, tmp_path):
     slack.say("C1", "U1", "", files=clip("F2"), subtype="file_share")
     assert d.run_once()["ticket"] == 1 and "Mike Driver: 6" in CALLS[-1]
     assert d.run_once() == NOTHING and heard == ["F1", "F2"]
+
+
+def test_a_driver_asks_about_an_item_itself(setup, monkeypatch):
+    """"How much does a bath blanket weigh?" in a route channel: answered from skus.csv (no prices), not "which customer?"."""
+    import service_changes.parser as parser
+    slack, d = setup
+    monkeypatch.setattr(parser, "parse_message", lambda *a, **k: ParsedMessage(category=Category.lookup, summary="weight"))
+    monkeypatch.setattr(parser, "answer_lookup", lambda c, q, facts, asker="": parser.Answer(
+        answer="A bath blanket weighs 30 oz, about 1.9 lb.", found="30 oz" in facts))
+    d.alliant.skus = {"7-00-02": {"description": "BATH BLANKET", "weight_oz": "30"}}
+    slack.say("C1", "U1", "how much does a bath blanket weigh")
+    assert d.run_once()["answered"] == 1
+    [a] = slack.bot_posts("C1", "answer")
+    assert a["text"] == "<@U1> A bath blanket weighs 30 oz, about 1.9 lb."
+    d.alliant.skus = {}

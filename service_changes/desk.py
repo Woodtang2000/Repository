@@ -346,7 +346,13 @@ class Desk:
             questions = list(dict.fromkeys(questions + review(parsed, self.alliant)[2]))
 
         did = "read"
-        if parsed.category == Category.not_a_request:
+        item = self.sku_answer(src.get("text", ""), src.get("user")) if parsed.category in (
+            Category.lookup, Category.howto, Category.not_a_request) and not parsed.account_number else ""
+        if item and not item.startswith("I don't have the SKU details"):  # "how much does a bath blanket weigh?"
+            self.post(channel, f"<@{src.get('user')}> {item}"[:3900],
+                      {"kind": "answer", "src_ts": src["ts"], "driver_id": src.get("user"), "msgs": replies}, bot_posts)
+            did = "answered"
+        elif parsed.category == Category.not_a_request:
             pass
         elif parsed.category == Category.route_lookup:
             did = self.route_answer(route_name, channel, src, parsed, replies, bot_posts)
