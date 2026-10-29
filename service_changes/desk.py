@@ -638,7 +638,10 @@ class Desk:
                     self.post(self.desk_id, f"<@{h.get('user')}> Which one? React ✅ on the ticket, or type done "
                                             "with the account number.", {"kind": "which"})
             elif not h.get("thread_ts"):
-                if self.office_lookup(h, top):
+                from .announce import ASK
+                if ASK.search(text) and self.announcer().propose(h):  # "Donna, let route 4 know we're running late"
+                    counts["answered"] += 1
+                elif self.office_lookup(h, top):
                     counts["answered"] += 1
             self.mark_seen(self.desk_id, [h])
         for t in tickets:
@@ -748,6 +751,13 @@ class Desk:
         as_of = f" _(Alliant as of {self.alliant.as_of})_" if self.alliant.as_of else ""
         say(f"<@{user}> *{acct}* {name}: {ans.answer}{as_of}", {"kind": "answer", "account": acct})
         return True
+
+    def announcer(self):
+        """Messages to many customers at once, sent only when the office taps Send (announce.py)."""
+        if "_announcer" not in self.__dict__:
+            from .announce import Announcer
+            self._announcer = Announcer(self)
+        return self._announcer
 
     def jobs(self):
         """Donna's Alliant work queue (alliant_jobs.py)."""
@@ -1479,6 +1489,15 @@ class Desk:
                     except Exception as e:
                         print(time.strftime("%H:%M"), "alliant jobs error:", e, flush=True)
                 threading.Thread(target=enter, daemon=True).start()
+                return
+            if req.type == "interactive" and req.payload.get("type") == "block_actions" and any(
+                    x.get("action_id", "").startswith("announce_") for x in req.payload.get("actions", [])):
+                def announce(p=req.payload):  # Send / Cancel on Donna's message to customers (announce.py)
+                    try:
+                        print(time.strftime("%H:%M"), "announce:", self.announcer().act(p), flush=True)
+                    except Exception as e:
+                        print(time.strftime("%H:%M"), "announce error:", e, flush=True)
+                threading.Thread(target=announce, daemon=True).start()
                 return
             if req.type == "interactive" and req.payload.get("type") == "block_actions":
                 # "Give to Bill/Jesse" on a website lead in #sales-desk: create the Salesforce Account and Opportunity (sales.py)
