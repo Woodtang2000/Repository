@@ -1063,6 +1063,15 @@ class Desk:
         """"All of the Safeway customers / stores / locations": (the name, every account whose Alliant name has it), for
         Scott and Bill only (owner_change). None when the request isn't for all of a customer's locations."""
         said = f"{text}\n{parsed.customer_as_written or ''}"
+        num = re.search(r"\b(?:account|acct|customer)\s*(?:number|no\.?|#)?\s*(\d{4})\b(?!-\d)", said, re.I)
+        if num and re.search(r"\b(?:all|every|each)\b", said, re.I) and re.search(
+                r"\b(?:customers?|locations?|stores?|accounts?|sites?|departments?)\b", said, re.I):
+            # "all the customers inside account 4000": every location under that account number
+            accounts = sorted(c.account for c in self.alliant.customers if c.account.split("-")[0] == num.group(1))
+            if 2 <= len(accounts) <= 300:
+                first = [c.name.split()[0] for c in self.alliant.customers if c.account in accounts and c.name.split()]
+                common = max(set(first), key=first.count) if first else ""
+                return (string.capwords(common) if first.count(common) > len(first) / 2 else f"account {num.group(1)}"), accounts
         m = re.search(r"\b(?:all|every|each)\s+(?:of\s+)?(?:the\s+|our\s+)?((?:(?!\b(?:all|every|each)\b)[a-z0-9'&. -])+?)\s+"
                       r"(?:customers?|locations?|stores?|accounts?|sites?|departments?)\b", said, re.I)
         if not m:

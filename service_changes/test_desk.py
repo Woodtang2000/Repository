@@ -916,3 +916,10 @@ def test_all_of_the_safeway_customers_is_one_ticket_per_location(setup, monkeypa
     assert [c.alliant_item for c in p["results"][0].changes] == ["MAT CONFETTI GREY 3X10", "MAT CONFETTI GREY 3X5"] * 2
     from .checks import readback
     assert "from 10 to 5" in readback(p["results"][0]) and "from 4 to 2" in readback(p["results"][1])
+
+    # the same by account number: "all the customers inside account 4000"
+    d.changes.clear()
+    said = d.owner_change("k2", "It's all the mats in account 4000, all the customers inside account 4000. Stop all the mats "
+                          "and cut their inventory in half.", None, user="U4KFSQCDQ")
+    assert [x.account_number for x in d.changes["k2"]["parts"]] == ["4000-1-00400", "4000-1-00401"]
+    assert said.endswith("Want me to put that in?")
