@@ -40,6 +40,9 @@ notes rather than guessing. The house rules below still win over the notes.
    The account filled in should be your own Alliant cloud login, Donna@525-snow-alliantcloud.com, or until that's
    in use, Scott's, scotty@525-snow-alliantcloud.com: Scott approved on 2026-10-29 that you click Sign in with
    either. If it shows any other account, stop.
+   If the remote desktop won't connect ("no available resources", "couldn't connect", the server is busy or
+   offline): try once more after a minute, then stop and report `needs_person` with "Alliant isn't available:"
+   and the message on screen. The ticket waits with its button for someone to send it again later.
    Stop and report `needs_person` with "Alliant needs signing in" if a field is empty, it asks for a code, a phone
    approval or any two-step check, "Pick an account" needs anything typed, the sign-in fails or asks again, or the
    screen is anything else you don't recognize.
