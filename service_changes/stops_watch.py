@@ -15,8 +15,9 @@ if the office doesn't lower the inventory by what came back, the customer is bil
                aren't told: the customer gets the email with each barcode, and one reminder around day 10 if any are
                still out.
 
-The first run only takes note of what's already there. CUSTOMER_NOTICES=off stops the customer emails; at most
-MAX_EMAILS a pass.
+The first run only takes note of what's already there. CUSTOMER_NOTICES=off stops the customer emails;
+STOP_EMAILS_HOLD=4000 (account numbers, comma separated) holds them for those accounts only, say a corporate stop
+handled with the customer directly. At most MAX_EMAILS a pass.
 """
 import json
 import os
@@ -169,9 +170,16 @@ class StopsWatch:
                     by_acct.setdefault(w["account"], {"items": [], "wearers": []})["wearers"].append(key)
                 elif w.get("emailed"):
                     w["reminded"] = "nothing left out"
+        hold = {x.strip() for x in os.environ.get("STOP_EMAILS_HOLD", "").split(",") if x.strip()}
         for acct, what in by_acct.items():
             if not emails_on or budget <= 0:
                 break
+            if acct.split("-")[0] in hold:  # e.g. 4000: Safeway's corporate stop, handled with them directly
+                for k in what["items"]:
+                    st["items"][k]["emailed"] = "held"
+                for k in what["wearers"]:
+                    st["wearers"][k].setdefault("emailed", "held")
+                continue
             from .notices import Notices
             to = Notices(self.desk).emails(acct)
             if not to:

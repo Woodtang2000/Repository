@@ -76,3 +76,14 @@ def test_a_whole_account_stopped_gets_totals_not_barcodes(tmp_path, monkeypatch)
     [(to, subject, body)] = mails
     assert "Now that your service has ended" in body and "- 10 Mat Confetti Grey 3x10\n- 6 Shirt Cook Black XL" in body
     assert "barcode" not in body and "exact ones" not in body
+
+
+def test_held_accounts_get_no_email_but_drivers_still_hear(tmp_path, monkeypatch):
+    monkeypatch.setenv("STOP_EMAILS_HOLD", "4000")
+    d, posts, mails = make(tmp_path, {"4000-1-00400": {"MAT CONFETTI GREY 3X10": 10, "TOWEL BAR MOP": 60}},
+                           {"4000-1-00400": {"MAT CONFETTI GREY 3X10": 5, "TOWEL BAR MOP": 60}})
+    run(d, monkeypatch, mails, date(2026, 10, 27))
+    d.alliant.autocount["4000-1-00400"]["MAT CONFETTI GREY 3X10"] = 0
+    run(d, monkeypatch, mails, date(2026, 10, 29))
+    run(d, monkeypatch, mails, date(2026, 11, 10))
+    assert not mails and any("please pick up" in t for _, t in posts)

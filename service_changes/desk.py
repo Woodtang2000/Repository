@@ -1072,7 +1072,7 @@ class Desk:
             return None
         accounts = sorted(c.account for c in self.alliant.customers
                           if all(re.search(rf"\b{re.escape(w)}", c.name.lower()) for w in words))
-        if len(accounts) < 2 or len(accounts) > 80:
+        if len(accounts) < 2 or len(accounts) > 300:  # Safeway alone is 100+ accounts
             return None
         return string.capwords(" ".join(words)), accounts
 
