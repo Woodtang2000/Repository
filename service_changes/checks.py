@@ -459,7 +459,7 @@ def readback(result: Result) -> str:
         if ch.action == Action.set:  # "wet mops – from 16 to 28" (the from/to says it all); "set to 28" when the old count isn't known
             verb = ("inventory " if ch.inventory else "") + ("changed" if cc.current is not None else f"set to {ch.quantity}")
         else:
-            verb = VERBS.get(ch.action, "changed")
+            verb = ("inventory " if ch.inventory else "") + VERBS.get(ch.action, "changed")
         parts.append(f"{_what(ch)} {verb}{_tail(cc)}")
         i += 1
     return f"✅ {who} – " + "; ".join(parts) if parts else ""

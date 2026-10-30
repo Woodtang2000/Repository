@@ -890,3 +890,29 @@ def test_her_question_keeps_the_tickets_exact_items(setup):
     text = d.changes["DS"]["text"]
     assert text.startswith("On account 4000-1-00400, stop all the mats.")
     assert "The ticket for it: Stop  MAT CONFETTI GREY 3X10 10-10-02 · 5 → 0; Decrease" in text and "MAT CONFETTI GREY 3X5" in text
+
+
+def test_all_of_the_safeway_customers_is_one_ticket_per_location(setup, monkeypatch):
+    import service_changes.parser as parser
+    from .schema import Action, Category, Change, ParsedMessage
+    slack, d = setup
+    d.alliant = Alliant(
+        customers=[Customer("4000-1-00400", "SAFEWAY 1739AS (P)", "4", ["Tue"]), Customer("4000-1-00401", "SAFEWAY 1809", "4", ["Wed"]),
+                   Customer("4000-1-00402", "SAFEWAY 548 (S)", "2", ["Mon"]), Customer("5045-1-00000", "HOMER GOLF COURSE", "5", ["Tue"])],
+        items={"4000-1-00400": {"MAT CONFETTI GREY 3X10": 10, "MAT CONFETTI GREY 3X5": 8},
+               "4000-1-00401": {"MAT CHARCOAL HEATHER 3X5": 4}, "4000-1-00402": {"TOWEL BAR MOP": 40}},
+        autocount={"4000-1-00400": {"MAT CONFETTI GREY 3X10": 5, "MAT CONFETTI GREY 3X5": 4},
+                   "4000-1-00401": {"MAT CHARCOAL HEATHER 3X5": 2}, "4000-1-00402": {"TOWEL BAR MOP": 40}})
+    monkeypatch.setattr(parser, "parse_message", lambda *a, **k: ParsedMessage(
+        category=Category.item_change, account_number=None, customer_as_written="all of the Safeway customers", summary="s",
+        changes=[Change(action=Action.stop, item="all mats"),
+                 Change(action=Action.decrease, item="all mats", inventory=True, fraction=0.5)]))
+    said = d.owner_change("k", "Stop all of the mats in all of the Safeway customers and cut their inventory in half.", None,
+                          user="U4KFSQCDQ")
+    p = d.changes["k"]
+    assert [x.account_number for x in p["parts"]] == ["4000-1-00400", "4000-1-00401"]  # 548 has no mats: left out
+    assert said.endswith("Want me to put that in?") and "safeway 1739as (p)" in said.lower()
+    assert "MAT CONFETTI GREY 3X10 inventory decreased – from 10 to 5" in said
+    assert [c.alliant_item for c in p["results"][0].changes] == ["MAT CONFETTI GREY 3X10", "MAT CONFETTI GREY 3X5"] * 2
+    from .checks import readback
+    assert "from 10 to 5" in readback(p["results"][0]) and "from 4 to 2" in readback(p["results"][1])

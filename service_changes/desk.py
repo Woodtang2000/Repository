@@ -1020,14 +1020,30 @@ class Desk:
             pending.pop(key, None)
             return None
         other_route_account(parsed, self.alliant)
-        parts = split_by_account(parsed)
+        group = self.all_locations(text, parsed)
+        if group:  # "all of the Safeway customers": the same change at each of their locations, one ticket each
+            name, accounts = group
+            parts = [parsed.model_copy(deep=True, update={"account_number": a, "customer_as_written": name})
+                     for a in accounts]
+        else:
+            parts = split_by_account(parsed)
         for part in parts:
             fix_department(part, self.alliant, None, service_day(now))
-            fill_item_matches(self.claude, part, self.alliant)
+            if not group:
+                fill_item_matches(self.claude, part, self.alliant)
         results = [check(part, self.alliant) for part in parts]
+        if group:  # only the locations that have the items
+            keep = [i for i, r in enumerate(results) if r.changes and all(c.alliant_item for c in r.changes)]
+            if not keep:
+                pending.pop(key, None)
+                return f"None of the {group[0]} locations have that in Alliant, so there's nothing to change."
+            parts, results = [parts[i] for i in keep], [results[i] for i in keep]
         questions = list(dict.fromkeys(q for r in results for q in r.questions))
         if questions:
             asked = " ".join(questions[:2])
+            if group and len(parts) > 1:  # one answer for every location
+                asked = f"That's {len(parts)} {group[0]} locations. For all of them: " + re.sub(
+                    r"^Stopping .*?: what", "what", questions[0]).capitalize()
             pending[key] = {"text": text, "asked": asked, "at": now, "user": owner, "key": key}
             return asked
         said = []
@@ -1035,9 +1051,30 @@ class Desk:
             rb = re.sub(r"^✅\s*(\d{4}-\d-\d{5}\s*)?", "", readback(r)).strip()
             name, _, what = rb.partition(" – ")
             said.append(f"{string.capwords(name)}: {what}" if what else rb)
+        if group and len(said) > 3:  # a read-back of 20 stores is too long to hear: the count and one example
+            lines = sum(len(r.changes) for r in results)
+            said = [f"{len(said)} {group[0]} locations, {lines} item lines in all. For example, {said[0]}; and the "
+                    f"same at the other {len(said) - 1}"]
         pending[key] = {"text": text, "parts": parts, "results": results, "confirm": True, "at": now, "user": owner,
                         "key": key}
         return "; ".join(said) + ". Want me to put that in?"
+
+    def all_locations(self, text: str, parsed) -> tuple[str, list[str]] | None:
+        """"All of the Safeway customers / stores / locations": (the name, every account whose Alliant name has it), for
+        Scott and Bill only (owner_change). None when the request isn't for all of a customer's locations."""
+        said = f"{text}\n{parsed.customer_as_written or ''}"
+        m = re.search(r"\b(?:all|every|each)\s+(?:of\s+)?(?:the\s+|our\s+)?((?:(?!\b(?:all|every|each)\b)[a-z0-9'&. -])+?)\s+"
+                      r"(?:customers?|locations?|stores?|accounts?|sites?|departments?)\b", said, re.I)
+        if not m:
+            return None
+        words = [w for w in re.findall(r"[a-z0-9']+", m.group(1).lower()) if w not in ("the", "of", "our", "all")]
+        if not words:
+            return None
+        accounts = sorted(c.account for c in self.alliant.customers
+                          if all(re.search(rf"\b{re.escape(w)}", c.name.lower()) for w in words))
+        if len(accounts) < 2 or len(accounts) > 80:
+            return None
+        return string.capwords(" ".join(words)), accounts
 
     def owner_enter(self, p: dict, channel: str | None, typed: dict | None) -> str:
         """Scott (or Bill) said yes: the ticket(s) in #service-desk, queued for her workstation (unless DONNA_ALLIANT=off)."""
