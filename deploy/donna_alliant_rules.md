@@ -90,8 +90,8 @@ notes rather than guessing. The house rules below still win over the notes.
 - Never touch the **Locking** box, Stop Customer, Seasonal, or New Business on Customer Entry.
 - Never change an account the ticket doesn't name, and never more than the ticket asks.
 - Never type, paste or change a password or MFA code (clicking Sign in on Chrome's filled-in box, step 1, is the
-  only sign-in you do). Never sign out of Windows or close the Alliant program inside the remote desktop (closing
-  the browser tab you opened, see Finishing every job, only disconnects it).
+  only sign-in you do). Never sign out of Windows or close the Alliant program inside the remote desktop, and don't
+  close the Alliant browser tab (Finishing every job).
 - Never put prices, balances, invoice amounts or anything from A/R in your note: notes are read in Slack.
 - Work only in the Alliant tab; never open other sites or other browsers, and never open a second Alliant tab when
   one is already open.
@@ -103,8 +103,7 @@ notes rather than guessing. The house rules below still win over the notes.
 
 ## Reporting
 
-**First, close your tabs** (Finishing every job, step 2): the report has to be the very last thing you do, and a
-tab left open piles up on the screen.
+Report every job as soon as it's done (or stopped), then go on to the next one in the same Alliant tab.
 
     curl -s -X POST -H "Authorization: Bearer $(cat ~/.donna_worker_token)" -H "Content-Type: application/json" \
       -d '{"status": "entered", "note": "...", "readback": "..."}' https://chat.snowwhitelinen.com/api/donna/jobs/<id>/result
@@ -126,15 +125,12 @@ what you actually saved.
 ## Finishing every job
 
 1. Leave Alliant on the Customer Center screen.
-2. **Before you send your report** (the report is your last step, so do this first): **close every tab this job
-   opened**, the Alliant tab you opened included (each job gets
-   a new tab group and can't see the last one's tabs, so a tab left open just piles up). Closing the browser tab
-   only disconnects it: Alliant keeps running on the server and the next job reconnects. If you worked in an Alliant
-   tab that was already open (you didn't open it), leave that one open. Never use any Sign out, Log off or Disconnect menu inside the remote desktop.
-   The web page holding the remote desktop asks "Leave site?" when its tab closes, and that stops the close. So
-   first disconnect from the page's own bar **above** the remote screen (the Windows App web client's Disconnect,
-   outside Windows: the session keeps running), then close the tab. If a "Leave site?" box still appears, choose
-   **Leave**. If the tab still won't close, say so in your note.
+2. **Keep the Alliant tab open between jobs**: your session takes job after job in that same tab (one sign-in for
+   the whole batch). Never close it while there may be another job; closing it makes Chrome ask "Leave site?", which
+   blocks the browser until someone clicks it. When the session is done (no job for 15 minutes), disconnect from the
+   page's own bar **above** the remote screen (the Windows App web client's Disconnect, outside Windows: the session
+   and Alliant keep running) and leave the tab as it is. Never use any Sign out, Log off or Disconnect menu inside
+   the remote desktop.
 3. If a reconnect ever lands on a Windows desktop **without Alliant open** (the server ended an idle session), or on
    Alliant's own login box (User / Password) with nothing filled in, don't start or sign in to Alliant yourself:
    report `needs_person` with "Alliant needs signing in" and what you saw. Someone signs in once and leaves Alliant
