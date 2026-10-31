@@ -1431,6 +1431,9 @@ class Desk:
         src, acct = p.get("src_channel", ""), p.get("account", "")
         if mode == "off" or not acct or not customer or (mode != "all" and src not in ("text", "email", "phone")):
             return []
+        held = {x.strip() for x in os.environ.get("STOP_EMAILS_HOLD", "").split(",") if x.strip()}
+        if acct.split("-")[0] in held and src not in ("text", "email", "phone"):
+            return []  # e.g. Safeway (4000): changes we make on our side aren't emailed to the stores
         from .context import company_for
         from .sms import plain
         card = self.alliant.cards.get(acct, {})

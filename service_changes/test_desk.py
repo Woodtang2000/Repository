@@ -745,6 +745,9 @@ def test_change_email_to_the_invoice_contact(monkeypatch):
     assert "Thanks so much" not in sent[0][2]
     assert desk.Desk.change_email(d, {"src_channel": "C123", "account": "5045-1-00000"}, customer)  # a driver's too
     assert "requested through our team" in sent[-1][2]
+    monkeypatch.setenv("STOP_EMAILS_HOLD", "5045")
+    assert desk.Desk.change_email(d, {"src_channel": "DS", "account": "5045-1-00000"}, customer) == []  # held
+    monkeypatch.delenv("STOP_EMAILS_HOLD")
     monkeypatch.setenv("CHANGE_EMAILS", "customer")
     assert desk.Desk.change_email(d, {"src_channel": "C123", "account": "5045-1-00000"}, customer) == []
     monkeypatch.setenv("CHANGE_EMAILS", "off")
