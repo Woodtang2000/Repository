@@ -131,5 +131,11 @@ what you actually saved.
    a new tab group and can't see the last one's tabs, so a tab left open just piles up). Closing the browser tab
    only disconnects it: Alliant keeps running on the server and the next job reconnects. If you worked in an Alliant
    tab that was already open (you didn't open it), leave that one open. Never use any Sign out, Log off or Disconnect menu inside the remote desktop.
-3. If a reconnect ever lands on a Windows desktop **without Alliant open** (the server ended an idle session), don't
-   start Alliant yourself: report `needs_person` with "Alliant isn't open in the remote session".
+   The web page holding the remote desktop asks "Leave site?" when its tab closes, and that stops the close. So
+   first disconnect from the page's own bar **above** the remote screen (the Windows App web client's Disconnect,
+   outside Windows: the session keeps running), then close the tab. If a "Leave site?" box still appears, choose
+   **Leave**. If the tab still won't close, say so in your note.
+3. If a reconnect ever lands on a Windows desktop **without Alliant open** (the server ended an idle session), or on
+   Alliant's own login box (User / Password) with nothing filled in, don't start or sign in to Alliant yourself:
+   report `needs_person` with "Alliant needs signing in" and what you saw. Someone signs in once and leaves Alliant
+   running; then "Donna retry" sends every waiting ticket back to you.

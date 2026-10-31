@@ -192,3 +192,14 @@ def test_only_a_real_sign_in_screen_raises_the_alarm():
     assert SIGNED_OUT.search("Alliant needs signing in") and SIGNED_OUT.search("Got a Pick an account screen")
     assert not SIGNED_OUT.search("Alliant session is open and signed in, but no usual SKU for the mat")
     assert not SIGNED_OUT.search("Logged in fine; the account is on hold")
+
+
+def test_donna_retry_requeues_every_ticket_waiting_on_alliant(tmp_path):
+    jobs, slack, t, readbacks = setup(tmp_path)
+    jobs.queue(tap("UANA"))
+    jobs.next()
+    jobs.result("100.1", "needs_person", "Alliant needs signing in: the login box was empty")
+    assert jobs.load()["jobs"]["100.1"]["status"] == "needs_person"
+    assert jobs.retry_waiting("U4KFSQCDQ") == "Sent 1 ticket back to my queue."
+    assert jobs.next()["id"] == "100.1"
+    assert jobs.retry_waiting("U4KFSQCDQ") == "Nothing is waiting on Alliant."  # working now, not waiting

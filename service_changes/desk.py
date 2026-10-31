@@ -863,6 +863,10 @@ class Desk:
         except Exception:
             pass
         owner = self.is_owner(user)
+        if owner and re.match(r"^\s*donna,?\s+(?:retry|try again|redo)\b", ev.get("text", ""), re.I):
+            # every ticket waiting on Alliant's sign-in, back in her queue at once
+            self.slack.chat_postMessage(channel=channel, text=self.jobs().retry_waiting(user))
+            return "alliant retry"
         cmd = re.match(r"^\s*donna,?\s+(pause|stop|resume|start|go)\b", ev.get("text", ""), re.I)
         if owner and cmd:  # Donna's Alliant work: "Donna pause" / "Donna resume"
             self.slack.chat_postMessage(channel=channel, text=self.jobs().pause(cmd.group(1).lower() in ("pause", "stop")))

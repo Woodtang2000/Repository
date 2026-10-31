@@ -114,6 +114,19 @@ class Jobs:
                                     metadata={"event_type": KIND, "event_payload": {**p, "donna": "queued"}})
         return f"queued {ts}"
 
+    def retry_waiting(self, user: str, days: int = 3) -> str:
+        """"Donna retry": every ticket she sent back because Alliant wasn't signed in or available (the last few
+        days), back in her queue in one go, instead of a tap on each."""
+        with self.lock:
+            data = self.load()
+            ids = [k for k, j in data["jobs"].items() if j["status"] == "needs_person" and SIGNED_OUT.search(j.get("note", ""))
+                   and time.time() - j.get("finished", 0) < days * 86400]
+        n = sum(1 for ts in ids if self.add(ts, user).startswith("queued"))
+        if not n:
+            return "Nothing is waiting on Alliant."
+        return f"Sent {n} ticket{'s' if n != 1 else ''} back to my queue." + (
+            " (I'm paused: say \"Donna resume\" when you're ready.)" if self.load().get("paused") else "")
+
     def pause(self, on: bool) -> str:
         with self.lock:
             data = self.load()
