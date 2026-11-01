@@ -93,8 +93,10 @@ standing order. Your notes have the full steps (course C7, "Creating Special & C
 3. Date: the ticket's delivery date (a credit with no date: today), then **Enter** so Route Settlement and
    Pre-billing get the same date.
 4. Items: **only the Items button** (the customer's own items). Type each ticket line's quantity in its row,
-   **positive numbers only** (on a credit Alliant makes them negative), then **Accept**. Never Add Line, never a SKU
-   that isn't on the account, never NA or AI codes. Delete any item line that isn't on the ticket (Delete Line),
+   **positive numbers only** (on a credit Alliant makes them negative), then **Accept**. A special's line marked
+   "not on the account: one-time line" goes on with **Add Line** instead: transaction code **RS** (rental service),
+   the ticket's SKU, the quantity, Alliant's own unit price, OK. Never NA or AI codes (those add it to their standing
+   inventory), never a SKU the ticket doesn't name. Delete any item line that isn't on the ticket (Delete Line),
    including automatic RC/ZRC replenishment lines. Never change a price.
 5. **Charges** (special invoices): click the **Charges** button so the customer's own standing charges go on, as on
    their regular invoice: fuel charge, service charge, inventory maintenance charge and the like. Keep those lines;
@@ -106,8 +108,10 @@ standing order. Your notes have the full steps (course C7, "Creating Special & C
 8. Check it: **Delivery → Invoices / Delivery Tickets**, the date, **Refresh** (with Include Non-Printed Invoices if
    needed): the new S (or C) number is there for this customer. Don't print from this list: it brings up every ticket
    for the day.
-9. **The PDF for Kirk** (special invoices only): saving with Print invoice checked opens the Windows print box for
-   just this invoice. Choose **Microsoft Print to PDF** (never a real or redirected printer) and save it as the
+9. **The copy for Kirk** (special invoices only): saving prints just this invoice (Print invoice checked, or Alliant
+   prints a special on its own) and opens the Windows print box. If it lists a printer named for the **Depot**
+   (where Kirk pulls the routes), print to that and you're done: say "printed at the depot" in your note. Otherwise
+   choose **Microsoft Print to PDF** (never any other real or redirected printer) and save it as the
    invoice number (S0148777.pdf) in **Remote Desktop Virtual Drive → Downloads** (under This PC / Redirected drives):
    a file saved there downloads to this Mac through Chrome. (A **Remote Desktop Virtual Printer**, if offered, works
    too.) Then **uncheck Print invoice** again (the checkboxes are remembered for the next special). Then send it:

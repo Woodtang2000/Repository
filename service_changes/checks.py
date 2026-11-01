@@ -80,6 +80,7 @@ class CheckedChange:
     frequency_now: str | None = None  # Alliant code for the matched item
     already_done: bool = False
     current: int | None = None  # autocount (per delivery) where known; Alliant inventory otherwise
+    one_time_sku: str | None = None  # a special's item that isn't on the account: its SKU, for a one-time line
     inventory: int | None = None  # set only when Alliant inventory differs from the autocount
     new_total: int | None = None
     questions: list[str] = field(default_factory=list)
@@ -283,8 +284,10 @@ INVOICES = (Category.special_order, Category.credit_invoice)
 
 
 def _check_invoice(parsed: ParsedMessage, alliant: Alliant, who: str) -> Result:
-    """A special (S) or credit (C) invoice: one-time lines, only items already on the account (at Alliant's own
-    price), nothing about the standing order changes. Scott, 2026-11-01."""
+    """A special (S) or credit (C) invoice: one-time lines at Alliant's own price; nothing about the standing order
+    changes. Items on the account come from the Items button; on a special, an item that isn't on the account can be a
+    one-time line (Add Line, rental service) once they say yes to it. A credit only ever uses the account's items.
+    Scott, 2026-11-01."""
     out = []
     items = alliant.items.get(parsed.account_number or "", {})
     for ch in parsed.changes:
@@ -292,9 +295,21 @@ def _check_invoice(parsed: ParsedMessage, alliant: Alliant, who: str) -> Result:
         found = current_qty(alliant, parsed.account_number, ch.alliant_item or ch.item) if items else None
         if found:
             cc.alliant_item = found[0]
+        elif parsed.account_number and parsed.category == Category.special_order:
+            usual = None if bare(alliant, ch.item) else usual_sku(alliant, ch.item)
+            if not usual:  # which one exactly (color, size), the same question a new item gets
+                options = sku_choices(alliant, ch.item, limit=6)
+                cc.questions.append((_which_one(ch.item, alliant, items, who) or _which_color(ch.item, options, items, who))
+                                    if len(options) > 1 else f"Which {ch.item} exactly? I can't find one by that name in Alliant.")
+            else:
+                cc.one_time_sku = usual[0]
+                cc.alliant_item = usual[1]
+                if not ch.one_time:
+                    cc.questions.append(f"{who} doesn't have {ch.item} on their account. Add {ch.quantity or 'them'} "
+                                        f"{usual[1]} ({usual[0]}) as a one-time item on this special?")
         elif parsed.account_number and items:
-            cc.questions.append(f"{who} doesn't have {ch.item} on their account. A special or credit invoice only uses "
-                                "items already on the account; the office can add it first. Which of their items?")
+            cc.questions.append(f"{who} doesn't have {ch.item} on their account, and a credit only uses items already "
+                                "on the account. Which of their items?")
         if not ch.quantity:
             cc.questions.append(f"How many {cc.alliant_item or ch.item}?")
         out.append(cc)
@@ -747,8 +762,10 @@ def ticket(result: Result, alliant: Alliant, with_readback: bool = True) -> str:
             if not cc.change.item:
                 continue
             sku = alliant.sku.get((acct, cc.alliant_item)) if cc.alliant_item else None
+            one = getattr(cc, "one_time_sku", None)
             out.append(f"• *{cc.change.quantity or '?'}*  {cc.alliant_item or cc.change.item + ' _(not on account)_'}"
-                       + (f" `{sku}`" if sku else ""))
+                       + (f" `{sku or one}`" if (sku or one) else "")
+                       + (" _(not on the account: one-time line, Add Line, RS)_" if one and not sku else ""))
         out.append("_Alliant's own prices; nothing about the standing order changes._")
         if result.questions:
             out += [f"❓ {q}" for q in result.questions]

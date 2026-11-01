@@ -692,8 +692,14 @@ def test_special_and_credit_invoices():
     assert not r.questions and "🧾 *Special invoice (S)* · delivery Thursday · reason: extra delivery" in t
     assert "• *50*  TOWEL BAR MOP GOLD STRIPE `5-01-01`" in t and "→" not in t  # one-time: no standing change
     assert readback(r) == "✅ 5040-1-00000 CHILIS – special delivery of 50 Towel Bar Mop Gold Stripe on Thursday"
+    a.sku_counts = {("5-22-01", "APRON WHITE BIB"): 90}
     r = check(p(Category.special_order, [Change(action=Action.add, item="aprons", quantity=20)]), a)
-    assert any("only uses items already on the account" in q for q in r.questions)
+    assert any("doesn't have aprons on their account. Add 20 APRON WHITE BIB (5-22-01) as a one-time item" in q for q in r.questions)
     assert any("What day" in q for q in r.questions)
+    r = check(p(Category.special_order, [Change(action=Action.add, item="aprons", quantity=20, one_time=True)],
+                invoice_date="Tuesday"), a)
+    assert not r.questions and "• *20*  APRON WHITE BIB `5-22-01` _(not on the account: one-time line, Add Line, RS)_" in ticket(r, a)
+    r = check(p(Category.credit_invoice, [Change(action=Action.add, item="aprons", quantity=2)]), a)
+    assert any("a credit only uses items already on the account" in q for q in r.questions)
     r = check(p(Category.credit_invoice, [Change(action=Action.add, item="bar mops", quantity=10)], invoice_reason="shorted"), a)
     assert not r.questions and "Credit invoice (C)" in ticket(r, a) and "credit for 10" in readback(r)

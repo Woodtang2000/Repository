@@ -49,6 +49,9 @@ class Change(BaseModel):
     keep_inventory: bool = Field(False, description=(
         "For a stop: True when they say to leave the inventory as it is for now ('leave it', 'keep the inventory', "
         "'don't pick them up yet'). Inventory to zero or cut down is its own inventory change instead."))
+    one_time: bool = Field(False, description=(
+        "special_order only: True when they said yes to adding an item that isn't on the account as a one-time line on "
+        "the special ('yes, add it just this once', 'one time is fine')."))
     fraction: Optional[float] = Field(None, description=(
         "A share of what's there now instead of a number: 'by half' / 'cut it in half' = 0.5, 'by a third' = 0.33, "
         "'a quarter' = 0.25, with action decrease (quantity null). The office works out the number."))
