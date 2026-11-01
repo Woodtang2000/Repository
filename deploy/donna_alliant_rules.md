@@ -89,24 +89,28 @@ standing order. Your notes have the full steps (course C7, "Creating Special & C
 
 1. **Delivery → Special Invoice/Credit.** Customer: the ticket's account; check the bold name matches.
 2. Invoice number box: type **S** (special) or **C** (credit), then **Tab** for the next number. Route: leave the
-   customer's. Reason: the closest one to the ticket's reason (a call-in or extra delivery: "Call in customer").
+   customer's. Reason: the closest one to the ticket's reason (a call-in or extra delivery: "5 Special Delivery").
 3. Date: the ticket's delivery date (a credit with no date: today), then **Enter** so Route Settlement and
    Pre-billing get the same date.
 4. Items: **only the Items button** (the customer's own items). Type each ticket line's quantity in its row,
    **positive numbers only** (on a credit Alliant makes them negative), then **Accept**. Never Add Line, never a SKU
-   that isn't on the account, never NA or AI codes. Delete any line that isn't on the ticket (Delete Line), including
-   any automatic RC/ZRC or charge line Alliant adds. Never change a price or a charge.
-5. Top checkboxes: **Finalize unchecked** (a special goes to the driver's handheld for that day). Leave the others as
-   they are.
-6. **Save.** If Alliant says it's out of balance, type the subtotal, tax and total exactly as it shows them into the
+   that isn't on the account, never NA or AI codes. Delete any item line that isn't on the ticket (Delete Line),
+   including automatic RC/ZRC replenishment lines. Never change a price.
+5. **Charges** (special invoices): click the **Charges** button so the customer's own standing charges go on, as on
+   their regular invoice: fuel charge, service charge, inventory maintenance charge and the like. Keep those lines;
+   never add a charge the customer doesn't have, never change an amount. (A credit gets no charges.)
+6. Top checkboxes: **Finalize unchecked** (a special goes to the driver's handheld for that day). On a special, check
+   **Print invoice** so saving prints just this one invoice (see step 9). Leave the others as they are.
+7. **Save.** If Alliant says it's out of balance, type the subtotal, tax and total exactly as it shows them into the
    verification boxes, and save.
-7. Check it: **Delivery → Invoices / Delivery Tickets**, the date, **Refresh**: the new S (or C) number is there for
-   this customer.
-8. **The PDF for Kirk** (special invoices only): on that Invoices / Delivery Tickets screen, select the new S invoice
-   and print it. In the Windows print box choose **Microsoft Print to PDF** (never a real or redirected printer). In
-   the Save box, save it as the invoice number (S0148777.pdf) in **Remote Desktop Virtual Drive → Downloads** (under
-   This PC / Redirected drives): a file saved there downloads to this Mac through Chrome. (If the box offers a
-   **Remote Desktop Virtual Printer**, that works too: it downloads the PDF directly.) Then send it:
+8. Check it: **Delivery → Invoices / Delivery Tickets**, the date, **Refresh** (with Include Non-Printed Invoices if
+   needed): the new S (or C) number is there for this customer. Don't print from this list: it brings up every ticket
+   for the day.
+9. **The PDF for Kirk** (special invoices only): saving with Print invoice checked opens the Windows print box for
+   just this invoice. Choose **Microsoft Print to PDF** (never a real or redirected printer) and save it as the
+   invoice number (S0148777.pdf) in **Remote Desktop Virtual Drive → Downloads** (under This PC / Redirected drives):
+   a file saved there downloads to this Mac through Chrome. (A **Remote Desktop Virtual Printer**, if offered, works
+   too.) Then **uncheck Print invoice** again (the checkboxes are remembered for the next special). Then send it:
 
        F=$(find ~/Downloads -name '*.pdf' -mmin -5 | xargs ls -t | head -1); curl -s -X POST \
          -H "Authorization: Bearer $(cat ~/.donna_worker_token)" -H "Content-Type: application/pdf" \
@@ -115,7 +119,7 @@ standing order. Your notes have the full steps (course C7, "Creating Special & C
    It goes to Kirk in Slack, who pulls the routes and sends it to the customer. If there's no Remote Desktop Virtual
    Drive to save to, or no PDF comes down to ~/Downloads, don't print anything else: say so in your note, with what
    the Save box offered (Kirk is still told to print it from Alliant).
-9. Report `entered` with the invoice number and its lines in your note, never amounts or prices.
+10. Report `entered` with the invoice number and its lines in your note, never amounts or prices.
 
 A credit is only from a ticket Scott or Bill asked for ("Scott, by voice" or "Bill, …" on it); anyone else's credit
 ticket: `needs_person`. Anything unclear (a line that isn't on the account, no quantity, no date): `ask`.
@@ -134,7 +138,8 @@ ticket: `needs_person`. Anything unclear (a line that isn't on the account, no q
 - Work only in the Alliant tab; never open other sites or other browsers, and never open a second Alliant tab when
   one is already open.
 - If a ticket has open questions (❓), a ⚠️ warning, or asks for something these rules don't cover (putting an account
-  or item on hold or taking it off, a special order, a new customer, pricing): `needs_person` with why.
+  or item on hold or taking it off, a new customer, pricing): `needs_person` with why. Special and credit invoices
+  are covered above.
 - A ⏸️ "on hold" note in a ticket comes from the latest Alliant export (up to an hour old). Check the hold on Alliant's own screen: if the
   account or item is no longer on hold, go ahead with the item change. If it is still on hold, `needs_person`. Never
   change a hold yourself.
