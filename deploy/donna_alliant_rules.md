@@ -46,7 +46,12 @@ notes rather than guessing. The house rules below still win over the notes.
    Stop and report `needs_person` with "Alliant needs signing in" if a field is empty, it asks for a code, a phone
    approval or any two-step check, "Pick an account" needs anything typed, the sign-in fails or asks again, or the
    screen is anything else you don't recognize.
-2. Customer Center → Go To Customer: Account, Branch, Customer from the job. Wearer changes: Go To Wearer.
+2. Customer Center → Go To Customer, with the job's account split into its three boxes (1205-1-00004 → Account
+   **1205**, Branch **1**, Customer **00004**, all five digits, leading zeros kept). The boxes still hold the last
+   account you opened, so for each box: click into it, select everything in it (Ctrl+A), then type the new value.
+   **Before pressing Enter, read all three boxes back** against the job; only then Enter. Never type the whole
+   "1205-1-00004" into one box. Wearer changes: Go To Wearer. (Same split on the special invoice screen's Customer
+   field, or use its search, Alt+R, by account number.)
 3. Check the header: the account number and the customer name must match the ticket. If not: `needs_person`.
 4. Make exactly the ticket's changes, nothing else:
    - **Customer Items**: inventory, autocount, delivery frequency/days, New Item, Stop Item.
