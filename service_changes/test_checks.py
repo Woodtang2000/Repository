@@ -689,7 +689,7 @@ def test_special_and_credit_invoices():
     r = check(p(Category.special_order, [Change(action=Action.add, item="bar mops", quantity=50)], invoice_date="Thursday",
                 invoice_reason="extra delivery"), a)
     t = ticket(r, a)
-    assert not r.questions and "🧾 *Special invoice (S)* · delivery Thursday · reason: extra delivery" in t
+    assert not r.questions and "🧾 *Special invoice (S)* · delivery Thursday · reason: *S- Extra Delivery* · _(extra delivery)_" in t
     assert "• *50*  TOWEL BAR MOP GOLD STRIPE `5-01-01`" in t and "→" not in t  # one-time: no standing change
     assert readback(r) == "✅ 5040-1-00000 CHILIS – special delivery of 50 Towel Bar Mop Gold Stripe on Thursday"
     a.sku_counts = {("5-22-01", "APRON WHITE BIB"): 90}
@@ -702,7 +702,9 @@ def test_special_and_credit_invoices():
     r = check(p(Category.credit_invoice, [Change(action=Action.add, item="aprons", quantity=2)]), a)
     assert any("a credit only uses items already on the account" in q for q in r.questions)
     r = check(p(Category.credit_invoice, [Change(action=Action.add, item="bar mops", quantity=10)], invoice_reason="shorted"), a)
-    assert not r.questions and "Credit invoice (C)" in ticket(r, a) and "credit for 10" in readback(r)
+    assert not r.questions and "reason: *C- Short / Missed*" in ticket(r, a) and "credit for 10" in readback(r)
+    r = check(p(Category.credit_invoice, [Change(action=Action.add, item="bar mops", quantity=10)]), a)
+    assert any(q.startswith("What's the credit for") for q in r.questions)  # a credit always says why
 
 
 def test_reason_names_match_alliants_lists():
