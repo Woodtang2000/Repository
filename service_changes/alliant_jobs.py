@@ -178,7 +178,7 @@ class Jobs:
             self.desk.slack.chat_postMessage(channel=self.desk.desk_id, thread_ts=job_id, text=f"🤖 Donna: {note}"[:3000],
                                              unfurl_links=False)
         if job["status"] == "entered" and "Special invoice (S)" in body(t) and not job.get("pdf"):
-            to = os.environ.get("SPECIALS_TO", "U09B5C91QKG")
+            to = os.environ.get("SPECIALS_TO", "U5WUV01JA")
             try:  # the special is in Alliant but its PDF didn't come through: Kirk still needs to know
                 self.desk.slack.chat_postMessage(channel=to, text=f"🧾 Donna made a special invoice for *{meta(t).get('account', '')}*"
                                                  f" but couldn't send its PDF. Her note: {note[:400]}\nPlease print it from "
@@ -232,7 +232,7 @@ class Jobs:
         p = (meta(t) or {}) if t else {}
         acct = p.get("account", "")
         name_ = next((c.name for c in getattr(self.desk.alliant, "customers", []) if c.account == acct), "")
-        to = os.environ.get("SPECIALS_TO", "U09B5C91QKG")
+        to = os.environ.get("SPECIALS_TO", "U5WUV01JA")
         text = (f"🧾 *Special invoice {name.rsplit('.', 1)[0]}* for *{acct} {name_}*, made by Donna"
                 f" (asked by {job.get('asked_by') or 'the office'}). It's on the route for its delivery date; "
                 "here's the PDF to send to the customer.")

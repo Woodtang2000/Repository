@@ -216,9 +216,9 @@ def test_a_special_invoice_pdf_goes_to_kirk(tmp_path):
     jobs.queue(tap("UANA"))
     jobs.next()
     assert jobs.attach("100.1", b"<html>", "S211.pdf") == "not a PDF"
-    assert jobs.attach("100.1", b"%PDF-1.4 ...", "S211.pdf") == "pdf sent to U09B5C91QKG"
+    assert jobs.attach("100.1", b"%PDF-1.4 ...", "S211.pdf") == "pdf sent to U5WUV01JA"
     [u] = uploads
     assert u["channel"] == "DKIRK" and u["filename"] == "S211.pdf" and u["content"].startswith(b"%PDF")
     assert any("Special invoice S211" in text and "MIDAS #4" in text for _, text in slack.thread)
-    assert ("100.1", "🧾 The invoice PDF (S211.pdf) went to <@U09B5C91QKG>.") in slack.thread
+    assert ("100.1", "🧾 The invoice PDF (S211.pdf) went to <@U5WUV01JA>.") in slack.thread
     assert jobs.load()["jobs"]["100.1"]["pdf"] == "S211.pdf"
