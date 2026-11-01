@@ -185,6 +185,11 @@ class Jobs:
                                                  "Alliant (Delivery → Invoices / Delivery Tickets).")
             except Exception as e:
                 print(time.strftime("%H:%M"), "specials: Kirk not told:", e, flush=True)
+        if job["status"] == "entered" and "Special invoice (S)" in body(t):
+            try:
+                self.tell_driver(t, job.get("pdf") or note)
+            except Exception as e:
+                print(time.strftime("%H:%M"), "specials: driver not told:", e, flush=True)
         if job["status"] == "entered":
             if readback.strip():  # what she actually did on Alliant's screen beats the ticket's (last night's data)
                 p = dict(meta(t))
@@ -247,6 +252,27 @@ class Jobs:
         self.desk.slack.chat_postMessage(channel=self.desk.desk_id, thread_ts=job_id,
                                          text=f"🧾 The invoice PDF ({name}) went to <@{to}>.")
         return f"pdf sent to {to}"
+
+    def tell_driver(self, t: dict, said: str) -> bool:
+        """A special she made: the route's driver hears what's coming and when, in their route channel, so they and
+        Kirk (who pulls it) both know. Branch 1 routes have channels (route-N)."""
+        from .desk import meta
+        acct = (meta(t) or {}).get("account", "")
+        cust = next((c for c in getattr(self.desk.alliant, "customers", []) if c.account == acct), None)
+        channels = getattr(self.desk, "channels", {}) or {}
+        where = channels.get(f"route-{cust.route}") if cust and acct.split("-")[1:2] == ["1"] else None
+        if not where:
+            return False
+        text = body(t)
+        day = re.search(r"delivery ([^·\n]+?)\s*(?:·|\n|$)", text)
+        lines = [re.sub(r"[*`]", "", m.group(1)).strip() for m in re.finditer(r"^•\s*(.+)$", text, re.M)]
+        number = re.search(r"\b(S\d{2,})\b", said or "")
+        self.desk.slack.chat_postMessage(
+            channel=where, unfurl_links=False,
+            text=f"🧾 *Special for {cust.name}* ({acct})" + (f", invoice {number.group(1)}" if number else "")
+                 + f": going out *{day.group(1).strip() if day else 'on its delivery date'}*.\n"
+                 + "\n".join(f"• {ln}" for ln in lines) + "\nKirk is pulling it.")
+        return True
 
     def signed_out(self, job_id: str = "") -> None:
         """Alliant signed her out: say so where people will see it (the office channel, and Scott directly), at most once

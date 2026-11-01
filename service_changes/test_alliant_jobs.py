@@ -222,3 +222,16 @@ def test_a_special_invoice_pdf_goes_to_kirk(tmp_path):
     assert any("Special invoice S211" in text and "MIDAS #4" in text for _, text in slack.thread)
     assert ("100.1", "🧾 The invoice PDF (S211.pdf) went to <@U5WUV01JA>.") in slack.thread
     assert jobs.load()["jobs"]["100.1"]["pdf"] == "S211.pdf"
+
+
+def test_the_routes_driver_hears_about_a_special(tmp_path):
+    jobs, slack, t, readbacks = setup(tmp_path)
+    t["attachments"] = attachment("*1205-1-00004* MIDAS #4\n🧾 *Special invoice (S)* · delivery Thursday · reason: call-in\n"
+                                  "• *50*  TOWEL BAR MOP GOLD STRIPE `5-01-01`", button=False)
+    jobs.desk.alliant = SimpleNamespace(customers=[SimpleNamespace(account="1205-1-00004", name="MIDAS #4", route="3")])
+    jobs.desk.channels = {"route-3": "CR3"}
+    jobs.queue(tap("UANA"))
+    jobs.next()
+    jobs.result("100.1", "entered", "Made special invoice S211 for Midas.", readback="50 bar mops on Thursday")
+    posted = [text for ch, text in slack.thread if text.startswith("🧾 *Special for")]
+    assert posted and "invoice S211: going out *Thursday*" in posted[0] and "• 50  TOWEL BAR MOP GOLD STRIPE 5-01-01" in posted[0]
