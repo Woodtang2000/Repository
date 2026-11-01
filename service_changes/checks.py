@@ -303,12 +303,19 @@ INCOMPLETE_CODES = [("CL Customer Closed", r"closed|locked|not open"),
                     ("TD Truck / Driver Issue", r"truck|broke|breakdown|sick|ran out of time|driver")]
 
 
+# Their numbers in Alliant's list (Scott, 2026-11-01): specials 1-6, credits 10-15
+REASON_NUMBERS = {"S- Extra Delivery": 1, "S- Call-in Order": 2, "S- Event": 3, "S- Make-good / Short": 4,
+                  "S- New Customer Start": 5, "S- Counter Sale": 6, "C- Short / Missed": 10, "C- Damaged / Stained": 11,
+                  "C- Billing Error": 12, "C- Loss Charge Reversal": 13, "C- Returned / Stopped Items": 14,
+                  "C- Goodwill": 15}
+
+
 def reason_for(kind: Category, said: str | None) -> str:
-    """The Alliant reason name for a special or credit, from what they said ("" when a credit says nothing)."""
-    for name, pat in (SPECIAL_REASONS if kind == Category.special_order else CREDIT_REASONS):
-        if said and pat and re.search(pat, said, re.I):
-            return name
-    return "S- Extra Delivery" if kind == Category.special_order else ""
+    """The Alliant reason for a special or credit, number and name ("4 S- Make-good / Short"), from what they said
+    ("" when a credit says nothing)."""
+    name = next((n for n, pat in (SPECIAL_REASONS if kind == Category.special_order else CREDIT_REASONS)
+                 if said and pat and re.search(pat, said, re.I)), "S- Extra Delivery" if kind == Category.special_order else "")
+    return f"{REASON_NUMBERS[name]} {name}" if name else ""
 
 
 def incomplete_code(said: str | None) -> str:

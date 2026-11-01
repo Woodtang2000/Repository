@@ -689,7 +689,7 @@ def test_special_and_credit_invoices():
     r = check(p(Category.special_order, [Change(action=Action.add, item="bar mops", quantity=50)], invoice_date="Thursday",
                 invoice_reason="extra delivery"), a)
     t = ticket(r, a)
-    assert not r.questions and "🧾 *Special invoice (S)* · delivery Thursday · reason: *S- Extra Delivery* · _(extra delivery)_" in t
+    assert not r.questions and "🧾 *Special invoice (S)* · delivery Thursday · reason: *1 S- Extra Delivery* · _(extra delivery)_" in t
     assert "• *50*  TOWEL BAR MOP GOLD STRIPE `5-01-01`" in t and "→" not in t  # one-time: no standing change
     assert readback(r) == "✅ 5040-1-00000 CHILIS – special delivery of 50 Towel Bar Mop Gold Stripe on Thursday"
     a.sku_counts = {("5-22-01", "APRON WHITE BIB"): 90}
@@ -702,7 +702,7 @@ def test_special_and_credit_invoices():
     r = check(p(Category.credit_invoice, [Change(action=Action.add, item="aprons", quantity=2)]), a)
     assert any("a credit only uses items already on the account" in q for q in r.questions)
     r = check(p(Category.credit_invoice, [Change(action=Action.add, item="bar mops", quantity=10)], invoice_reason="shorted"), a)
-    assert not r.questions and "reason: *C- Short / Missed*" in ticket(r, a) and "credit for 10" in readback(r)
+    assert not r.questions and "reason: *10 C- Short / Missed*" in ticket(r, a) and "credit for 10" in readback(r)
     r = check(p(Category.credit_invoice, [Change(action=Action.add, item="bar mops", quantity=10)]), a)
     assert any(q.startswith("What's the credit for") for q in r.questions)  # a credit always says why
 
@@ -710,12 +710,12 @@ def test_special_and_credit_invoices():
 def test_reason_names_match_alliants_lists():
     from .checks import incomplete_code, reason_for
     from .schema import Category
-    assert reason_for(Category.special_order, None) == "S- Extra Delivery"
-    assert reason_for(Category.special_order, "for their golf tournament") == "S- Event"
-    assert reason_for(Category.special_order, "we shorted them Tuesday") == "S- Make-good / Short"
-    assert reason_for(Category.credit_invoice, "shorted 10 bar mops") == "C- Short / Missed"
-    assert reason_for(Category.credit_invoice, "billed as lost but they turned them in") == "C- Loss Charge Reversal"
-    assert reason_for(Category.credit_invoice, "stained napkins") == "C- Damaged / Stained"
+    assert reason_for(Category.special_order, None) == "1 S- Extra Delivery"
+    assert reason_for(Category.special_order, "for their golf tournament") == "3 S- Event"
+    assert reason_for(Category.special_order, "we shorted them Tuesday") == "4 S- Make-good / Short"
+    assert reason_for(Category.credit_invoice, "shorted 10 bar mops") == "10 C- Short / Missed"
+    assert reason_for(Category.credit_invoice, "billed as lost but they turned them in") == "13 C- Loss Charge Reversal"
+    assert reason_for(Category.credit_invoice, "stained napkins") == "11 C- Damaged / Stained"
     assert reason_for(Category.credit_invoice, None) == ""
     assert incomplete_code("The Kannery is closed, redating to Thursday") == "CL Customer Closed"
     assert incomplete_code("gate was locked, no access") == "CL Customer Closed" or incomplete_code("no access at the gate") == "NA No Access"

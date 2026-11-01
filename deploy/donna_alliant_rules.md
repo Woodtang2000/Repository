@@ -89,8 +89,9 @@ standing order. Your notes have the full steps (course C7, "Creating Special & C
 
 1. **Delivery → Special Invoice/Credit.** Customer: the ticket's account; check the bold name matches.
 2. Invoice number box: type **S** (special) or **C** (credit), then **Tab** for the next number. Route: leave the
-   customer's. Reason: the one the ticket names (its "reason:", e.g. **S- Extra Delivery**, **C- Short / Missed**),
-   exactly as it is in Alliant's list. If the ticket names none, or Alliant has no such reason: `ask`.
+   customer's. Reason: the one the ticket names, by its number and name (its "reason:", e.g. **1 S- Extra
+   Delivery**, **10 C- Short / Missed**): specials are 1-6, credits 10-15. If the ticket names none, or Alliant's
+   list doesn't have that number and name: `ask`.
 3. Date: the ticket's delivery date (a credit with no date: today), then **Enter** so Route Settlement and
    Pre-billing get the same date.
 4. Items: **only the Items button** (the customer's own items). Type each ticket line's quantity in its row,
