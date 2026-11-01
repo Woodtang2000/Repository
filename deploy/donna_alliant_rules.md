@@ -103,16 +103,18 @@ standing order. Your notes have the full steps (course C7, "Creating Special & C
 7. Check it: **Delivery → Invoices / Delivery Tickets**, the date, **Refresh**: the new S (or C) number is there for
    this customer.
 8. **The PDF for Kirk** (special invoices only): on that Invoices / Delivery Tickets screen, select the new S invoice
-   and print it. In the Windows print box choose the **Remote Desktop Virtual Printer** (the web page's own PDF
-   printer; never a real printer), print, and let Chrome download the PDF. Then send it, naming it by its invoice
-   number:
+   and print it. In the Windows print box choose **Microsoft Print to PDF** (never a real or redirected printer). In
+   the Save box, save it as the invoice number (S0148777.pdf) in **Remote Desktop Virtual Drive → Downloads** (under
+   This PC / Redirected drives): a file saved there downloads to this Mac through Chrome. (If the box offers a
+   **Remote Desktop Virtual Printer**, that works too: it downloads the PDF directly.) Then send it:
 
        F=$(find ~/Downloads -name '*.pdf' -mmin -5 | xargs ls -t | head -1); curl -s -X POST \
          -H "Authorization: Bearer $(cat ~/.donna_worker_token)" -H "Content-Type: application/pdf" \
-         --data-binary @"$F" "https://chat.snowwhitelinen.com/api/donna/jobs/<id>/file?name=S211.pdf"
+         --data-binary @"$F" "https://chat.snowwhitelinen.com/api/donna/jobs/<id>/file?name=S0148777.pdf"
 
-   It goes to Kirk in Slack, who pulls the routes and sends it to the customer. If there's no such printer or no PDF
-   comes down, don't print anything else: say so in your note (Kirk is still told to print it from Alliant).
+   It goes to Kirk in Slack, who pulls the routes and sends it to the customer. If there's no Remote Desktop Virtual
+   Drive to save to, or no PDF comes down to ~/Downloads, don't print anything else: say so in your note, with what
+   the Save box offered (Kirk is still told to print it from Alliant).
 9. Report `entered` with the invoice number and its lines in your note, never amounts or prices.
 
 A credit is only from a ticket Scott or Bill asked for ("Scott, by voice" or "Bill, …" on it); anyone else's credit
