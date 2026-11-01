@@ -1183,6 +1183,16 @@ class Desk:
                 self.reply(200, json.dumps({"job": job}).encode())
 
             def do_POST(self):
+                f = re.fullmatch(r"/jobs/([\d.]+)/file\?name=([\w.-]{1,60})", self.path)
+                if f:  # the PDF of a special invoice she made: to Kirk in Slack (alliant_jobs.attach)
+                    n = int(self.headers.get("Content-Length") or 0)
+                    try:
+                        out = desk.jobs().attach(f.group(1), self.rfile.read(min(n, 6_000_000)), f.group(2))
+                    except Exception as e:
+                        print(time.strftime("%H:%M"), "alliant jobs file error:", e, flush=True)
+                        return self.reply(500, b"{}")
+                    print(time.strftime("%H:%M"), "alliant jobs file:", f.group(1), out, flush=True)
+                    return self.reply(200, json.dumps({"ok": out}).encode())
                 m = re.fullmatch(r"/jobs/([\d.]+)/result", self.path)
                 if m:  # Donna's workstation reporting a finished job
                     try:

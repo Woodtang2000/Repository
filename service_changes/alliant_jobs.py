@@ -177,6 +177,14 @@ class Jobs:
         if note:
             self.desk.slack.chat_postMessage(channel=self.desk.desk_id, thread_ts=job_id, text=f"🤖 Donna: {note}"[:3000],
                                              unfurl_links=False)
+        if job["status"] == "entered" and "Special invoice (S)" in body(t) and not job.get("pdf"):
+            to = os.environ.get("SPECIALS_TO", "U09B5C91QKG")
+            try:  # the special is in Alliant but its PDF didn't come through: Kirk still needs to know
+                self.desk.slack.chat_postMessage(channel=to, text=f"🧾 Donna made a special invoice for *{meta(t).get('account', '')}*"
+                                                 f" but couldn't send its PDF. Her note: {note[:400]}\nPlease print it from "
+                                                 "Alliant (Delivery → Invoices / Delivery Tickets).")
+            except Exception as e:
+                print(time.strftime("%H:%M"), "specials: Kirk not told:", e, flush=True)
         if job["status"] == "entered":
             if readback.strip():  # what she actually did on Alliant's screen beats the ticket's (last night's data)
                 p = dict(meta(t))
@@ -206,6 +214,39 @@ class Jobs:
                                     attachments=restyle(t, GOLD, status="🙋 Donna needs a person for this one (see thread)"),
                                     metadata={"event_type": KIND, "event_payload": {**p, "donna": "needs_person"}})
         return "back to the office"
+
+    def attach(self, job_id: str, data: bytes, name: str) -> str:
+        """The PDF of a special invoice she just made goes to whoever pulls the routes (SPECIALS_TO, Kirk Kosiek), who
+        sends it on to the customer; a note in the ticket's thread says so. Only a PDF, only for a job she's on."""
+        from .desk import meta
+        with self.lock:
+            data_ = self.load()
+            job = data_["jobs"].get(job_id)
+            if not job or job["status"] != "working":
+                return "unknown job"
+        if not data.startswith(b"%PDF"):
+            return "not a PDF"
+        r = self.desk.slack.conversations_history(channel=self.desk.desk_id, latest=job_id, inclusive=True, limit=1,
+                                                   include_all_metadata=True)
+        t = next((m for m in r.get("messages", []) if m["ts"] == job_id), None)
+        p = (meta(t) or {}) if t else {}
+        acct = p.get("account", "")
+        name_ = next((c.name for c in getattr(self.desk.alliant, "customers", []) if c.account == acct), "")
+        to = os.environ.get("SPECIALS_TO", "U09B5C91QKG")
+        text = (f"🧾 *Special invoice {name.rsplit('.', 1)[0]}* for *{acct} {name_}*, made by Donna"
+                f" (asked by {job.get('asked_by') or 'the office'}). It's on the route for its delivery date; "
+                "here's the PDF to send to the customer.")
+        first = self.desk.slack.chat_postMessage(channel=to, text=text)
+        self.desk.slack.files_upload_v2(channel=first.get("channel") or to, thread_ts=first.get("ts"), content=data,
+                                        filename=name, title=f"Special invoice {acct} {name_}".strip())
+        with self.lock:
+            data_ = self.load()
+            if job_id in data_["jobs"]:
+                data_["jobs"][job_id]["pdf"] = name
+                self.save(data_)
+        self.desk.slack.chat_postMessage(channel=self.desk.desk_id, thread_ts=job_id,
+                                         text=f"🧾 The invoice PDF ({name}) went to <@{to}>.")
+        return f"pdf sent to {to}"
 
     def signed_out(self, job_id: str = "") -> None:
         """Alliant signed her out: say so where people will see it (the office channel, and Scott directly), at most once

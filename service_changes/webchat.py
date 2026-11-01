@@ -554,6 +554,10 @@ def make_handler(chat: Chat, public_url: str):
             m = re.fullmatch(r"/api/donna/jobs/([\d.]+)/result", path)
             if m:  # Donna's workstation: a finished Alliant job
                 return self._worker("POST", f"/jobs/{m.group(1)}/result")
+            m = re.fullmatch(r"/api/donna/jobs/([\d.]+)/file", path)
+            if m:  # Donna's workstation: the PDF of a special invoice she made, for Kirk
+                name = re.sub(r"[^\w.-]", "", (parse_qs(urlparse(self.path).query).get("name") or ["invoice.pdf"])[0])[:60]
+                return self._worker("FILE", f"/jobs/{m.group(1)}/file?name={name or 'invoice.pdf'}")
             if path != "/api/chat":
                 return self._send(404, b"not found", "text/plain")
             try:
@@ -654,12 +658,17 @@ def make_handler(chat: Chat, public_url: str):
                     return self._send(404, b"not one of the notes", "text/plain")
                 with open(os.path.join(root, local), "rb") as f:
                     return self._send(200, f.read(), "text/markdown; charset=utf-8")
-            data = None
+            data, ctype = None, "application/json"
             if method == "POST":
                 n = min(int(self.headers.get("Content-Length") or 0), 20000)
                 data = self.rfile.read(n) or b"{}"
+            if method == "FILE":  # a PDF, up to 6 MB
+                n = int(self.headers.get("Content-Length") or 0)
+                if n > 6_000_000:
+                    return self._send(413, b'{"error":"too large"}', "application/json")
+                data, method, ctype = self.rfile.read(n), "POST", "application/pdf"
             req = urllib.request.Request(f"http://127.0.0.1:{os.environ.get('DESK_VOICE_PORT', '8091')}{local}", data=data,
-                                         method=method, headers={"Content-Type": "application/json"})
+                                         method=method, headers={"Content-Type": ctype})
             try:
                 with urllib.request.urlopen(req, timeout=60) as r:
                     out = r.read()

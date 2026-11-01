@@ -203,3 +203,22 @@ def test_donna_retry_requeues_every_ticket_waiting_on_alliant(tmp_path):
     assert jobs.retry_waiting("U4KFSQCDQ") == "Sent 1 ticket back to my queue."
     assert jobs.next()["id"] == "100.1"
     assert jobs.retry_waiting("U4KFSQCDQ") == "Nothing is waiting on Alliant."  # working now, not waiting
+
+
+def test_a_special_invoice_pdf_goes_to_kirk(tmp_path):
+    jobs, slack, t, readbacks = setup(tmp_path)
+    jobs.desk.alliant = SimpleNamespace(customers=[SimpleNamespace(account="1205-1-00004", name="MIDAS #4")])
+    uploads = []
+    slack.files_upload_v2 = lambda **kw: uploads.append(kw)
+    real = slack.chat_postMessage
+    slack.chat_postMessage = lambda channel, text, thread_ts=None, **kw: real(channel, text, thread_ts) or {"channel": "DKIRK", "ts": "9.9"}
+    assert jobs.attach("100.1", b"%PDF-1.4 ...", "S211.pdf") == "unknown job"  # not working on it yet
+    jobs.queue(tap("UANA"))
+    jobs.next()
+    assert jobs.attach("100.1", b"<html>", "S211.pdf") == "not a PDF"
+    assert jobs.attach("100.1", b"%PDF-1.4 ...", "S211.pdf") == "pdf sent to U09B5C91QKG"
+    [u] = uploads
+    assert u["channel"] == "DKIRK" and u["filename"] == "S211.pdf" and u["content"].startswith(b"%PDF")
+    assert any("Special invoice S211" in text and "MIDAS #4" in text for _, text in slack.thread)
+    assert ("100.1", "🧾 The invoice PDF (S211.pdf) went to <@U09B5C91QKG>.") in slack.thread
+    assert jobs.load()["jobs"]["100.1"]["pdf"] == "S211.pdf"
