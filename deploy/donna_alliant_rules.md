@@ -127,7 +127,11 @@ standing order. Your notes have the full steps (course C7, "Creating Special & C
          -H "Authorization: Bearer $(cat ~/.donna_worker_token)" -H "Content-Type: application/pdf" \
          --data-binary @"$F" "https://chat.snowwhitelinen.com/api/donna/jobs/<id>/file?name=S0148777.pdf"
 
-   It goes to Kirk in Slack, who pulls the routes and sends it to the customer. If there's no Remote Desktop Virtual
+   Then print that same PDF at the depot from this Mac (the depot printer is set up on it, over the office VPN):
+
+       P=$(lpstat -p | awk '/[Dd]epot/{print $2; exit}'); [ -n "$P" ] && lp -d "$P" "$F"
+
+   It goes to Kirk in Slack, who pulls the routes and sends it to the customer, and it's on the depot printer. If there's no Remote Desktop Virtual
    Drive to save to, or no PDF comes down to ~/Downloads, don't print anything else: say so in your note, with what
    the Save box offered (Kirk is still told to print it from Alliant).
 10. Report `entered` with the invoice number and its lines in your note, never amounts or prices.
