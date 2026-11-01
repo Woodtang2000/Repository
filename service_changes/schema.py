@@ -9,7 +9,8 @@ class Category(str, Enum):
     item_change = "item_change"              # add / decrease / stop / restart a standing item
     wearer_change = "wearer_change"          # employee garments: new wearer, stop, size change, swap
     hold_or_closure = "hold_or_closure"      # seasonal hold, skip a week, closed, account cancelled
-    special_order = "special_order"          # one-time delivery, not on the standing invoice
+    special_order = "special_order"          # one-time delivery, not on the standing invoice: a special invoice (S)
+    credit_invoice = "credit_invoice"        # a credit on the customer's bill for items or a delivery (C)
     today_only = "today_only"                # one delivery changed ("0 bar mops today only"): driver did it on the handheld
     route_or_schedule = "route_or_schedule"  # stop order, service day move, redate
     operational_issue = "operational_issue"  # missing/wrong items, damage, truck, pricing question
@@ -78,3 +79,9 @@ class ParsedMessage(BaseModel):
     )
     summary: str = Field(description="One line saying what was asked.")
     service: Optional[ServiceFlag] = Field(None, description="Only for service_code: what to flag and why.")
+    invoice_date: Optional[str] = Field(None, description=(
+        "special_order: the day it's delivered as said ('Thursday', 'tomorrow', '11/5'); credit_invoice: the day the "
+        "credit is for, if said. Null if not said."))
+    invoice_reason: Optional[str] = Field(None, description=(
+        "special_order or credit_invoice: why, in a few words ('call-in order', 'extra delivery', 'short 10 bar mops "
+        "last week'). Null if not said."))

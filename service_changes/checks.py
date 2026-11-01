@@ -279,10 +279,40 @@ def expand_all(parsed: ParsedMessage, alliant: Alliant) -> None:
     parsed.changes = out
 
 
+INVOICES = (Category.special_order, Category.credit_invoice)
+
+
+def _check_invoice(parsed: ParsedMessage, alliant: Alliant, who: str) -> Result:
+    """A special (S) or credit (C) invoice: one-time lines, only items already on the account (at Alliant's own
+    price), nothing about the standing order changes. Scott, 2026-11-01."""
+    out = []
+    items = alliant.items.get(parsed.account_number or "", {})
+    for ch in parsed.changes:
+        cc = CheckedChange(ch)
+        found = current_qty(alliant, parsed.account_number, ch.alliant_item or ch.item) if items else None
+        if found:
+            cc.alliant_item = found[0]
+        elif parsed.account_number and items:
+            cc.questions.append(f"{who} doesn't have {ch.item} on their account. A special or credit invoice only uses "
+                                "items already on the account; the office can add it first. Which of their items?")
+        if not ch.quantity:
+            cc.questions.append(f"How many {cc.alliant_item or ch.item}?")
+        out.append(cc)
+    if not out:
+        out.append(CheckedChange(Change(action=Action.other, item="")))
+        out[0].questions.append("Which items, and how many?")
+    if parsed.category == Category.special_order and not parsed.invoice_date:
+        out[0].questions.append(f"What day should the special delivery for {who} go out?")
+    cust = next((c for c in alliant.customers if c.account == parsed.account_number), None) if parsed.account_number else None
+    return Result(parsed, out, cust.name if cust else None)
+
+
 def check(parsed: ParsedMessage, alliant: Alliant, asker: str = "staff") -> Result:
     """`asker`: "staff" (drivers, the office, Scott and Bill) or "customer" (their own text, email or call): who a
     question is worded for."""
     who = parsed.customer_as_written or "this customer"
+    if parsed.category in INVOICES:
+        return _check_invoice(parsed, alliant, who)
     expand_all(parsed, alliant)
     out = []
     for ch in parsed.changes:
@@ -437,6 +467,12 @@ def readback(result: Result) -> str:
     who = f"{p.account_number} {result.customer_name}" if result.customer_name else p.customer_as_written
     if p.category == Category.hold_or_closure and not result.changes:
         return f"✅ {who} – {p.summary}"
+    if p.category in INVOICES:
+        what = ", ".join(f"{c.change.quantity} {(c.alliant_item or c.change.item).title()}" for c in result.changes
+                         if c.change.quantity)
+        if p.category == Category.special_order:
+            return f"✅ {who} – special delivery of {what}" + (f" on {p.invoice_date}" if p.invoice_date else "")
+        return f"✅ {who} – credit for {what}" + (f" ({p.invoice_reason})" if p.invoice_reason else "")
     parts: list[str] = []
     i = 0
     while i < len(result.changes):
@@ -701,6 +737,24 @@ def ticket(result: Result, alliant: Alliant, with_readback: bool = True) -> str:
     note = (card.get("special_instructions") or "").strip()
     if note and "Remittance" not in note:
         out.append(f"_📝 {note}_")
+    if p.category in INVOICES:  # one-time lines on a special (S) or credit (C) invoice: the standing order stays
+        kind = "Special invoice (S)" if p.category == Category.special_order else "Credit invoice (C)"
+        out.append(" · ".join(x for x in (f"🧾 *{kind}*", f"delivery {p.invoice_date}" if p.invoice_date and
+                                          p.category == Category.special_order else
+                                          (f"for {p.invoice_date}" if p.invoice_date else ""),
+                                          f"reason: {p.invoice_reason}" if p.invoice_reason else "") if x))
+        for cc in result.changes:
+            if not cc.change.item:
+                continue
+            sku = alliant.sku.get((acct, cc.alliant_item)) if cc.alliant_item else None
+            out.append(f"• *{cc.change.quantity or '?'}*  {cc.alliant_item or cc.change.item + ' _(not on account)_'}"
+                       + (f" `{sku}`" if sku else ""))
+        out.append("_Alliant's own prices; nothing about the standing order changes._")
+        if result.questions:
+            out += [f"❓ {q}" for q in result.questions]
+        elif with_readback and (rb := readback(result)):
+            out.append(f"Readback when done: {rb}")
+        return "\n".join(out)
     for cc in result.changes:
         ch = cc.change
         if ch.wearer:

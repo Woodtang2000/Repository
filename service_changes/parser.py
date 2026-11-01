@@ -46,6 +46,12 @@ Classify the message and extract every change in it. Rules:
   garment with no size gets a question.
 - A wearer who "needs" a garment, or a new garment for a wearer, is a standing addition unless the driver says it
   is a one-time replacement. Don't ask which.
+- A one-time extra or call-in delivery ("send Chili's 50 extra bar mops Thursday", "they need 20 more aprons for
+  an event this week, just once") is special_order: one change per item, action add, quantity = how many go out
+  that one time; invoice_date = the day, invoice_reason = why. It doesn't change their standing order.
+- A credit on a customer's bill ("credit Vato's for the 10 bar mops they were shorted", "credit invoice for 2 mats
+  last week") is credit_invoice: one change per item, action add, quantity = how many to credit (always positive);
+  invoice_date and invoice_reason as said.
 - A change to today's delivery only ("set bar mops to 0 today only", "skip the mats today", "short 10 towels this
   delivery") is today_only with NO changes: the driver changes it on the handheld and the office only needs to know.
   Describe it in summary ("bar mops 0 today only"). Don't ask questions about it.

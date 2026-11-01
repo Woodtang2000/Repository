@@ -71,9 +71,12 @@ STOCKROOM_DAY, STOCKROOM_LEAD = 0, "Ana Faamita"  # Mondays, tagging the stockro
 STALE_HOURS = 36  # the Alliant feed runs nightly; older than this means it has stopped (e.g. the Mac restarted)
 MAX_LOOKUPS_PER_DAY = 15  # per person: past this the bot stops answering and tells the office
 ACTIONABLE = {Category.item_change, Category.wearer_change, Category.hold_or_closure, Category.special_order}
+# Scott and Bill only (owner_change, by private message or voice): a credit invoice moves money
+OWNER_ACTIONABLE = ACTIONABLE | {Category.credit_invoice}
 # Scott telling Donna a change himself (owner_change): worth parsing as one; "yes" / "no" to her readback.
 CHANGE_Q = re.compile(r"\b(change|add|stop|cancel|take (?:off|away)|remove|increase|decrease|raise|lower|cut|bump|drop|"
-                      r"swap|switch|replace|set|make (?:it|that|them)|new wearer|put\b.{0,40}\bon|start|more|fewer|less)\b", re.I)
+                      r"swap|switch|replace|set|make (?:it|that|them)|new wearer|put\b.{0,40}\bon|start|more|fewer|less|"
+                      r"credit|special (?:invoice|delivery|order)|extra|send|deliver|invoice)\b", re.I)
 YES = re.compile(r"^\W*(yes|yeah|yep|yup|sure|correct|right|do it|go ahead|go for it|please do|put it in|enter it|"
                  r"sounds good|ok(?:ay)?|that's (?:it|right)|perfect)\b", re.I)
 NO = re.compile(r"^\W*(no|nope|cancel|never ?mind|don't|wait|hold on|scratch that)\b", re.I)
@@ -1020,7 +1023,7 @@ class Desk:
         owner = (p or {}).get("user") or user or os.environ.get("OWNER_SLACK_ID", "U4KFSQCDQ").split(",")[0].strip()
         parsed = parse_message(self.claude, text, self.desk_name, f"{now:.6f}", self.alliant, author=self.name(owner),
                                office=True)
-        if parsed.category not in ACTIONABLE:
+        if parsed.category not in OWNER_ACTIONABLE:
             pending.pop(key, None)
             return None
         other_route_account(parsed, self.alliant)

@@ -82,6 +82,30 @@ notes rather than guessing. The house rules below still win over the notes.
 7. Report `entered` with a one-line note of exactly what changed ("TOWEL BAR MOP 6-01-55: inventory 100 → 150,
    autocount 100 → 150, saved").
 
+## Special (S) and credit (C) invoices
+
+A ticket headed **🧾 Special invoice (S)** or **🧾 Credit invoice (C)** is a one-time invoice, not a change to the
+standing order. Your notes have the full steps (course C7, "Creating Special & Credit Invoices"; file 21). In short:
+
+1. **Delivery → Special Invoice/Credit.** Customer: the ticket's account; check the bold name matches.
+2. Invoice number box: type **S** (special) or **C** (credit), then **Tab** for the next number. Route: leave the
+   customer's. Reason: the closest one to the ticket's reason (a call-in or extra delivery: "Call in customer").
+3. Date: the ticket's delivery date (a credit with no date: today), then **Enter** so Route Settlement and
+   Pre-billing get the same date.
+4. Items: **only the Items button** (the customer's own items). Type each ticket line's quantity in its row,
+   **positive numbers only** (on a credit Alliant makes them negative), then **Accept**. Never Add Line, never a SKU
+   that isn't on the account, never NA or AI codes. Delete any line that isn't on the ticket (Delete Line), including
+   any automatic RC/ZRC or charge line Alliant adds. Never change a price or a charge.
+5. Top checkboxes: **Finalize unchecked** (a special goes to the driver's handheld for that day). Leave the others as
+   they are.
+6. **Save.** If Alliant says it's out of balance, type the subtotal, tax and total exactly as it shows them into the
+   verification boxes, and save.
+7. Check it: **Delivery → Invoices / Delivery Tickets**, the date, **Refresh**: the new S (or C) number is there for
+   this customer. Report `entered` with that invoice number and its lines in your note, never amounts or prices.
+
+A credit is only from a ticket Scott or Bill asked for ("Scott, by voice" or "Bill, …" on it); anyone else's credit
+ticket: `needs_person`. Anything unclear (a line that isn't on the account, no quantity, no date): `ask`.
+
 ## Never
 
 - In the **Billing** box on Customer Items, the only field you may change is **Auto Count** (the per-delivery count;

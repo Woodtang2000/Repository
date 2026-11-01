@@ -676,3 +676,24 @@ def test_stop_all_the_mats_means_each_mat_on_the_account():
     assert [c.alliant_item for c in r.changes] == ["MAT CONFETTI GREY 3X10", "MAT CONFETTI GREY 3X5"]
     assert len(r.questions) == 1 and "(10 in inventory) and MAT CONFETTI GREY 3X5 (8 in inventory)" in r.questions[0]
     assert "not on account yet" not in ticket(r, a) and "usual" not in ticket(r, a)
+
+
+def test_special_and_credit_invoices():
+    from .checks import check, readback, ticket
+    from .context import Alliant, Customer
+    from .schema import Action, Category, Change, ParsedMessage
+    a = Alliant(customers=[Customer("5040-1-00000", "CHILIS", "3", ["Thu"])], items={"5040-1-00000": {"TOWEL BAR MOP GOLD STRIPE": 60}},
+                sku={("5040-1-00000", "TOWEL BAR MOP GOLD STRIPE"): "5-01-01"})
+    p = lambda cat, chs, **kw: ParsedMessage(category=cat, account_number="5040-1-00000", customer_as_written="Chili's",
+                                              summary="s", changes=chs, **kw)
+    r = check(p(Category.special_order, [Change(action=Action.add, item="bar mops", quantity=50)], invoice_date="Thursday",
+                invoice_reason="extra delivery"), a)
+    t = ticket(r, a)
+    assert not r.questions and "🧾 *Special invoice (S)* · delivery Thursday · reason: extra delivery" in t
+    assert "• *50*  TOWEL BAR MOP GOLD STRIPE `5-01-01`" in t and "→" not in t  # one-time: no standing change
+    assert readback(r) == "✅ 5040-1-00000 CHILIS – special delivery of 50 Towel Bar Mop Gold Stripe on Thursday"
+    r = check(p(Category.special_order, [Change(action=Action.add, item="aprons", quantity=20)]), a)
+    assert any("only uses items already on the account" in q for q in r.questions)
+    assert any("What day" in q for q in r.questions)
+    r = check(p(Category.credit_invoice, [Change(action=Action.add, item="bar mops", quantity=10)], invoice_reason="shorted"), a)
+    assert not r.questions and "Credit invoice (C)" in ticket(r, a) and "credit for 10" in readback(r)
