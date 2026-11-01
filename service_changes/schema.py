@@ -2,7 +2,15 @@
 from enum import Enum
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
+
+
+def _require(*names):
+    """Mark fields required in the JSON schema the model fills in (their Python defaults stay): every optional field
+    adds to the structured-output grammar, and too many make the API refuse it ("Schema is too complex")."""
+    def extra(schema: dict, cls) -> None:
+        schema["required"] = list(dict.fromkeys(schema.get("required", []) + [n for n in names if n in schema["properties"]]))
+    return ConfigDict(json_schema_extra=extra)
 
 
 class Category(str, Enum):
@@ -32,6 +40,7 @@ class Action(str, Enum):
 
 
 class Change(BaseModel):
+    model_config = _require("inventory", "keep_inventory", "one_time")
     action: Action
     item: str = Field(description="Item as a linen tech would say it, e.g. 'bar mops', '3x5 charcoal heather mat', 'shirts'.")
     quantity: Optional[int] = Field(None, description="Amount of the change for add/decrease; the new total for set.")
@@ -72,6 +81,7 @@ class ServiceFlag(BaseModel):
 
 
 class ParsedMessage(BaseModel):
+    model_config = _require("questions_for_driver", "changes")
     category: Category
     customer_as_written: Optional[str] = Field(None, description="Customer name exactly as the driver wrote it.")
     account_number: Optional[str] = Field(None, description="Account number from the candidate list, only when the match is clear. Null otherwise.")

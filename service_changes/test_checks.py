@@ -720,3 +720,13 @@ def test_reason_names_match_alliants_lists():
     assert incomplete_code("The Kannery is closed, redating to Thursday") == "CL Customer Closed"
     assert incomplete_code("gate was locked, no access") == "CL Customer Closed" or incomplete_code("no access at the gate") == "NA No Access"
     assert incomplete_code("roads closed by the avalanche") .startswith(("WX", "CL"))
+
+
+def test_the_request_schema_stays_small_enough_for_the_api():
+    """Too many optional fields and the API refuses every request ("Schema is too complex", 2026-11-01): 21 failed,
+    16 works. New fields: make yes/no ones required (schema._require) or drop one."""
+    from .schema import ParsedMessage
+    sch = ParsedMessage.model_json_schema()
+    optional = sum(len([p for p in d.get("properties", {}) if p not in set(d.get("required", []))])
+                   for d in list(sch.get("$defs", {}).values()) + [sch])
+    assert optional <= 17
