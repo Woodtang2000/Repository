@@ -281,6 +281,39 @@ def expand_all(parsed: ParsedMessage, alliant: Alliant) -> None:
 
 
 INVOICES = (Category.special_order, Category.credit_invoice)
+# The reason lists in Alliant (Business -> Reason Codes), as Scott set them up 2026-11-01: the first pattern that
+# matches the request's reason wins. A special with no reason is an extra delivery; a credit with none is asked.
+SPECIAL_REASONS = [("S- Make-good / Short", r"short|missed|make.?good|make it right|forgot|left off"),
+                   ("S- Event", r"event|party|banquet|tournament|wedding|gala|weekend"),
+                   ("S- New Customer Start", r"new customer|first delivery|start(?:ing)? service|startup"),
+                   ("S- Counter Sale", r"counter|walk.?in|pick.?up|picked up|will call"),
+                   ("S- Call-in Order", r"call.?in|called in|phoned"),
+                   ("S- Extra Delivery", r"")]
+CREDIT_REASONS = [("C- Loss Charge Reversal", r"loss|lost|turned in|came back|already returned|returned them"),
+                  ("C- Returned / Stopped Items", r"stopped|returned|picked up|pick.?up"),
+                  ("C- Damaged / Stained", r"damag|stain|torn|rip|hole|dirty|wrong size|unusable"),
+                  ("C- Short / Missed", r"short|missed|didn't get|did not get|never got|not delivered|skipped"),
+                  ("C- Billing Error", r"billing|price|charged|overcharg|double|duplicate|wrong (?:amount|quantity)|error"),
+                  ("C- Goodwill", r"goodwill|make it right|sorry|courtesy|keep them happy")]
+INCOMPLETE_CODES = [("CL Customer Closed", r"closed|locked|not open"),
+                    ("NA No Access", r"no access|gate|keys?|can'?t get in|nobody|no one|no answer"),
+                    ("CR Customer Request", r"asked|request|wants? (?:to )?(?:move|skip)|customer wants"),
+                    ("NL Not Loaded / Short at Plant", r"not loaded|didn'?t load|short at (?:the )?plant|not ready"),
+                    ("WX Weather / Road", r"weather|snow|ice|road|storm|avalanche"),
+                    ("TD Truck / Driver Issue", r"truck|broke|breakdown|sick|ran out of time|driver")]
+
+
+def reason_for(kind: Category, said: str | None) -> str:
+    """The Alliant reason name for a special or credit, from what they said ("" when a credit says nothing)."""
+    for name, pat in (SPECIAL_REASONS if kind == Category.special_order else CREDIT_REASONS):
+        if said and pat and re.search(pat, said, re.I):
+            return name
+    return "S- Extra Delivery" if kind == Category.special_order else ""
+
+
+def incomplete_code(said: str | None) -> str:
+    """The incomplete (redate) code for why a stop didn't happen, when it's clear."""
+    return next((name for name, pat in INCOMPLETE_CODES if said and re.search(pat, said, re.I)), "")
 
 
 def _check_invoice(parsed: ParsedMessage, alliant: Alliant, who: str) -> Result:
@@ -318,6 +351,9 @@ def _check_invoice(parsed: ParsedMessage, alliant: Alliant, who: str) -> Result:
         out[0].questions.append("Which items, and how many?")
     if parsed.category == Category.special_order and not parsed.invoice_date:
         out[0].questions.append(f"What day should the special delivery for {who} go out?")
+    if parsed.category == Category.credit_invoice and not reason_for(parsed.category, parsed.invoice_reason):
+        out[0].questions.append("What's the credit for: short or missed, damaged or stained, a billing error, a loss "
+                                "charge reversal, returned or stopped items, or goodwill?")
     cust = next((c for c in alliant.customers if c.account == parsed.account_number), None) if parsed.account_number else None
     return Result(parsed, out, cust.name if cust else None)
 
@@ -757,7 +793,9 @@ def ticket(result: Result, alliant: Alliant, with_readback: bool = True) -> str:
         out.append(" · ".join(x for x in (f"🧾 *{kind}*", f"delivery {p.invoice_date}" if p.invoice_date and
                                           p.category == Category.special_order else
                                           (f"for {p.invoice_date}" if p.invoice_date else ""),
-                                          f"reason: {p.invoice_reason}" if p.invoice_reason else "") if x))
+                                          f"reason: *{reason_for(p.category, p.invoice_reason)}*" if
+                                          reason_for(p.category, p.invoice_reason) else "",
+                                          f"_({p.invoice_reason})_" if p.invoice_reason else "") if x))
         for cc in result.changes:
             if not cc.change.item:
                 continue

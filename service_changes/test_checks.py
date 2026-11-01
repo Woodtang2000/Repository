@@ -703,3 +703,18 @@ def test_special_and_credit_invoices():
     assert any("a credit only uses items already on the account" in q for q in r.questions)
     r = check(p(Category.credit_invoice, [Change(action=Action.add, item="bar mops", quantity=10)], invoice_reason="shorted"), a)
     assert not r.questions and "Credit invoice (C)" in ticket(r, a) and "credit for 10" in readback(r)
+
+
+def test_reason_names_match_alliants_lists():
+    from .checks import incomplete_code, reason_for
+    from .schema import Category
+    assert reason_for(Category.special_order, None) == "S- Extra Delivery"
+    assert reason_for(Category.special_order, "for their golf tournament") == "S- Event"
+    assert reason_for(Category.special_order, "we shorted them Tuesday") == "S- Make-good / Short"
+    assert reason_for(Category.credit_invoice, "shorted 10 bar mops") == "C- Short / Missed"
+    assert reason_for(Category.credit_invoice, "billed as lost but they turned them in") == "C- Loss Charge Reversal"
+    assert reason_for(Category.credit_invoice, "stained napkins") == "C- Damaged / Stained"
+    assert reason_for(Category.credit_invoice, None) == ""
+    assert incomplete_code("The Kannery is closed, redating to Thursday") == "CL Customer Closed"
+    assert incomplete_code("gate was locked, no access") == "CL Customer Closed" or incomplete_code("no access at the gate") == "NA No Access"
+    assert incomplete_code("roads closed by the avalanche") .startswith(("WX", "CL"))

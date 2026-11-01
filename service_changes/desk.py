@@ -495,6 +495,11 @@ class Desk:
                 lines += [f"❓ {q}" for q in still] + ["⚠️ _Still unclear after asking the driver. Please call them._"]
         else:
             lines = [f"📣 *FYI: {parsed.category.value.replace('_', ' ')}*", parsed.summary]
+            if parsed.category in (Category.route_or_schedule, Category.hold_or_closure, Category.today_only):
+                from .checks import incomplete_code
+                code = incomplete_code(f"{parsed.summary} {src.get('text', '')}")
+                if code and re.search(r"redat|closed|skip|move|no access|couldn'?t|can'?t", f"{parsed.summary} {src.get('text', '')}", re.I):
+                    lines.append(f"_Incomplete code: *{code}*_")  # the redate reason in Alliant (Reason Codes)
             rb = f"✅ Office has it: {parsed.summary}"
         if correction:
             lines.insert(1, "🔁 *Correction*: the driver says the last entry wasn't right")
