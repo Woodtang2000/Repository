@@ -115,3 +115,22 @@ she waits for jobs she checks every 5 minutes, and each time she clicks once on 
 bar through her browser tool (nothing else: never a key, never inside the screen's fields or buttons). A Mac-side mouse nudge (osascript, CGEventPost) was tried 2026-11-02 and macOS
 blocked it even with Terminal allowed under Accessibility, so it isn't used: `launchctl unload
 ~/Library/LaunchAgents/com.donna.keepawake.plist` removes it if it was installed.
+
+## No screen saver, no sleep (Donna's user, no admin needed)
+
+While the screen saver or a sleeping display is on, Chrome can stop drawing the remote desktop. Done 2026-11-02:
+
+```
+defaults -currentHost write com.apple.screensaver idleTime 0
+cat > ~/Library/LaunchAgents/com.donna.awake.plist <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>com.donna.awake</string>
+  <key>ProgramArguments</key><array><string>/usr/bin/caffeinate</string><string>-dims</string></array>
+  <key>KeepAlive</key><true/>
+  <key>RunAtLoad</key><true/>
+</dict></plist>
+EOF
+launchctl load ~/Library/LaunchAgents/com.donna.awake.plist
+```
