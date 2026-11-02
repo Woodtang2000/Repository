@@ -72,7 +72,8 @@ def _html(text: str) -> str:
     return (f'<div style="font:15px/1.5 Arial,sans-serif;color:#1c2226;max-width:600px">{para}{sign}</div>')
 
 
-def send(to: str, subject: str, text: str, in_reply_to: str = "", key: str = "", company: str = "") -> None:
+def send(to: str, subject: str, text: str, in_reply_to: str = "", key: str = "", company: str = "",
+         attachments: list[dict] | None = None) -> None:
     """From Donna (EMAIL_FROM, e.g. donna@mail.snowwhitelinen.com), named for the customer's company; replies go to
     EMAIL_REPLY_TO (service@), which comes back to the desk. The Laundry Group's customers: EMAIL_FROM_TLG and
     EMAIL_REPLY_TO_TLG when set (donna@mail.thelaundrygroup.com, donna@thelaundrygroup.com), else the same as above."""
@@ -86,4 +87,8 @@ def send(to: str, subject: str, text: str, in_reply_to: str = "", key: str = "",
         body["reply_to"] = [reply_to]
     if in_reply_to:
         body["headers"] = {"In-Reply-To": in_reply_to, "References": in_reply_to}
+    if attachments:  # [{"filename": ..., "content": bytes}]
+        import base64
+        body["attachments"] = [{"filename": a["filename"], "content": base64.b64encode(a["content"]).decode()}
+                               for a in attachments[:5]]
     _call("POST", "/v1/email/messages", body=body, key=key)

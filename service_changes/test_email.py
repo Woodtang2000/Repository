@@ -240,7 +240,33 @@ def test_a_special_alliant_emailed_goes_to_kirk_not_the_desk(desk):
     inbox.append(m)
     ed.run_once()
     assert posts and posts[0][0] == "U5WUV01JA" and "Special invoice S0148777" in posts[0][1]
+    import os
+    assert os.path.exists(os.path.join(ed.data_dir, "specials", "S0148777.pdf"))  # kept for the customer's email
     assert uploads and uploads[0]["filename"] == "S0148777.pdf" and uploads[0]["content"].startswith(b"%PDF")
     assert not [p for p in slack.posts if p["meta"].get("kind") == "ticket"] and not sent  # no ticket, no reply
     ed.run_once()
     assert len(uploads) == 1  # once
+
+
+def test_the_customer_gets_the_special_with_its_pdf_once_whichever_half_comes_first(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from . import bird, specials
+    sent = []
+    monkeypatch.setattr(bird, "send", lambda to, subject, text, in_reply_to="", key="", company="", attachments=None:
+                        sent.append((to, subject, text, attachments)))
+    alliant = SimpleNamespace(customers=[SimpleNamespace(account="5045-1-00000", name="HOMER GOLF COURSE")],
+                              cards={"5045-1-00000": {"email": "pro@homergolf.com"}})
+    d = str(tmp_path)
+    specials.save_pdf(d, "S0148779", b"%PDF-1.7")
+    assert specials.try_send(d, alliant, "S0148779") == ""  # her report isn't in yet
+    specials.save_job(d, "S0148779", "5045-1-00000", "✅ 5045-1-00000 HOMER GOLF COURSE – special delivery of 5 Towel Bar Mop Gold Stripe on Tuesday")
+    assert specials.try_send(d, alliant, "S0148779") == "sent to pro@homergolf.com"
+    [(to, subject, text, att)] = sent
+    assert subject == "Snow White Linen: your special delivery for Homer Golf Course"
+    assert "is set up: special delivery of 5 Towel Bar Mop Gold Stripe on Tuesday. The delivery ticket is attached (invoice S0148779)" in text
+    assert att == [{"filename": "S0148779.pdf", "content": b"%PDF-1.7"}]
+    assert specials.try_send(d, alliant, "S0148779") == "" and len(sent) == 1  # once
+    monkeypatch.setenv("STOP_EMAILS_HOLD", "5045")
+    specials.save_pdf(d, "S0148780", b"%PDF")
+    specials.save_job(d, "S0148780", "5045-1-00000", "x")
+    assert specials.try_send(d, alliant, "S0148780") == "held" and len(sent) == 1

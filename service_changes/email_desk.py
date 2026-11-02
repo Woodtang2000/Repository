@@ -235,18 +235,23 @@ class EmailDesk(TextDesk):
                  or "pdf" in (a.get("content_type") or "")]
         number = re.search(r"\b(S\d{4,})\b", said + " " + " ".join(a.get("filename") or "" for a in files))
         who = os.environ.get("SPECIALS_TO", "U5WUV01JA")
-        text = (f"🧾 *Special invoice {number.group(1) if number else ''}* from Alliant, made by Donna: here's the PDF to "
-                "send to the customer.").replace("  ", " ")
+        text = (f"🧾 *Special invoice {number.group(1) if number else ''}* from Alliant, made by Donna: here's the PDF "
+                "for pulling it. Donna emails the customer their copy.").replace("  ", " ")
         if not files:
             self.slack.chat_postMessage(channel=who, text=text.replace("here's the PDF", "the email had no PDF; please "
                                                                           "print it from Alliant") )
             return True
         first = self.slack.chat_postMessage(channel=who, text=text)
-        for a in files[:3]:
+        for i, a in enumerate(files[:3]):
             data = self.attachment(m["id"], a["id"])
             name = re.sub(r"[^\w.-]", "", a.get("filename") or "") or f"{number.group(1) if number else 'special'}.pdf"
             self.slack.files_upload_v2(channel=first.get("channel") or who, thread_ts=first.get("ts"), content=data,
                                        filename=name, title=f"Special invoice {number.group(1) if number else ''}".strip())
+            if i == 0 and number:  # the customer's copy, with Donna's note (specials.py), once the job's report is in
+                from . import specials
+                specials.save_pdf(self.data_dir, number.group(1), data)
+                print(time.strftime("%H:%M"), "specials: customer email:",
+                      specials.try_send(self.data_dir, self.alliant, number.group(1)) or "waiting for her report", flush=True)
         print(time.strftime("%H:%M"), f"specials: {number.group(1) if number else 'a special'} PDF to Kirk", flush=True)
         return True
 
