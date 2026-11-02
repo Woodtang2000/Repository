@@ -570,14 +570,49 @@ def setup(public_url: str, data_dir: str, undo: bool = False) -> None:
         print(f"+1{num}: calls now answered by {LABEL[line]} (texts still go to {sms_before or 'the Service Desk'})")
 
 
+def calls(n: int = 12) -> None:
+    """The last calls on the Twilio account and Twilio's recent error alerts: why a transfer didn't connect."""
+    import base64
+    import urllib.parse
+    import urllib.request
+    from datetime import datetime
+    from .context import ALASKA
+    from .sms import _twilio
+    when = lambda t: (datetime.strptime(t, "%a, %d %b %Y %H:%M:%S %z").astimezone(ALASKA).strftime("%-m/%-d %-I:%M:%S %p")
+                      if t else "")
+    print("Last calls (Alaska time):")
+    for c in _twilio("GET", "Calls.json", {"PageSize": n}).get("calls", []):
+        print(f"  {when(c.get('start_time') or c.get('date_created'))}  {c.get('direction', ''):14} {c.get('from', ''):>13} -> "
+              f"{c.get('to', ''):<13} {c.get('status', ''):10} {c.get('duration') or 0}s  {c.get('sid')}")
+        if c.get("status") in ("failed", "busy", "no-answer", "canceled"):
+            for note in _twilio("GET", f"Calls/{c['sid']}/Notifications.json").get("notifications", [])[:3]:
+                print(f"      error {note.get('error_code')}: {urllib.parse.unquote_plus(note.get('message_text') or '')[:300]}")
+    sid, token = os.environ["TWILIO_ACCOUNT_SID"], os.environ["TWILIO_AUTH_TOKEN"]
+    req = urllib.request.Request("https://monitor.twilio.com/v1/Alerts?PageSize=8", headers={
+        "Authorization": "Basic " + base64.b64encode(f"{sid}:{token}".encode()).decode()})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            alerts = json.loads(r.read()).get("alerts", [])
+    except Exception as e:
+        alerts = []
+        print("Alerts not readable:", e)
+    print("Twilio alerts (newest first):")
+    for a in alerts:
+        print(f"  {a.get('date_created', '')[:19]}  error {a.get('error_code')}  "
+              f"{urllib.parse.unquote_plus(a.get('alert_text') or '')[:300]}")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--setup", action="store_true")
     ap.add_argument("--undo", action="store_true")
+    ap.add_argument("--calls", action="store_true", help="the last calls and Twilio's errors (a transfer that failed)")
     ap.add_argument("--data", default=os.environ.get("SERVICE_DESK_DATA", "service_changes/data"))
     ap.add_argument("--public-url", default=os.environ.get("WEBCHAT_PUBLIC_URL", "https://chat.snowwhitelinen.com"))
     args = ap.parse_args()
-    if args.setup or args.undo:
+    if args.calls:
+        calls()
+    elif args.setup or args.undo:
         setup(args.public_url.rstrip("/"), args.data, undo=args.undo)
     else:
         ap.print_help()
