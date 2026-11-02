@@ -31,6 +31,7 @@ import os
 import re
 import string
 import sys
+import threading
 import time
 from datetime import datetime, timedelta
 
@@ -81,6 +82,8 @@ REDATE = re.compile(r"redat|closed|not open|locked|no access|couldn'?t (?:get in
                     r"nobody (?:there|home)|no one (?:there|answered)|move[sd]? (?:the )?deliver|deliver(?:y|ing)? (?:on |to )?"
                     r"(?:tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)|skip(?:ped|ping)? (?:this|today|the)|"
                     r"come back|try again (?:tomorrow|later)", re.I)
+REDATE_FYI = re.compile(r"FYI: (?:route or schedule|hold or closure|today only)", re.I)
+REDATE_FOOTER = re.compile(r"^<[^>]+\|[^>]+> · ")
 YES = re.compile(r"^\W*(yes|yeah|yep|yup|sure|correct|right|do it|go ahead|go for it|please do|put it in|enter it|"
                  r"sounds good|ok(?:ay)?|that's (?:it|right)|perfect)\b", re.I)
 NO = re.compile(r"^\W*(no|nope|cancel|never ?mind|don't|wait|hold on|scratch that)\b", re.I)
@@ -94,10 +97,21 @@ def meta(m: dict) -> dict | None:
     return md.get("event_payload") if md.get("event_type") == KIND else None
 
 
+REDATE_APPROVE = "redate_approve"
+
+
+def redate_bar(text: str) -> list[dict]:
+    """A redate in #route-redates: gold, with ✅ Approve for payroll (Bill or Scott only) in place of ✓ Done."""
+    return attachment(text, button=False, extra=[{"type": "actions", "block_id": "redate", "elements": [
+        {"type": "button", "action_id": REDATE_APPROVE, "value": "approve", "style": "primary",
+         "text": {"type": "plain_text", "text": "✅ Approve for payroll"}}]}])
+
+
 def _post(slack, channel: str, text: str, payload: dict, thread_ts: str | None = None, todo: str | None = None, **kw) -> dict:
-    """todo: "button" for a gold to-do bar with ✓ Done, "own" for a gold bar on a message with its own ✅ flow (todo.py)."""
+    """todo: "button" for a gold to-do bar with ✓ Done, "own" for a gold bar on a message with its own ✅ flow (todo.py),
+    "redate" for a redate with ✅ Approve for payroll."""
     if todo:
-        kw["attachments"] = attachment(text, button=todo == "button")
+        kw["attachments"] = redate_bar(text) if todo == "redate" else attachment(text, button=todo == "button")
         text = ""
     return slack.chat_postMessage(channel=channel, text=text, thread_ts=thread_ts, unfurl_links=False,
                                   metadata={"event_type": KIND, "event_payload": payload}, **kw)
@@ -261,7 +275,8 @@ class Desk:
         m = {"ts": r["ts"], "user": self.me, "bot_id": "self", "text": text,
              "metadata": {"event_type": KIND, "event_payload": payload}}
         if kw.get("todo"):
-            m.update(text="", attachments=attachment(text, button=kw["todo"] == "button"))
+            m.update(text="", attachments=redate_bar(text) if kw["todo"] == "redate"
+                     else attachment(text, button=kw["todo"] == "button"))
         if posted is not None:
             posted.append(m)
         if channel == self.desk_id and hasattr(self, "desk_msgs"):
@@ -523,10 +538,13 @@ class Desk:
                 and REDATE.search(said) and not correction:
             # a redate (closed, no access, moved, skipped): #route-redates with a Done button, not #service-desk;
             # the driver hears right away (Scott, 11/2)
-            new = self.post(redates, "\n".join(lines + ["", _quote(_short(src.get("text", ""), 300)),
-                                                        f"<{link}|{where}> · Tap ✓ Done when it's handled"]),
+            day = datetime.fromtimestamp(float(src["ts"]), ALASKA)
+            head = [f"🗓️ *Redate* · {author} · {day:%a %-m/%-d %-I:%M %p}"] + lines[1:]
+            new = self.post(redates, "\n".join(head + ["", _quote(_short(src.get("text", ""), 300)),
+                                                       f"<{link}|{where}> · Bill: tap ✅ Approve for payroll"]),
                             {"kind": "redate", "src_channel": channel, "src_ts": src["ts"], "driver": author,
-                             "driver_id": src.get("user"), "account": parsed.account_number or ""}, todo="button")
+                             "driver_id": src.get("user"), "account": parsed.account_number or "",
+                             "date": f"{day:%Y-%m-%d}"}, todo="redate")
             if channel in self.routes.values():
                 self.post(channel, f"<@{src.get('user')}> ✅ Got it: passed to the office in #route-redates.",
                           {"kind": "answer", "src_ts": src["ts"], "driver_id": src.get("user"), "msgs": replies},
@@ -801,6 +819,84 @@ class Desk:
         except Exception as e:
             print(time.strftime("%H:%M"), "stopped items error:", str(e)[:200], flush=True)
 
+    def approve_redate(self, payload: dict) -> str:
+        """✅ Approve for payroll on a redate in #route-redates: Bill or Scott only (AR_SLACK_IDS). The post turns
+        green with who and when; its metadata gets approved_by / approved_at (the HR agent reads those for payroll)."""
+        user = payload.get("user", {}).get("id")
+        channel = (payload.get("container") or {}).get("channel_id") or (payload.get("channel") or {}).get("id")
+        ts = (payload.get("container") or {}).get("message_ts")
+        if user not in AR_USERS:
+            self.slack.chat_postEphemeral(channel=channel, user=user,
+                                          text="Only Bill or Scott can approve redates for payroll.")
+            return "ignored: not Bill or Scott"
+        m = payload.get("message") if (payload.get("message") or {}).get("ts") == ts else None
+        if not m:
+            r = self.slack.conversations_history(channel=channel, latest=ts, oldest=ts, inclusive=True, limit=1,
+                                                 include_all_metadata=True)
+            m = next((x for x in r.get("messages", []) if x["ts"] == ts), None)
+        p = meta(m) if m else None
+        if not p or p.get("kind") not in ("redate", "redate_approved"):
+            return "not a redate"
+        if p.get("kind") == "redate_approved":
+            return "already approved"
+        who = self.name(user) or ("Bill" if user == "U9SGPJP0C" else "Scott")
+        a = restyle(m, GREEN, status=stamp(who, "Approved for payroll"))
+        for att in a:
+            att["blocks"] = [b for b in att.get("blocks") or [] if b.get("block_id") != "redate"]
+        self.slack.chat_update(channel=channel, ts=ts, text="", attachments=a, metadata={
+            "event_type": KIND, "event_payload": {**p, "kind": "redate_approved", "approved_by": who.split()[0],
+                                                  "approved_by_id": user,
+                                                  "approved_at": datetime.now(ALASKA).isoformat(timespec="minutes")}})
+        return f"approved redate {ts} by {who}"
+
+    def move_redates(self, days: int = 31) -> str:
+        """Past redates in #service-desk (FYI posts for a closed / no access / moved / skipped stop), copied into
+        #route-redates, oldest first, with their driver, date and an Approve button; the original says it moved.
+        Slack can't move a message, so this is a copy plus a note."""
+        redates = self.channels.get(os.environ.get("REDATE_CHANNEL", "route-redates"))
+        if not redates:
+            return "I can't find #route-redates. Invite me to it first."
+        found = []
+        for m in _messages(self.slack, self.desk_id, time.time() - days * 86400, include_all_metadata=True):
+            p = meta(m) or {}
+            text = todo_bar.body(m)
+            if p.get("moved_to") or p.get("kind") not in ("ticket", "done", "fyi") or not REDATE_FYI.search(text):
+                continue
+            if m.get("reply_count"):  # a shrunk (done) post keeps its full text in its thread
+                try:
+                    full = todo_bar._full_text(self.slack, self.desk_id, m["ts"])
+                    text = full[0] if full else text
+                except Exception:
+                    pass
+            if REDATE.search(text):
+                found.append((m, p, text))
+        pause = float(os.environ.get("REDATE_MOVE_PAUSE", "1.1"))  # Slack: about one post a second
+        moved = 0
+        for m, p, text in sorted(found, key=lambda x: float(x[0]["ts"])):
+            day = datetime.fromtimestamp(float(p.get("src_ts") or m["ts"]), ALASKA)
+            keep = [ln for ln in text.splitlines() if not REDATE_FOOTER.search(ln) and not REDATE_FYI.search(ln)]
+            link = next((ln for ln in text.splitlines() if REDATE_FOOTER.search(ln)), "")
+            link = re.sub(r"\s*·.*$", "", link)
+            head = f"🗓️ *Redate* · {p.get('driver') or 'driver'} · {day:%a %-m/%-d %-I:%M %p} _(moved from #{self.desk_name})_"
+            body = "\n".join([head] + keep + ([f"{link} · Bill: tap ✅ Approve for payroll"] if link
+                                                else ["Bill: tap ✅ Approve for payroll"])).strip()
+            try:
+                new = self.post(redates, body, {"kind": "redate", "src_channel": p.get("src_channel", ""),
+                                                "src_ts": p.get("src_ts", ""), "driver": p.get("driver", ""),
+                                                "driver_id": p.get("driver_id", ""), "account": p.get("account", ""),
+                                                "date": f"{day:%Y-%m-%d}", "moved_from": m["ts"]}, todo="redate")
+                self.slack.chat_update(channel=self.desk_id, ts=m["ts"], text="",
+                                       attachments=restyle(m, GREY, status="➡️ Moved to #route-redates for payroll approval"),
+                                       metadata={"event_type": KIND, "event_payload": {**p, "moved_to": new["ts"]}})
+                moved += 1
+            except Exception as e:
+                print(time.strftime("%H:%M"), "move redates:", e, flush=True)
+            if pause:
+                time.sleep(pause)
+        return (f"Moved {moved} redate{'s' if moved != 1 else ''} from the last {days} days into #route-redates, "
+                "oldest first, each with ✅ Approve for payroll." if moved else
+                f"No redates in #{self.desk_name} in the last {days} days to move.")
+
     def link_contact(self, payload: dict) -> str:
         """A sign-up card's button: office or owner only. Marks the card approved for that account (moving the number
         off its other accounts, or adding this one too); the texting / email desk finishes it (sms.office_pass): links
@@ -894,6 +990,20 @@ class Desk:
                                          ev.get("text", ""), re.I):  # Scott and Bill: today so far, or yesterday
             self.send_scorecard(channel, 1 if "yesterday" in ev.get("text", "").lower() else 0)
             return "scorecard"
+        mv = re.match(r"^\s*donna,?\s+move\s+(?:the\s+|all\s+(?:the\s+)?)?redates?\b\D*(\d+)?", ev.get("text", ""), re.I)
+        if user in AR_USERS and mv:  # Scott and Bill: copy past redates from #service-desk into #route-redates
+            days = min(int(mv.group(1) or 31), 120)
+            self.slack.chat_postMessage(channel=channel, text=f"Moving the redates from the last {days} days into "
+                                        "#route-redates, oldest first. I'll tell you when it's done.")
+
+            def go(days=days):
+                try:
+                    said = self.move_redates(days)
+                except Exception as e:
+                    said = f"Moving the redates stopped: {str(e)[:200]}"
+                self.slack.chat_postMessage(channel=channel, text=said)
+            threading.Thread(target=go, daemon=True).start()
+            return "move redates"
         if owner and re.match(r"^\s*donna,?\s+(?:notebook|notes)\s*$", ev.get("text", ""), re.I):
             from . import notebook  # what she has learned on Alliant's screens
             text = notebook.read(self.data_dir).strip()
@@ -1788,6 +1898,15 @@ class Desk:
                     except Exception as e:
                         print(time.strftime("%H:%M"), "alliant jobs error:", e, flush=True)
                 threading.Thread(target=enter, daemon=True).start()
+                return
+            if req.type == "interactive" and req.payload.get("type") == "block_actions" and any(
+                    x.get("action_id") == REDATE_APPROVE for x in req.payload.get("actions", [])):
+                def approve(p=req.payload):  # ✅ Approve for payroll on a redate (Bill or Scott)
+                    try:
+                        print(time.strftime("%H:%M"), "redate:", self.approve_redate(p), flush=True)
+                    except Exception as e:
+                        print(time.strftime("%H:%M"), "redate approve error:", e, flush=True)
+                threading.Thread(target=approve, daemon=True).start()
                 return
             if req.type == "interactive" and req.payload.get("type") == "block_actions" and any(
                     x.get("action_id", "").startswith("link_") for x in req.payload.get("actions", [])):

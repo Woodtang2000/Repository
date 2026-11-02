@@ -938,6 +938,50 @@ def test_a_redate_goes_to_route_redates_and_the_driver_hears_right_away(setup):
     p = ParsedMessage(category=Category.route_or_schedule, account_number="W1", summary="Wendy's closed; redated to Thursday")
     d.post_ticket("route-1-test", "C1", post, "Mike Driver", p, Result(p, []), [], False, [])
     [r] = [m for m in slack.msgs["CRED"] if desk.meta(m) and desk.meta(m)["kind"] == "redate"]
-    assert "Incomplete code: *CL Customer Closed*" in str(r) and "Tap ✓ Done" in str(r)
+    assert "Incomplete code: *CL Customer Closed*" in str(r) and "Approve for payroll" in str(r)
+    assert "Redate* · Mike Driver" in r["text"] and desk.meta(r)["date"]
     assert not [m for m in slack.msgs.get("D1", []) if desk.meta(m) and desk.meta(m).get("kind") == "ticket"]  # not the desk
     assert any("passed to the office in #route-redates" in m["text"] for m in slack.msgs["C1"])
+
+
+def test_only_bill_or_scott_can_approve_a_redate_for_payroll(setup):
+    from .checks import Result
+    from .schema import Category, ParsedMessage
+    slack, d = setup
+    d.channels["route-redates"] = "CRED"
+    slack.msgs.setdefault("CRED", [])
+    slack.users["U9SGPJP0C"] = "Bill Dubinsky"
+    told = []
+    slack.chat_postEphemeral = lambda channel, user, text: told.append((user, text))
+    post = slack.say("C1", "U1", "Wendys is closed today, redating to Thursday")
+    p = ParsedMessage(category=Category.route_or_schedule, account_number="W1", summary="Wendy's closed; redated to Thursday")
+    d.post_ticket("route-1-test", "C1", post, "Mike Driver", p, Result(p, []), [], False, [])
+    [r] = [m for m in slack.msgs["CRED"] if desk.meta(m) and desk.meta(m)["kind"] == "redate"]
+    tap = lambda user: {"user": {"id": user}, "container": {"channel_id": "CRED", "message_ts": r["ts"]},
+                        "message": dict(r), "actions": [{"action_id": desk.REDATE_APPROVE}]}
+    assert d.approve_redate(tap("U2")) == "ignored: not Bill or Scott"
+    assert told and "Only Bill or Scott" in told[0][1] and desk.meta(r)["kind"] == "redate"
+    assert d.approve_redate(tap("U9SGPJP0C")).startswith("approved")
+    m = desk.meta(r)
+    assert m["kind"] == "redate_approved" and m["approved_by"] == "Bill" and m["approved_at"]
+    assert "Approved for payroll · Bill" in r["text"]
+    assert not any(b.get("block_id") == "redate" for b in r["attachments"][0]["blocks"])  # button gone
+
+
+def test_move_redates_copies_past_ones_from_the_desk_with_an_approve_button(setup, monkeypatch):
+    slack, d = setup
+    monkeypatch.setenv("REDATE_MOVE_PAUSE", "0")
+    d.channels["route-redates"] = "CRED"
+    slack.msgs.setdefault("CRED", [])
+    old = d.post(d.desk_id, "📣 *FYI: route or schedule*\nBurger King closed, no access\n\n> it was locked\n"
+                 "<https://x|#route-1-test> · React ✅ when it's handled",
+                 {"kind": "ticket", "driver": "Mike Driver", "driver_id": "U1", "account": "B1", "src_ts": "1761000000.0001"},
+                 todo="own")
+    d.post(d.desk_id, "📣 *FYI: route or schedule*\nAdd a Monday stop\n<https://x|#route-1-test> · React ✅ when it's handled",
+           {"kind": "ticket", "driver": "Mike Driver"}, todo="own")  # not a redate
+    assert d.move_redates(31).startswith("Moved 1 redate ")
+    [r] = slack.msgs["CRED"]
+    assert "Redate* · Mike Driver" in r["text"] and "Burger King closed" in r["text"] and "FYI" not in r["text"]
+    assert desk.meta(r)["kind"] == "redate" and desk.meta(r)["moved_from"] == old["ts"]
+    assert "Moved to #route-redates" in slack.find(d.desk_id, old["ts"])["text"]
+    assert d.move_redates(31).startswith("No redates")  # never twice
