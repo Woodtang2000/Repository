@@ -326,7 +326,9 @@ How to work on the phone (you are speaking, not writing):
   they're a verified customer or known employee, their account facts, and whether the office is open.
 - Talk like a person: one to three short sentences, one question at a time, no lists, numbers the way people say them.
 - When a tool returns `say`, say it in your own warm words without changing any fact, number or item.
-- Transfers: only while the office is open (caller_info), with transfer_to_number. When it's closed, take a message.
+- Transfers: when the caller wants a person, the office or someone by name and caller_info says the office is open,
+  say you're putting them through and call transfer_to_number right away. When it's closed, never offer a transfer:
+  say the office is closed, take a message and say someone will call back next business day.
 - End the call with end_call once they're done and you've said goodbye.
 """
 
@@ -473,15 +475,26 @@ def _tool(hook: dict, name: str, url: str, token: str) -> dict:
     return t
 
 
-def _system_tools() -> list[dict]:
-    return [{"type": "system", "name": "end_call", "description": "End the call once the caller is done and you've said "
-             "goodbye.", "params": {"system_tool_type": "end_call"}},
-            {"type": "system", "name": "transfer_to_number", "description": "Put the caller through to the office, only "
-             "while caller_info says it's open.", "params": {"system_tool_type": "transfer_to_number", "transfers": [
-                 {"phone_number": OFFICE_PHONE, "condition": "The caller wants a person and the office is open."}]}}]
+TRANSFER_WHEN = "The caller asks for a person, the office or someone by name, and caller_info says the office is open."
 
 
-def _agent_body(agent: dict, hook: dict, line: str, url: str, token: str, system: bool) -> dict:
+def _system_tools(shape: str = "new") -> list[dict]:
+    """End call, and Transfer to number (the office). ElevenLabs changed the transfer's shape: "new" is
+    transfer_destination + a conference transfer (what numbers imported from Twilio need), "old" the earlier
+    phone_number field; "end" is End call only."""
+    end = {"type": "system", "name": "end_call", "description": "End the call once the caller is done and you've said "
+           "goodbye.", "params": {"system_tool_type": "end_call"}}
+    if shape == "end":
+        return [end]
+    dest = ({"transfer_destination": {"type": "phone", "phone_number": OFFICE_PHONE}, "transfer_type": "conference"}
+            if shape == "new" else {"phone_number": OFFICE_PHONE})
+    return [end, {"type": "system", "name": "transfer_to_number", "description": "Put the caller through to the office "
+                  "(a person), only while caller_info says it's open. Tell them you're putting them through first.",
+                  "params": {"system_tool_type": "transfer_to_number", "enable_client_message": True,
+                             "transfers": [{**dest, "condition": TRANSFER_WHEN}]}}]
+
+
+def _agent_body(agent: dict, hook: dict, line: str, url: str, token: str, system: str | bool) -> dict:
     import copy
     cc = copy.deepcopy(agent["conversation_config"])
     a = cc["agent"]
@@ -490,7 +503,8 @@ def _agent_body(agent: dict, hook: dict, line: str, url: str, token: str, system
     p = a["prompt"]
     p["prompt"] = prompt(line)
     p.pop("tool_ids", None)
-    p["tools"] = [_tool(hook, n, url, token) for n in LINE_TOOLS[line]] + (_system_tools() if system else [])
+    p["tools"] = [_tool(hook, n, url, token) for n in LINE_TOOLS[line]] + (
+        _system_tools("new" if system is True else system) if system else [])
     for k in ("built_in_tools", "knowledge_base", "rag"):
         p.pop(k, None)
     return {"name": LABEL[line], "conversation_config": cc}
@@ -517,19 +531,21 @@ def setup(public_url: str, data_dir: str, undo: bool = False) -> None:
     agent, hook = _template()
     for line in ("customers", "employees"):
         aid = saved["agents"].get(line)
-        for system in (True, False):
+        for system in ("new", "old", "end", False):  # the transfer in today's shape, then the older one, then without
             body = _agent_body(agent, hook, line, public_url, token, system)
             try:
                 if aid:
                     _api("PATCH", f"/v1/convai/agents/{aid}", body)
                 else:
                     aid = _api("POST", "/v1/convai/agents/create", body)["agent_id"]
+                print(f"{LABEL[line]}: " + ("transfer to the office ON (" + OFFICE_PHONE + ")" if system in ("new", "old")
+                                            else "⚠️ transfer to the office OFF: ElevenLabs didn't take it; add Transfer "
+                                                 "to number in the agent's Tools"))
                 break
             except SystemExit as e:
                 if not system:
                     raise
-                print(f"{LABEL[line]}: ElevenLabs didn't take the end-call/transfer tools ({str(e)[:160]}); "
-                      "made it without them: add End call and Transfer to number in its Tools.")
+                print(f"{LABEL[line]}: ElevenLabs didn't take the {system} tools ({str(e)[:200]}); trying the next way.")
         saved["agents"][line] = aid
         print(f"{LABEL[line]}: agent {aid}")
     json.dump(saved, open(path, "w"))

@@ -180,3 +180,12 @@ def test_a_blocked_caller_gets_no_help(desk, tmp_path):
     assert tools.handle("caller_info", jane)["blocked"] is True
     assert tools.handle("customer_request", {**jane, "summary": "how many towels"})["blocked"] is True and not p.slack.posts
     assert "<Hangup/>" in p.start({"CallSid": "x", "From": "+19075551234", "To": "+18668278398"})
+
+
+def test_transfer_to_the_office_in_the_current_shape_and_the_older_one():
+    from . import phone_agent as pa
+    new = pa._system_tools("new")[1]["params"]
+    assert new["system_tool_type"] == "transfer_to_number" and new["transfers"][0]["transfer_type"] == "conference"
+    assert new["transfers"][0]["transfer_destination"] == {"type": "phone", "phone_number": pa.OFFICE_PHONE}
+    assert pa._system_tools("old")[1]["params"]["transfers"][0]["phone_number"] == pa.OFFICE_PHONE
+    assert [t["name"] for t in pa._system_tools("end")] == ["end_call"]
