@@ -184,7 +184,9 @@ what you actually saved.
 
 1. Leave Alliant on the Customer Center screen.
 2. **Keep the Alliant tab open between jobs**: your session takes job after job in that same tab all day (one
-   sign-in for the day), waiting for the next with ~/Donna/next_job.sh. Never close it while there may be another job; closing it makes Chrome ask "Leave site?", which
+   sign-in for the day), waiting for the next with ~/Donna/next_job.sh. Each time it says NONE, hover your pointer
+   over the middle of the Alliant screen (a mouse move only: never a click or a key) so Alliant doesn't sign you out
+   for being idle, then wait again. Never close it while there may be another job; closing it makes Chrome ask "Leave site?", which
    blocks the browser until someone clicks it. When the day is done (10 PM), disconnect from the
    page's own bar **above** the remote screen (the Windows App web client's Disconnect, outside Windows: the session
    and Alliant keep running) and leave the tab as it is. Never use any Sign out, Log off or Disconnect menu inside

@@ -28,10 +28,10 @@ unattended run read her inbox (sign-in codes) or post as her.
 mkdir -p ~/Donna/logs ~/Library/LaunchAgents
 cat > ~/Donna/next_job.sh <<'EOF'
 #!/bin/bash
-# Wait (quietly, up to 9 minutes) for Donna's next Alliant job and print it; prints NONE if there wasn't one.
-# Her all-day session runs this between jobs, so waiting costs nothing.
+# Wait (quietly, up to 5 minutes) for Donna's next Alliant job and print it; prints NONE if there wasn't one.
+# Her all-day session runs this between jobs, so waiting costs nothing; on NONE she nudges Alliant awake and runs it again.
 KEY="$(cat "$HOME/.donna_worker_token")"
-for i in $(seq 1 18); do
+for i in $(seq 1 10); do
   JOB="$(curl -s --max-time 20 -H "Authorization: Bearer $KEY" https://chat.snowwhitelinen.com/api/donna/jobs/next)"
   case "$JOB" in *'"id"'*) echo "$JOB"; exit 0 ;; esac
   sleep 30
@@ -44,7 +44,7 @@ cat > ~/Donna/donna_worker.sh <<'EOF'
 # Donna's Alliant work loop: launchd runs this every minute (deploy/donna_workstation.md in the Service Desk repo).
 # One Claude session works the whole day in one Alliant tab; a new one starts only after the last one ends.
 export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
-export BASH_DEFAULT_TIMEOUT_MS=600000 BASH_MAX_TIMEOUT_MS=600000   # her 9-minute waits for the next job
+export BASH_DEFAULT_TIMEOUT_MS=600000 BASH_MAX_TIMEOUT_MS=600000   # her 5-minute waits for the next job
 LOG="$HOME/Donna/logs/$(date +%F).log"
 [ "$(date +%H)" -ge 22 ] && exit 0   # after 10 PM: no new session until morning (a job asked late waits for it)
 JOB="$("$HOME/Donna/next_job.sh" | tail -1)"
@@ -57,8 +57,10 @@ for you: $JOB
 Get your rules first: curl -s -H \"Authorization: Bearer \$(cat ~/.donna_worker_token)\" \
 https://chat.snowwhitelinen.com/api/donna/jobs/rules . Follow them exactly, including reading your Alliant notes. \
 Open Alliant once, in one tab, and keep it open: do the job, report it with the curl command in the rules, then wait \
-for the next one by running ~/Donna/next_job.sh (it waits up to 9 minutes and prints the next job, or NONE). On NONE, \
-just run it again: never close the tab, never open a new one, never start over. Keep going until 10 PM Alaska time \
+for the next one by running ~/Donna/next_job.sh (it waits up to 5 minutes and prints the next job, or NONE). On NONE, \
+keep Alliant awake: move your pointer over the middle of the Alliant remote screen with your browser tool (a hover only: \
+never a click, never a key, no screenshot needed), then run it again. Never close the tab, never open a new one, never \
+start over. Keep going until 10 PM Alaska time \
 (check with: date), then disconnect from the page's bar above the remote screen and stop. Always report every job \
 you take, even if you have to stop." >> "$LOG" 2>&1
 echo "=== $(date) day session done (exit $?)" >> "$LOG"
@@ -106,26 +108,10 @@ Stop: `launchctl unload ~/Library/LaunchAgents/com.donna.worker.plist`. Start ag
    still off; Energy: prevent sleeping, start up after a power failure.
 7. **Test:** ask Donna for a small Homer Golf Course change, say yes, and watch `tail -f ~/Donna/logs/$(date +%F).log`.
 
-## Keep Alliant awake (Mac mini, Donna's user)
+## Keep Alliant awake
 
-Alliant (and the remote desktop around it) signs her out after a quiet stretch. A LaunchAgent nudges the mouse one
-pixel and taps Shift (types nothing, clicks nothing) every 2 minutes from 6 AM to 10 PM, so it never goes idle. It runs
-on the Mac only (no Claude, no cost). macOS has to allow it: System Settings → Privacy & Security → Accessibility.
-
-```
-cat > ~/Donna/keep_awake.sh <<'EOF'
-#!/bin/bash
-# Nudge the mouse 1 pixel and back and tap Shift so the remote desktop (and Alliant in it) never goes idle.
-# Never a click, never a key that types. 6 AM to 10 PM only.
-H=$(date +%H); { [ "$H" -lt 6 ] || [ "$H" -ge 22 ]; } && exit 0
-osascript -l JavaScript -e '
-ObjC.import("CoreGraphics");
-var p = $.CGEventGetLocation($.CGEventCreate(null));
-function move(x, y) { $.CGEventPost($.kCGHIDEventTap, $.CGEventCreateMouseEvent(null, $.kCGEventMouseMoved, $.CGPointMake(x, y), 0)); }
-function shift(down) { $.CGEventPost($.kCGHIDEventTap, $.CGEventCreateKeyboardEvent(null, 56, down)); }
-move(p.x + 1, p.y); delay(0.2); move(p.x, p.y);
-shift(true); delay(0.05); shift(false);'
-caffeinate -u -t 1
-EOF
-chmod +x ~/Donna/keep_awake.sh
-```
+Alliant (and the remote desktop around it) signs her out after a quiet stretch. Donna keeps it awake herself: while
+she waits for jobs she checks every 5 minutes, and each time she hovers her pointer over the Alliant screen through her
+browser tool (never a click or a key). A Mac-side mouse nudge (osascript, CGEventPost) was tried 2026-11-02 and macOS
+blocked it even with Terminal allowed under Accessibility, so it isn't used: `launchctl unload
+~/Library/LaunchAgents/com.donna.keepawake.plist` removes it if it was installed.
