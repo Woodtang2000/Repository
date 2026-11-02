@@ -39,7 +39,7 @@ from .checks import check, readback, split_by_account, ticket
 from . import todo as todo_bar  # (listen() has its own `todo` queue)
 from .todo import GOLD, GREEN, GREY, attachment, restyle, shrink, stamp
 from .context import ALASKA, Alliant, route_from_channel, service_day
-from .schema import Category
+from .schema import Action, Category
 
 KIND = "service_desk"
 SEEN = "eyes"
@@ -1046,7 +1046,8 @@ class Desk:
         group = self.all_locations(text, parsed)
         if group:  # "all of the Safeway customers": the same change at each of their locations, one ticket each
             name, accounts = group
-            parts = [parsed.model_copy(deep=True, update={"account_number": a, "customer_as_written": name})
+            parts = [parsed.model_copy(deep=True, update={"account_number": a, "customer_as_written": name,
+                                                          "questions_for_driver": []})  # "which store?" is answered
                      for a in accounts]
         else:
             parts = split_by_account(parsed)
@@ -1056,7 +1057,8 @@ class Desk:
                 fill_item_matches(self.claude, part, self.alliant)
         results = [check(part, self.alliant) for part in parts]
         if group:  # only the locations that have the items
-            keep = [i for i, r in enumerate(results) if r.changes and all(c.alliant_item for c in r.changes)]
+            keep = [i for i, r in enumerate(results) if r.changes and all(c.alliant_item for c in r.changes)
+                    and not all(c.already_done for c in r.changes)]  # a store already done (stopped the other day): skip
             if not keep:
                 pending.pop(key, None)
                 return f"None of the {group[0]} locations have that in Alliant, so there's nothing to change."
@@ -1064,9 +1066,18 @@ class Desk:
         questions = list(dict.fromkeys(q for r in results for q in r.questions))
         if questions:
             asked = " ".join(questions[:2])
-            if group and len(parts) > 1:  # one answer for every location
-                asked = f"That's {len(parts)} {group[0]} locations. For all of them: " + re.sub(
-                    r"^Stopping .*?: what", "what", questions[0]).capitalize()
+            if group and len(parts) > 1:  # one question, one answer, for every location
+                stops = [q for q in questions if q.startswith("Stopping ")]
+                other = [q for q in questions if not q.startswith("Stopping ")]
+                if stops:
+                    from .checks import stop_inventory
+                    inv = sum(stop_inventory(c) or 0 for r in results for c in r.changes
+                              if c.change.action == Action.stop and not c.change.inventory)
+                    asked = (f"That's {len(parts)} {group[0]} locations, {inv} in inventory in all. For all of them, "
+                             "what should the inventory be: zero (picked up), cut down (to how many, or by half), or "
+                             "left as is for now?")
+                else:
+                    asked = f"That's {len(parts)} {group[0]} locations. For all of them: {other[0]}"
             pending[key] = {"text": text, "asked": asked, "at": now, "user": owner, "key": key}
             return asked
         said = []
