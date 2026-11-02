@@ -926,3 +926,18 @@ def test_all_of_the_safeway_customers_is_one_ticket_per_location(setup, monkeypa
                           "and cut their inventory in half.", None, user="U4KFSQCDQ")
     assert [x.account_number for x in d.changes["k2"]["parts"]] == ["4000-1-00400", "4000-1-00401"]
     assert said.endswith("Want me to put that in?")
+
+
+def test_a_redate_goes_to_route_redates_and_the_driver_hears_right_away(setup):
+    from .checks import Result
+    from .schema import Category, ParsedMessage
+    slack, d = setup
+    d.channels["route-redates"] = "CRED"
+    slack.msgs.setdefault("CRED", [])
+    post = slack.say("C1", "U1", "Wendys is closed today, redating to Thursday")
+    p = ParsedMessage(category=Category.route_or_schedule, account_number="W1", summary="Wendy's closed; redated to Thursday")
+    d.post_ticket("route-1-test", "C1", post, "Mike Driver", p, Result(p, []), [], False, [])
+    [r] = [m for m in slack.msgs["CRED"] if desk.meta(m) and desk.meta(m)["kind"] == "redate"]
+    assert "Incomplete code: *CL Customer Closed*" in str(r) and "Tap ✓ Done" in str(r)
+    assert not [m for m in slack.msgs.get("D1", []) if desk.meta(m) and desk.meta(m).get("kind") == "ticket"]  # not the desk
+    assert any("passed to the office in #route-redates" in m["text"] for m in slack.msgs["C1"])

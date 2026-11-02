@@ -77,6 +77,10 @@ OWNER_ACTIONABLE = ACTIONABLE | {Category.credit_invoice}
 CHANGE_Q = re.compile(r"\b(change|add|stop|cancel|take (?:off|away)|remove|increase|decrease|raise|lower|cut|bump|drop|"
                       r"swap|switch|replace|set|make (?:it|that|them)|new wearer|put\b.{0,40}\bon|start|more|fewer|less|"
                       r"credit|specials?|extra|send|deliver|invoice|one.?time|drop (?:off|some)|bring|order|need)\b", re.I)
+REDATE = re.compile(r"redat|closed|not open|locked|no access|couldn'?t (?:get in|deliver)|can'?t (?:get in|deliver)|"
+                    r"nobody (?:there|home)|no one (?:there|answered)|move[sd]? (?:the )?deliver|deliver(?:y|ing)? (?:on |to )?"
+                    r"(?:tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)|skip(?:ped|ping)? (?:this|today|the)|"
+                    r"come back|try again (?:tomorrow|later)", re.I)
 YES = re.compile(r"^\W*(yes|yeah|yep|yup|sure|correct|right|do it|go ahead|go for it|please do|put it in|enter it|"
                  r"sounds good|ok(?:ay)?|that's (?:it|right)|perfect)\b", re.I)
 NO = re.compile(r"^\W*(no|nope|cancel|never ?mind|don't|wait|hold on|scratch that)\b", re.I)
@@ -513,6 +517,21 @@ class Desk:
         where = f"#{route_name}" if route_name in self.channels else route_name  # "Scott, by voice"
         text = "\n".join(lines + ["", _quote(_short(src.get("text", ""), 300)), f"<{link}|{where}> · {done}"])
         from .verify import expectations
+        redates = self.channels.get(os.environ.get("REDATE_CHANNEL", "route-redates"))
+        said = f"{parsed.summary} {src.get('text', '')}"
+        if redates and parsed.category in (Category.route_or_schedule, Category.hold_or_closure, Category.today_only) \
+                and REDATE.search(said) and not correction:
+            # a redate (closed, no access, moved, skipped): #route-redates with a Done button, not #service-desk;
+            # the driver hears right away (Scott, 11/2)
+            new = self.post(redates, "\n".join(lines + ["", _quote(_short(src.get("text", ""), 300)),
+                                                        f"<{link}|{where}> · Tap ✓ Done when it's handled"]),
+                            {"kind": "redate", "src_channel": channel, "src_ts": src["ts"], "driver": author,
+                             "driver_id": src.get("user"), "account": parsed.account_number or ""}, todo="button")
+            if channel in self.routes.values():
+                self.post(channel, f"<@{src.get('user')}> ✅ Got it: passed to the office in #route-redates.",
+                          {"kind": "answer", "src_ts": src["ts"], "driver_id": src.get("user"), "msgs": replies},
+                          thread_ts=src["ts"])
+            return new["ts"]
         expect = expectations(result) if parsed.category in ACTIONABLE and not result.questions else []
         new = self.post(self.desk_id, text, {"kind": "ticket", "src_channel": channel, "src_ts": src["ts"],
                                              "readback": rb, "driver": author, "driver_id": src.get("user"),
