@@ -100,6 +100,14 @@ def meta(m: dict) -> dict | None:
 REDATE_APPROVE = "redate_approve"
 
 
+def OUTREACH_BUTTONS(task_id: str) -> dict:
+    """✅ Send and Skip on an outreach email card (outreach.py)."""
+    return {"type": "actions", "block_id": "outreach", "elements": [
+        {"type": "button", "action_id": "outreach_send", "value": task_id, "style": "primary",
+         "text": {"type": "plain_text", "text": "✅ Send"}},
+        {"type": "button", "action_id": "outreach_skip", "value": task_id, "text": {"type": "plain_text", "text": "Skip"}}]}
+
+
 def redate_bar(text: str) -> list[dict]:
     """A redate in #route-redates: gold, with ✅ Approve for payroll (Bill or Scott only) in place of ✓ Done."""
     return attachment(text, button=False, extra=[{"type": "actions", "block_id": "redate", "elements": [
@@ -990,6 +998,20 @@ class Desk:
                                          ev.get("text", ""), re.I):  # Scott and Bill: today so far, or yesterday
             self.send_scorecard(channel, 1 if "yesterday" in ev.get("text", "").lower() else 0)
             return "scorecard"
+        if re.match(r"^\s*donna,?\s+(?:outreach|my emails|send my emails)\s*$", ev.get("text", ""), re.I):
+            from . import outreach  # the rep's (or, for Scott and Bill, every rep's) outreach emails, now
+            mine = [r for r in outreach.reps() if r["slack"] == user] or (outreach.reps() if user in AR_USERS else [])
+            if mine:
+                def cards(mine=mine):
+                    for r in mine:
+                        try:
+                            said = self.outreach_cards(r)
+                        except Exception as e:
+                            said = f"Outreach emails for {r['name'].split()[0]} didn't load: {str(e)[:200]}"
+                        if r["slack"] != user or "No outreach" in said:
+                            self.slack.chat_postMessage(channel=channel, text=said)
+                threading.Thread(target=cards, daemon=True).start()
+                return "outreach"
         mv = re.match(r"^\s*donna,?\s+move\s+(?:the\s+|all\s+(?:the\s+)?)?redates?\b\D*(\d+)?", ev.get("text", ""), re.I)
         if user in AR_USERS and mv:  # Scott and Bill: copy past redates from #service-desk into #route-redates
             days = min(int(mv.group(1) or 31), 120)
@@ -1546,6 +1568,135 @@ class Desk:
         import threading
         threading.Thread(target=send, daemon=True).start()
 
+    # ---- sales outreach emails, sent by Donna in the rep's name (outreach.py) --------------------------------------
+
+    def _outreach_state(self, day: str) -> dict:
+        try:
+            return json.load(open(os.path.join(self.data_dir, f"outreach_{day}.json")))
+        except (OSError, ValueError):
+            return {"cards": {}}
+
+    def _outreach_save(self, day: str, state: dict) -> None:
+        with open(os.path.join(self.data_dir, f"outreach_{day}.json"), "w") as f:
+            json.dump(state, f)
+
+    def outreach_cards(self, rep: dict) -> str:
+        """Today's outreach emails for one rep, in their private messages: a header with Send all, then one card each
+        with ✅ Send and Skip. Emails already carded today aren't posted again."""
+        from . import outreach
+        day = datetime.now(ALASKA).strftime("%Y-%m-%d")
+        state = self._outreach_state(day)
+        tasks = [t for t in outreach.due(rep) if t["Id"] not in state["cards"]]
+        if not tasks:
+            return f"No outreach emails waiting for {rep['name'].split()[0]}."
+        first = rep["name"].split()[0]
+        head = self.slack.chat_postMessage(channel=rep["slack"], text=(
+            f"📧 *{len(tasks)} outreach email{'s' if len(tasks) != 1 else ''} ready to go out in your name, {first}.* "
+            "Each one is below: ✅ Send, or Skip to leave it on your Salesforce list. To change one first, edit the "
+            "task's Comments in Salesforce, then tap Send. Replies come straight to your inbox, and the task closes "
+            "itself with Outcome \"Done - no answer\" (change it if they answer)."),
+            blocks=[{"type": "section", "text": {"type": "mrkdwn", "text": f"📧 *{len(tasks)} outreach email"
+                     f"{'s' if len(tasks) != 1 else ''} ready to go out in your name, {first}.* Each one is below: ✅ Send, "
+                     "or Skip to leave it on your Salesforce list. To change one first, edit the task's Comments in "
+                     "Salesforce, then tap Send. Replies come straight to your inbox, and the task closes itself with "
+                     "Outcome \"Done - no answer\" (change it if they answer)."}},
+                    {"type": "actions", "block_id": "outreach", "elements": [
+                        {"type": "button", "action_id": "outreach_all", "value": rep["slack"], "style": "primary",
+                         "text": {"type": "plain_text", "text": f"✅ Send all {len(tasks)}"},
+                         "confirm": {"title": {"type": "plain_text", "text": "Send them all?"},
+                                     "text": {"type": "plain_text", "text": f"Send all {len(tasks)} emails in your name now?"},
+                                     "confirm": {"type": "plain_text", "text": "Send all"},
+                                     "deny": {"type": "plain_text", "text": "Not yet"}}}]}])
+        state.setdefault("heads", {})[rep["slack"]] = head["ts"]
+        link = f"https://{os.environ.get('SF_DOMAIN', 'login.salesforce.com')}/lightning/r/Task/"
+        for t in tasks:
+            e = t["email"]
+            body = e["body"].split("\n\nThanks,")[0]
+            text = (f"*{(t.get('What') or {}).get('Name') or t['Subject'].split('–')[-1].strip()}* · to "
+                    f"{e['to_name'] or e['to']} <{e['to']}>\n*Subject:* {e['subject']}\n"
+                    + _quote(_short(body, 600)) + f"\n<{link}{t['Id']}/view|Open the task in Salesforce>")
+            card = self.slack.chat_postMessage(channel=rep["slack"], text="", unfurl_links=False,
+                                               attachments=attachment(text, button=False, extra=[OUTREACH_BUTTONS(t["Id"])]),
+                                               metadata={"event_type": KIND, "event_payload": {"kind": "outreach", "task": t["Id"],
+                                                                                               "rep": rep["slack"]}})
+            state["cards"][t["Id"]] = {"channel": card.get("channel") or rep["slack"], "ts": card["ts"], "text": text,
+                                       "status": "open", "rep": rep["slack"]}
+            self._outreach_save(day, state)
+        self._outreach_save(day, state)
+        return f"{len(tasks)} outreach email{'s' if len(tasks) != 1 else ''} posted for {first}."
+
+    def outreach_pass(self, now: float) -> None:
+        """Weekdays from OUTREACH_HOUR (8, after the Sales Manager's 5:45 run), once a day: each rep's cards."""
+        local = datetime.fromtimestamp(now, ALASKA)
+        if local.weekday() > 4 or local.hour < int(os.environ.get("OUTREACH_HOUR", "8")) or \
+                os.environ.get("OUTREACH", "on").lower() == "off":
+            return
+        from . import salesforce
+        if not salesforce.configured():
+            return
+        mark = os.path.join(self.data_dir, "outreach_posted.txt")
+        day = local.strftime("%Y-%m-%d")
+        try:
+            if open(mark).read().strip() == day:
+                return
+        except OSError:
+            pass
+        with open(mark, "w") as f:  # first, so a failure below can't post twice
+            f.write(day)
+
+        def go():
+            from . import outreach
+            for rep in outreach.reps():
+                try:
+                    print(time.strftime("%H:%M"), "outreach:", self.outreach_cards(rep), flush=True)
+                except Exception as e:
+                    print(time.strftime("%H:%M"), "outreach error:", str(e)[:300], flush=True)
+        threading.Thread(target=go, daemon=True).start()
+
+    def outreach_action(self, payload: dict) -> str:
+        """✅ Send / Skip on an outreach card, or Send all on the header: the rep, Scott or Bill."""
+        from . import outreach
+        user = payload.get("user", {}).get("id")
+        act = next((a for a in payload.get("actions", []) if a.get("action_id", "").startswith("outreach_")), {})
+        channel = (payload.get("container") or {}).get("channel_id") or (payload.get("channel") or {}).get("id")
+        day = datetime.now(ALASKA).strftime("%Y-%m-%d")
+        state = self._outreach_state(day)
+        if act.get("action_id") == "outreach_all":
+            rep_id = act.get("value")
+            ids = [tid for tid, c in state["cards"].items() if c.get("rep") == rep_id and c["status"] == "open"]
+        else:
+            ids = [act.get("value")]
+            rep_id = (state["cards"].get(act.get("value")) or {}).get("rep") or user
+        rep = outreach.rep_for(slack_id=rep_id)
+        if not rep or (user != rep["slack"] and user not in AR_USERS):
+            self.slack.chat_postEphemeral(channel=channel, user=user, text="Only the rep (or Scott or Bill) can send these.")
+            return "ignored: not the rep"
+        who = (self.name(user) or rep["name"]).split()[0]
+        sent = 0
+        for tid in ids:
+            card = state["cards"].get(tid)
+            if not card or card["status"] != "open":
+                continue
+            if act.get("action_id") == "outreach_skip":
+                status, color, card["status"] = f"↪️ Skipped by {who}: still on the Salesforce list", GREY, "skipped"
+            else:
+                try:
+                    said = outreach.send(tid, rep, who)
+                except Exception as e:
+                    said = f"not sent: {str(e)[:150]}"
+                ok = said.startswith("sent")
+                sent += ok
+                card["status"] = "sent" if ok else ("closed" if "already closed" in said else "open")
+                status, color = (stamp(who, "Sent") + f" · {said}", GREEN) if ok else (f"⚠️ {said}", GOLD if card["status"] == "open" else GREY)
+            self._outreach_save(day, state)
+            extra = [OUTREACH_BUTTONS(tid)] if card["status"] == "open" else None
+            try:
+                self.slack.chat_update(channel=card["channel"], ts=card["ts"], text="",
+                                       attachments=attachment(card["text"], color=color, button=False, status=status, extra=extra))
+            except Exception as e:
+                print(time.strftime("%H:%M"), "outreach card not updated:", e, flush=True)
+        return f"outreach {act.get('action_id')}: {len(ids)} card(s), {sent} sent"
+
     def owner_brief_pass(self, now: float) -> None:
         """Weekdays from OWNER_BRIEF_HOUR, once a day: Donna's morning read of the last day, in Scott's private messages."""
         local = datetime.fromtimestamp(now, ALASKA)
@@ -1900,6 +2051,15 @@ class Desk:
                 threading.Thread(target=enter, daemon=True).start()
                 return
             if req.type == "interactive" and req.payload.get("type") == "block_actions" and any(
+                    x.get("action_id", "").startswith("outreach_") for x in req.payload.get("actions", [])):
+                def outreach_go(p=req.payload):  # ✅ Send / Skip / Send all on a rep's outreach emails
+                    try:
+                        print(time.strftime("%H:%M"), self.outreach_action(p), flush=True)
+                    except Exception as e:
+                        print(time.strftime("%H:%M"), "outreach action error:", e, flush=True)
+                threading.Thread(target=outreach_go, daemon=True).start()
+                return
+            if req.type == "interactive" and req.payload.get("type") == "block_actions" and any(
                     x.get("action_id") == REDATE_APPROVE for x in req.payload.get("actions", [])):
                 def approve(p=req.payload):  # ✅ Approve for payroll on a redate (Bill or Scott)
                     try:
@@ -2033,6 +2193,7 @@ class Desk:
                     except Exception as e:
                         print(time.strftime("%H:%M"), "watchdog error:", e, flush=True)
                     self.scorecard_pass(now)
+                    self.outreach_pass(now)
                     self.notices_pass()
                     # Route passes share an office pass from the last few seconds: during a burst of drivers they
                     # don't queue up behind each other here. Office events (✅, "done") always get a fresh one.
