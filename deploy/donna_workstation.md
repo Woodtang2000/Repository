@@ -105,3 +105,27 @@ Stop: `launchctl unload ~/Library/LaunchAgents/com.donna.worker.plist`. Start ag
 6. **After a macOS update:** System Settings → General → Software Update → Automatic updates: "Install macOS updates"
    still off; Energy: prevent sleeping, start up after a power failure.
 7. **Test:** ask Donna for a small Homer Golf Course change, say yes, and watch `tail -f ~/Donna/logs/$(date +%F).log`.
+
+## Keep Alliant awake (Mac mini, Donna's user)
+
+Alliant (and the remote desktop around it) signs her out after a quiet stretch. A LaunchAgent nudges the mouse one
+pixel and taps Shift (types nothing, clicks nothing) every 2 minutes from 6 AM to 10 PM, so it never goes idle. It runs
+on the Mac only (no Claude, no cost). macOS has to allow it: System Settings → Privacy & Security → Accessibility.
+
+```
+cat > ~/Donna/keep_awake.sh <<'EOF'
+#!/bin/bash
+# Nudge the mouse 1 pixel and back and tap Shift so the remote desktop (and Alliant in it) never goes idle.
+# Never a click, never a key that types. 6 AM to 10 PM only.
+H=$(date +%H); { [ "$H" -lt 6 ] || [ "$H" -ge 22 ]; } && exit 0
+osascript -l JavaScript -e '
+ObjC.import("CoreGraphics");
+var p = $.CGEventGetLocation($.CGEventCreate(null));
+function move(x, y) { $.CGEventPost($.kCGHIDEventTap, $.CGEventCreateMouseEvent(null, $.kCGEventMouseMoved, $.CGPointMake(x, y), 0)); }
+function shift(down) { $.CGEventPost($.kCGHIDEventTap, $.CGEventCreateKeyboardEvent(null, 56, down)); }
+move(p.x + 1, p.y); delay(0.2); move(p.x, p.y);
+shift(true); delay(0.05); shift(false);'
+caffeinate -u -t 1
+EOF
+chmod +x ~/Donna/keep_awake.sh
+```
