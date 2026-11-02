@@ -58,8 +58,8 @@ Get your rules first: curl -s -H \"Authorization: Bearer \$(cat ~/.donna_worker_
 https://chat.snowwhitelinen.com/api/donna/jobs/rules . Follow them exactly, including reading your Alliant notes. \
 Open Alliant once, in one tab, and keep it open: do the job, report it with the curl command in the rules, then wait \
 for the next one by running ~/Donna/next_job.sh (it waits up to 5 minutes and prints the next job, or NONE). On NONE, \
-keep Alliant awake: move your pointer over the middle of the Alliant remote screen with your browser tool (a hover only: \
-never a click, never a key, no screenshot needed), then run it again. Never close the tab, never open a new one, never \
+keep Alliant awake: click once on the Alliant program window's own title bar (the strip across the top of the \
+Alliant window with its name in it, inside the remote screen); never anywhere else, never a key. Then run it again. Never close the tab, never open a new one, never \
 start over. Keep going until 10 PM Alaska time \
 (check with: date), then disconnect from the page's bar above the remote screen and stop. Always report every job \
 you take, even if you have to stop." >> "$LOG" 2>&1
@@ -111,7 +111,7 @@ Stop: `launchctl unload ~/Library/LaunchAgents/com.donna.worker.plist`. Start ag
 ## Keep Alliant awake
 
 Alliant (and the remote desktop around it) signs her out after a quiet stretch. Donna keeps it awake herself: while
-she waits for jobs she checks every 5 minutes, and each time she hovers her pointer over the Alliant screen through her
-browser tool (never a click or a key). A Mac-side mouse nudge (osascript, CGEventPost) was tried 2026-11-02 and macOS
+she waits for jobs she checks every 5 minutes, and each time she clicks once on the Alliant program window's title
+bar through her browser tool (nothing else: never a key, never inside the screen's fields or buttons). A Mac-side mouse nudge (osascript, CGEventPost) was tried 2026-11-02 and macOS
 blocked it even with Terminal allowed under Accessibility, so it isn't used: `launchctl unload
 ~/Library/LaunchAgents/com.donna.keepawake.plist` removes it if it was installed.
