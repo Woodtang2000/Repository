@@ -146,8 +146,11 @@ standing order. Your notes have the full steps (course C7, "Creating Special & C
    **One time email**. The address box **comes filled with the customer's own invoice email** (it went to the
    customer once, 11/1, because it was left that way): click into it, select everything (Ctrl+A), delete it, and type
    **donna+specials@snowwhitelinen.com**. **Read the box back before you send: it must say exactly
-   donna+specials@snowwhitelinen.com and nothing else.** If it shows any other address, don't send. Then send it,
-   and put the address the box showed when you sent it in your note. Uncheck One time
+   donna+specials@snowwhitelinen.com and nothing else.** If it shows any other address, don't send. Then, **staying on
+   that same page**, click the **Email** button on the right (below **Refresh**, above **Fax**): that sends it to the
+   One time email address. **Never use the Email/Fax Status tab** to send it: that sends the traditional way, to the
+   customer's own invoice email (it went to the customer that way on 11/1). Put the address the box showed when you
+   sent it in your note. Uncheck One time
    email again afterwards if it stays checked. That address comes back to the service desk, which sends the PDF to
    Kirk in Slack automatically (he pulls the routes and sends it to the customer). Never email it anywhere else.
 9. If the One time email box or the Range of invoices choice isn't there, or it won't send: don't print instead.
