@@ -602,16 +602,47 @@ def calls(n: int = 12) -> None:
               f"{urllib.parse.unquote_plus(a.get('alert_text') or '')[:300]}")
 
 
+def last_calls(data_dir: str, n: int = 3) -> None:
+    """The last few calls on the customer line from ElevenLabs' own log: what Donna said, and every tool she used
+    with its result, so a failed transfer shows ElevenLabs' error. Callers' words are cut short."""
+    saved = json.load(open(os.path.join(data_dir, SAVED)))
+    from datetime import datetime
+    from .context import ALASKA
+    for line, aid in saved.get("agents", {}).items():
+        convs = _api("GET", f"/v1/convai/conversations?agent_id={aid}&page_size={n}").get("conversations", [])
+        for c in convs:
+            d = _api("GET", f"/v1/convai/conversations/{c['conversation_id']}")
+            start = datetime.fromtimestamp(c.get("start_time_unix_secs") or 0, ALASKA).strftime("%-m/%-d %-I:%M %p")
+            print(f"\n=== {LABEL.get(line, line)} · {start} · {c.get('call_duration_secs')}s · {c.get('status')} · "
+                  f"{(d.get('metadata') or {}).get('termination_reason', '')}")
+            for t in d.get("transcript") or []:
+                if t.get("message"):
+                    print(f"  {t.get('role')}: {str(t['message'])[:160]}")
+                for call in t.get("tool_calls") or []:
+                    if "transfer" in json.dumps(call) or call.get("type") == "system":
+                        print(f"  TOOL CALL: {json.dumps(call)[:700]}")
+                for res in t.get("tool_results") or []:
+                    if "transfer" in json.dumps(res) or res.get("is_error") or res.get("type") == "system":
+                        print(f"  TOOL RESULT: {json.dumps(res)[:900]}")
+    print("\nTransfer tool on the customer agent now:")
+    agent = _api("GET", f"/v1/convai/agents/{saved['agents'].get('customers')}")
+    tools = ((agent.get("conversation_config") or {}).get("agent") or {}).get("prompt", {}).get("tools") or []
+    print("  " + json.dumps([t for t in tools if t.get("name") == "transfer_to_number"])[:900])
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--setup", action="store_true")
     ap.add_argument("--undo", action="store_true")
     ap.add_argument("--calls", action="store_true", help="the last calls and Twilio's errors (a transfer that failed)")
+    ap.add_argument("--last", action="store_true", help="the last calls in ElevenLabs' log, with tool results")
     ap.add_argument("--data", default=os.environ.get("SERVICE_DESK_DATA", "service_changes/data"))
     ap.add_argument("--public-url", default=os.environ.get("WEBCHAT_PUBLIC_URL", "https://chat.snowwhitelinen.com"))
     args = ap.parse_args()
     if args.calls:
         calls()
+    elif args.last:
+        last_calls(args.data)
     elif args.setup or args.undo:
         setup(args.public_url.rstrip("/"), args.data, undo=args.undo)
     else:
