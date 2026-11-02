@@ -251,6 +251,12 @@ class EmailDesk(TextDesk):
                       specials.try_send(self.data_dir, self.alliant, number.group(1)) or "waiting for her report", flush=True)
             except Exception as e:
                 print(time.strftime("%H:%M"), "specials: customer email failed:", str(e)[:300], flush=True)
+            try:  # and the route's driver, in the thread where they were told about it
+                print(time.strftime("%H:%M"), "specials: driver:",
+                      specials.share_with_driver(self.data_dir, self.slack, number.group(1)) or "waiting for her report",
+                      flush=True)
+            except Exception as e:
+                print(time.strftime("%H:%M"), "specials: driver PDF failed:", str(e)[:300], flush=True)
         first = self.slack.chat_postMessage(channel=who, text=text)
         for name, data in pdfs:
             try:

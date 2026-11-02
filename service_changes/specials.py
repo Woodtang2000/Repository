@@ -25,8 +25,35 @@ def save_pdf(data_dir: str, number: str, pdf: bytes) -> None:
 
 
 def save_job(data_dir: str, number: str, account: str, what: str) -> None:
-    with open(os.path.join(_dir(data_dir), f"{number}.json"), "w") as f:
-        json.dump({"account": account, "what": what}, f)
+    path = os.path.join(_dir(data_dir), f"{number}.json")
+    j = json.load(open(path)) if os.path.exists(path) else {}
+    j.update(account=account, what=what)
+    with open(path, "w") as f:
+        json.dump(j, f)
+
+
+def set_driver_post(data_dir: str, number: str, channel: str, ts: str) -> None:
+    """Where the route's driver was told about this special (alliant_jobs.tell_driver): its PDF goes in that thread."""
+    path = os.path.join(_dir(data_dir), f"{number}.json")
+    j = json.load(open(path)) if os.path.exists(path) else {}
+    j.update(driver_channel=channel, driver_ts=ts)
+    with open(path, "w") as f:
+        json.dump(j, f)
+
+
+def share_with_driver(data_dir: str, slack, number: str) -> str:
+    """The delivery ticket PDF in the driver's thread for this special (no paper), once both are in, once."""
+    d = _dir(data_dir)
+    pdf, job, done = (os.path.join(d, f"{number}{x}") for x in (".pdf", ".json", ".driver"))
+    if os.path.exists(done) or not (os.path.exists(pdf) and os.path.exists(job)):
+        return ""
+    j = json.load(open(job))
+    if not j.get("driver_channel"):
+        return ""
+    slack.files_upload_v2(channel=j["driver_channel"], thread_ts=j.get("driver_ts"), content=open(pdf, "rb").read(),
+                          filename=f"{number}.pdf", title=f"Delivery ticket {number}")
+    open(done, "w").write(j["driver_channel"])
+    return "pdf in the driver's thread"
 
 
 def try_send(data_dir: str, alliant, number: str) -> str:

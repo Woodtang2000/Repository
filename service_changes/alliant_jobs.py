@@ -295,11 +295,16 @@ class Jobs:
         day = re.search(r"delivery ([^·\n]+?)\s*(?:·|\n|$)", text)
         lines = [re.sub(r"[*`]", "", m.group(1)).strip() for m in re.finditer(r"^•\s*(.+)$", text, re.M)]
         number = re.search(r"\b(S\d{2,})\b", said or "")
-        self.desk.slack.chat_postMessage(
+        r = self.desk.slack.chat_postMessage(
             channel=where, unfurl_links=False,
             text=f"🧾 *Special for {cust.name}* ({acct})" + (f", invoice {number.group(1)}" if number else "")
                  + f": going out *{day.group(1).strip() if day else 'on its delivery date'}*.\n"
-                 + "\n".join(f"• {ln}" for ln in lines) + "\nKirk is pulling it.")
+                 + "\n".join(f"• {ln}" for ln in lines) + "\nKirk is pulling it. The delivery ticket PDF follows here.")
+        if number:  # the delivery ticket PDF goes in this thread, now or when Alliant's email brings it (specials.py)
+            from . import specials
+            specials.set_driver_post(self.desk.data_dir, number.group(1), (r or {}).get("channel") or where,
+                                     (r or {}).get("ts", ""))
+            specials.share_with_driver(self.desk.data_dir, self.desk.slack, number.group(1))
         return True
 
     def signed_out(self, job_id: str = "") -> None:

@@ -278,3 +278,21 @@ def test_each_company_signs_with_its_own_office_phone():
     assert bird.signature("Snow White Linen").endswith("Office: (907) 222-7738")
     html = bird._html("Hello,\n\nHi.\n\nThank you,\n\n" + bird.signature("The Laundry Group"), "The Laundry Group", "test")
     assert "Office (907) 519-0761" in html and "/logo/tlg.png" in html and "#ffb807" in html
+
+
+def test_the_driver_gets_the_delivery_ticket_pdf_in_their_thread(tmp_path):
+    from types import SimpleNamespace
+    from . import specials
+    uploads = []
+    slack = SimpleNamespace(files_upload_v2=lambda **kw: uploads.append(kw))
+    d = str(tmp_path)
+    specials.save_pdf(d, "S0148781", b"%PDF-1.7")
+    assert specials.share_with_driver(d, slack, "S0148781") == ""  # no report, no driver post yet
+    specials.save_job(d, "S0148781", "5045-1-00000", "x")
+    specials.set_driver_post(d, "S0148781", "CR5", "9.9")
+    assert specials.share_with_driver(d, slack, "S0148781") == "pdf in the driver's thread"
+    assert uploads == [{"channel": "CR5", "thread_ts": "9.9", "content": b"%PDF-1.7", "filename": "S0148781.pdf",
+                        "title": "Delivery ticket S0148781"}]
+    assert specials.share_with_driver(d, slack, "S0148781") == "" and len(uploads) == 1  # once
+    import json, os
+    assert json.load(open(os.path.join(d, "specials", "S0148781.json")))["account"] == "5045-1-00000"  # kept both halves
