@@ -53,23 +53,63 @@ def signature(company: str = "Snow White Linen") -> str:
     return (f"Donna\n{company}\nText me any time: 866-TAP-TEXT (866-827-8398)\nOffice: (907) 222-7738")
 
 
-def _html(text: str) -> str:
-    """The plain text as a simple email, with Donna's picture beside her sign-off (the text stays the fallback)."""
+BRANDS = {  # brand/README.md: the same logo, navy and gold as every other document
+    "Snow White Linen": {"logo": "sw", "navy": "#003746", "gold": "#f9af10", "tint": "#eaf0f1",
+                         "name": "Snow White Linen Supply", "addr": "700 'I' Street · Anchorage, AK 99501"},
+    "The Laundry Group": {"logo": "tlg", "navy": "#003f50", "gold": "#ffb807", "tint": "#eaf0f2",
+                          "name": "The Laundry Group", "addr": "300 E 5th Ave · Anchorage, AK 99501"},
+}
+
+
+def _html(text: str, company: str = "Snow White Linen", title: str = "") -> str:
+    """The plain text as a branded email, like the company's other materials: its logo, a gold rule, a navy heading,
+    Donna's sign-off card with her picture, and a navy footer. Tables and inline styles only (what mail apps keep);
+    the plain text stays the fallback."""
     import html
+    b = BRANDS.get(company, BRANDS["Snow White Linen"])
+    base = os.environ.get("WEBCHAT_PUBLIC_URL", "https://chat.snowwhitelinen.com").rstrip("/")
     body, _, sig = text.rpartition("\n\nDonna\n")
     if not body:
         body, sig = text, ""
-    pic = os.environ.get("WEBCHAT_PUBLIC_URL", "https://chat.snowwhitelinen.com").rstrip("/") + "/donna-avatar.png"
-    para = "".join(f"<p style=\"margin:0 0 12px\">{html.escape(p).replace(chr(10), '<br>')}</p>"
-                   for p in body.split("\n\n") if p.strip())
+    body = re.sub(r"\n\nThank you,\s*$", "", body)
+    paras = [p for p in body.split("\n\n") if p.strip()]
+
+    def block(p: str) -> str:
+        lines = p.split("\n")
+        if len(lines) > 1 and all(re.match(r"^\s*[-•]", ln) or not ln.strip() or ln.startswith("    ") for ln in lines[1:]):
+            head = f'<p style="margin:0 0 6px;font-weight:bold;color:{b["navy"]}">{html.escape(lines[0])}</p>'
+            items = "".join(f'<tr><td style="padding:3px 0;border-bottom:1px solid #e3e8eb">{html.escape(ln.strip(" -•"))}</td></tr>'
+                            for ln in lines[1:] if ln.strip())
+            return head + f'<table role="presentation" width="100%" style="margin:0 0 14px;border-collapse:collapse">{items}</table>'
+        if all(re.match(r"^\s*[-•]", ln) for ln in lines):
+            items = "".join(f'<tr><td style="padding:6px 10px;background:{b["tint"]};border-left:3px solid {b["gold"]}">'
+                            f'{html.escape(ln.strip(" -•"))}</td></tr><tr><td style="height:4px"></td></tr>' for ln in lines)
+            return f'<table role="presentation" width="100%" style="margin:0 0 14px;border-collapse:collapse">{items}</table>'
+        return f'<p style="margin:0 0 14px">{html.escape(p).replace(chr(10), "<br>")}</p>'
+
+    content = "".join(block(p) for p in paras)
     lines = ("Donna\n" + sig).split("\n") if sig else []
-    sign = ("" if not lines else
-            f'<table role="presentation" style="margin-top:16px;border-top:3px solid #f9af10;padding-top:10px"><tr>'
-            f'<td style="padding-right:12px;vertical-align:top"><img src="{pic}" width="56" height="56" alt="Donna" '
-            f'style="border-radius:50%;display:block"></td><td style="font:14px/1.45 Arial,sans-serif;color:#1c2226">'
-            f'<b style="color:#003746">{html.escape(lines[0])}</b><br>'
+    card = ("" if not lines else
+            f'<table role="presentation" style="margin-top:8px;border-collapse:collapse"><tr>'
+            f'<td style="padding-right:12px;vertical-align:top"><img src="{base}/donna-avatar.png" width="56" height="56" '
+            f'alt="Donna" style="border-radius:50%;display:block;border:2px solid {b["gold"]}"></td>'
+            f'<td style="font:14px/1.45 Arial,sans-serif;color:#1c2226;vertical-align:top">'
+            f'<b style="color:{b["navy"]};font-size:15px">{html.escape(lines[0])}</b><br>'
             + "<br>".join(html.escape(l) for l in lines[1:]) + "</td></tr></table>")
-    return (f'<div style="font:15px/1.5 Arial,sans-serif;color:#1c2226;max-width:600px">{para}{sign}</div>')
+    title = title[:1].upper() + title[1:]
+    heading = (f'<h1 style="margin:0 0 14px;font:bold 20px/1.3 Arial,sans-serif;color:{b["navy"]}">'
+               f'{html.escape(title)}</h1>') if title else ""
+    return (f'<table role="presentation" width="100%" style="background:#f3f5f6;border-collapse:collapse"><tr><td align="center" '
+            f'style="padding:20px 10px"><table role="presentation" width="600" style="max-width:600px;width:100%;background:#ffffff;'
+            f'border-collapse:collapse;font:15px/1.55 Arial,sans-serif;color:#1c2226">'
+            f'<tr><td style="padding:20px 28px 14px"><img src="{base}/logo/{b["logo"]}.png" height="44" alt="{html.escape(b["name"])}" '
+            f'style="display:block;height:44px;border:0"></td></tr>'
+            f'<tr><td style="height:3px;background:{b["gold"]};font-size:0;line-height:0">&nbsp;</td></tr>'
+            f'<tr><td style="padding:24px 28px 8px">{heading}{content}<p style="margin:0 0 6px">Thank you,</p>{card}</td></tr>'
+            f'<tr><td style="padding:16px 28px;background:{b["navy"]};color:#ffffff;font:12px/1.5 Arial,sans-serif">'
+            f'<b>{html.escape(b["name"])}</b> · {html.escape(b["addr"])}<br>'
+            f'Text us any time: <span style="color:{b["gold"]}">866-TAP-TEXT (866-827-8398)</span> · Office (907) 222-7738'
+            f'</td></tr></table></td></tr></table>')
 
 
 def send(to: str, subject: str, text: str, in_reply_to: str = "", key: str = "", company: str = "",
@@ -82,7 +122,9 @@ def send(to: str, subject: str, text: str, in_reply_to: str = "", key: str = "",
     sender = (tlg and os.environ.get("EMAIL_FROM_TLG")) or os.environ.get("EMAIL_FROM", "service@mail.snowwhitelinen.com")
     reply_to = (tlg and os.environ.get("EMAIL_REPLY_TO_TLG")) or os.environ.get("EMAIL_REPLY_TO")
     body = {"from": {"email": sender, "name": f"Donna \u2013 {company}"},
-            "to": [to], "subject": subject, "text": text, "html": _html(text), "category": "transactional"}
+            "to": [to], "subject": subject, "text": text, "category": "transactional",
+            "html": _html(text, company, re.sub(r"^(?:Re:\s*)?(?:Snow White Linen|The Laundry Group):\s*", "", subject).strip()
+                          if not subject.lower().startswith("re:") else "")}
     if reply_to:
         body["reply_to"] = [reply_to]
     if in_reply_to:
