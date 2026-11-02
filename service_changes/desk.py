@@ -32,7 +32,7 @@ import re
 import string
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from .bot import _messages, _name, _office_staff
 from .checks import check, readback, split_by_account, ticket
@@ -871,6 +871,11 @@ class Desk:
         except Exception:
             pass
         owner = self.is_owner(user)
+        if user in AR_USERS and re.match(r"^\s*donna,?\s+(?:score\s*card|scores|stats)\s*(?:yesterday)?\s*$",
+                                         ev.get("text", ""), re.I):  # Scott and Bill: today so far, or yesterday
+            self.slack.chat_postMessage(channel=channel, text=self.scorecard_text(
+                1 if "yesterday" in ev.get("text", "").lower() else 0)[:3900], unfurl_links=False)
+            return "scorecard"
         if owner and re.match(r"^\s*donna,?\s+(?:notebook|notes)\s*$", ev.get("text", ""), re.I):
             from . import notebook  # what she has learned on Alliant's screens
             text = notebook.read(self.data_dir).strip()
@@ -1330,6 +1335,47 @@ class Desk:
                 "it, and anything he should step into. Upbeat, but tell him the truth. Talk about how the operation is "
                 "running, not people's private lives; nobody gets singled out over being sick.\n\n"
                 + (text or "(nothing posted)"))
+
+    def scorecard_text(self, days_back: int = 1) -> str:
+        """The scorecard (scorecard.py) for yesterday, or today so far: read from #service-desk's tickets."""
+        from . import scorecard
+        start, end, title = scorecard.day_window(datetime.now(ALASKA), days_back)
+        msgs, cursor = [], None
+        while True:  # back 4 days, so tickets asked earlier but finished in the window count as work done
+            r = self.slack.conversations_history(channel=self.desk_id, oldest=str((start - timedelta(days=4)).timestamp()),
+                                                 latest=str(end.timestamp()), include_all_metadata=True, limit=200,
+                                                 cursor=cursor)
+            msgs += r.get("messages", [])
+            cursor = (r.get("response_metadata") or {}).get("next_cursor")
+            if not cursor or len(msgs) > 3000:
+                break
+        return scorecard.build(msgs, meta, todo_bar.body, set(self.routes.values()), self.desk_id, start, end, title)
+
+    def scorecard_pass(self, now: float) -> None:
+        """Every morning from SCORECARD_HOUR (7): yesterday's scorecard to Scott and Bill (SCORECARD_TO), once."""
+        local = datetime.fromtimestamp(now, ALASKA)
+        if local.hour < int(os.environ.get("SCORECARD_HOUR", "7")) or os.environ.get("SCORECARD", "on").lower() == "off":
+            return
+        mark = os.path.join(self.data_dir, "scorecard_sent.txt")
+        day = local.strftime("%Y-%m-%d")
+        try:
+            if open(mark).read().strip() == day:
+                return
+        except OSError:
+            pass
+        with open(mark, "w") as f:  # first, so a failure below can't send twice
+            f.write(day)
+
+        def send():
+            try:
+                text = self.scorecard_text(1)
+                for who in [u.strip() for u in os.environ.get("SCORECARD_TO", "U4KFSQCDQ,U9SGPJP0C").split(",") if u.strip()]:
+                    self.slack.chat_postMessage(channel=who, text=text[:3900], unfurl_links=False)
+                print(time.strftime("%H:%M"), "scorecard sent", flush=True)
+            except Exception as e:
+                print(time.strftime("%H:%M"), "scorecard error:", e, flush=True)
+        import threading
+        threading.Thread(target=send, daemon=True).start()
 
     def owner_brief_pass(self, now: float) -> None:
         """Weekdays from OWNER_BRIEF_HOUR, once a day: Donna's morning read of the last day, in Scott's private messages."""
@@ -1804,6 +1850,7 @@ class Desk:
                     self.verify_pass(now)
                     self.stockroom_pass(now)
                     self.owner_brief_pass(now)
+                    self.scorecard_pass(now)
                     self.notices_pass()
                     # Route passes share an office pass from the last few seconds: during a burst of drivers they
                     # don't queue up behind each other here. Office events (✅, "done") always get a fresh one.
