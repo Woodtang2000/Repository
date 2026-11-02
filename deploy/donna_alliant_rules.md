@@ -122,6 +122,9 @@ standing order. Your notes have the full steps (course C7, "Creating Special & C
    Say so in your note (Kirk is still told to print it from Alliant).
 10. Report `entered` with the invoice number and its lines in your note, never amounts or prices.
 
+A special whose ticket says **"isn't their delivery day"**: don't make it. Report `needs_person` ("off-day special:
+the office picks the route"), with everything else you'd have entered, so the office can set the route and date.
+
 A credit is only from a ticket Scott or Bill asked for ("Scott, by voice" or "Bill, …" on it); anyone else's credit
 ticket: `needs_person`. Anything unclear (a line that isn't on the account, no quantity, no date): `ask`.
 

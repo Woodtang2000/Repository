@@ -730,3 +730,15 @@ def test_the_request_schema_stays_small_enough_for_the_api():
     optional = sum(len([p for p in d.get("properties", {}) if p not in set(d.get("required", []))])
                    for d in list(sch.get("$defs", {}).values()) + [sch])
     assert optional <= 17
+
+
+def test_a_special_on_a_day_they_arent_delivered_is_flagged():
+    from .checks import check, off_day, ticket
+    from .context import Alliant, Customer
+    from .schema import Action, Category, Change, ParsedMessage
+    a = Alliant(customers=[Customer("5045-1-00000", "HOMER GOLF COURSE", "5", ["Tue"])], items={"5045-1-00000": {"APRON WHITE BIB": 20}})
+    p = lambda day: ParsedMessage(category=Category.special_order, account_number="5045-1-00000", summary="s", invoice_date=day,
+                                  changes=[Change(action=Action.add, item="aprons", quantity=10)])
+    assert off_day(p("Friday"), a) == "Tue" and off_day(p("Tuesday"), a) == "" and off_day(p("11/6"), a) == ""
+    assert "⚠️ *Friday isn't their delivery day* (Tue): the office picks the route for it" in ticket(check(p("Friday"), a), a)
+    assert "isn't their delivery day" not in ticket(check(p("Tuesday"), a), a)

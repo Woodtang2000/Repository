@@ -1063,6 +1063,12 @@ class Desk:
             rb = re.sub(r"^✅\s*(\d{4}-\d-\d{5}\s*)?", "", readback(r)).strip()
             name, _, what = rb.partition(" – ")
             said.append(f"{string.capwords(name)}: {what}" if what else rb)
+        from .checks import off_day
+        for part, r in zip(parts, results):
+            days = off_day(part, self.alliant) if part.category == Category.special_order else ""
+            if days and said:  # Homer is Tuesday: a Friday special needs a route the office arranges
+                said[results.index(r)] += (f" ({part.invoice_date} isn't their delivery day, which is {days}: the "
+                                           "office will pick a route for it, or say their regular day instead)")
         if group and len(said) > 3:  # a read-back of 20 stores is too long to hear: the count and one example
             lines = sum(len(r.changes) for r in results)
             said = [f"{len(said)} {group[0]} locations, {lines} item lines in all. For example, {said[0]}; and the "

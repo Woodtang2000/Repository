@@ -323,6 +323,19 @@ def incomplete_code(said: str | None) -> str:
     return next((name for name, pat in INCOMPLETE_CODES if said and re.search(pat, said, re.I)), "")
 
 
+WEEKDAYS = {"mon": "Mon", "tue": "Tue", "wed": "Wed", "thu": "Thu", "fri": "Fri", "sat": "Sat", "sun": "Sun"}
+
+
+def off_day(parsed: ParsedMessage, alliant: Alliant) -> str:
+    """A special asked for on a day the customer isn't delivered ("Friday" for Homer, whose day is Tuesday): their
+    delivery days ("Tue"), else "". Only when the request names a weekday."""
+    m = re.search(r"\b(mon|tue|wed|thu|fri|sat|sun)[a-z]*\b", parsed.invoice_date or "", re.I)
+    cust = next((c for c in alliant.customers if c.account == parsed.account_number), None)
+    if not m or not cust or not cust.service_days:
+        return ""
+    return "" if WEEKDAYS[m.group(1).lower()] in cust.service_days else "/".join(cust.service_days)
+
+
 def _check_invoice(parsed: ParsedMessage, alliant: Alliant, who: str) -> Result:
     """A special (S) or credit (C) invoice: one-time lines at Alliant's own price; nothing about the standing order
     changes. Items on the account come from the Items button; on a special, an item that isn't on the account can be a
@@ -811,6 +824,9 @@ def ticket(result: Result, alliant: Alliant, with_readback: bool = True) -> str:
             out.append(f"• *{cc.change.quantity or '?'}*  {cc.alliant_item or cc.change.item + ' _(not on account)_'}"
                        + (f" `{sku or one}`" if (sku or one) else "")
                        + (" _(not on the account: one-time line, Add Line, RS)_" if one and not sku else ""))
+        days = off_day(p, alliant) if p.category == Category.special_order else ""
+        if days:  # the customer's route doesn't go there that day: the office picks how it gets there
+            out.append(f"⚠️ *{p.invoice_date} isn't their delivery day* ({days}): the office picks the route for it")
         out.append("_Alliant's own prices; nothing about the standing order changes._")
         if result.questions:
             out += [f"❓ {q}" for q in result.questions]
