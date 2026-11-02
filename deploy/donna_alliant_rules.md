@@ -143,7 +143,11 @@ standing order. Your notes have the full steps (course C7, "Creating Special & C
 8. **Email it to Kirk** (special invoices only): **Delivery → Invoices / Delivery Tickets**. In the dropdown choose
    **Range of invoices**, and put the new S number as both the first and the last invoice (so it's only this one;
    never the whole day's list). Refresh, check that just that invoice is listed for this customer, then check
-   **One time email** and enter **donna+specials@snowwhitelinen.com** as the address, and send it. Uncheck One time
+   **One time email**. The address box **comes filled with the customer's own invoice email** (it went to the
+   customer once, 11/1, because it was left that way): click into it, select everything (Ctrl+A), delete it, and type
+   **donna+specials@snowwhitelinen.com**. **Read the box back before you send: it must say exactly
+   donna+specials@snowwhitelinen.com and nothing else.** If it shows any other address, don't send. Then send it,
+   and put the address the box showed when you sent it in your note. Uncheck One time
    email again afterwards if it stays checked. That address comes back to the service desk, which sends the PDF to
    Kirk in Slack automatically (he pulls the routes and sends it to the customer). Never email it anywhere else.
 9. If the One time email box or the Range of invoices choice isn't there, or it won't send: don't print instead.
