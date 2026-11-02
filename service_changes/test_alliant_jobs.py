@@ -247,3 +247,17 @@ def test_the_ticket_in_plain_text():
     assert "- 10 TOWEL BAR MOP GOLD STRIPE 5-01-01 (not on the account: one-time line, Add Line, RS)" in out
     assert "> One-time drop on Friday | Tuesday" in out and "Scott, in a private message" in out
     assert all(ord(ch) < 128 for ch in out)
+
+
+def test_watchdog_and_signed_out_alert(tmp_path):
+    jobs, slack, t, readbacks = setup(tmp_path)
+    assert jobs.watchdog(1000.0) == ""  # never checked in yet: nothing to say
+    jobs.next()  # her workstation checks in
+    seen = jobs.load()["seen_at"]
+    assert jobs.watchdog(seen + 10 * 60) == ""  # 10 minutes quiet: fine
+    assert jobs.watchdog(seen + 25 * 60) == "alerted"
+    assert any("hasn't checked in since" in text for _, text in slack.thread)
+    assert jobs.watchdog(seen + 30 * 60) == ""  # once an hour
+    n = len(slack.thread)
+    assert jobs.alert("Alliant User/Password box, empty") == "alerted"
+    assert any("What she saw: Alliant User/Password box, empty" in text for _, text in slack.thread[n:])

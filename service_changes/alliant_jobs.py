@@ -156,9 +156,11 @@ class Jobs:
         """The oldest queued job, marked working; None if there's nothing (or she's paused)."""
         with self.lock:
             data = self.load()
-            if data.get("paused"):
-                return None
             now = time.time()
+            data["seen_at"] = now  # her workstation checked in (watchdog), paused or not
+            if data.get("paused"):
+                self.save(data)
+                return None
             for j in data["jobs"].values():
                 if j["status"] == "working" and now - j.get("started", now) > STALE_MINUTES * 60:
                     j["status"] = "queued"
@@ -307,7 +309,38 @@ class Jobs:
             specials.share_with_driver(self.desk.data_dir, self.desk.slack, number.group(1))
         return True
 
-    def signed_out(self, job_id: str = "") -> None:
+    def alert(self, note: str) -> str:
+        """Donna, between jobs, found Alliant signed out (or a disconnect Reconnect didn't fix): tell people now."""
+        self.signed_out(note=note[:300])
+        return "alerted"
+
+    def watchdog(self, now: float | None = None) -> str:
+        """Her workstation checks in every few minutes (jobs/next), around the clock. Silent for WATCHDOG_MINUTES (20):
+        the Mac is off or asleep, Chrome crashed, or her session died. Tell Scott, at most once an hour."""
+        now = now or time.time()
+        minutes = int(os.environ.get("WATCHDOG_MINUTES", "20"))
+        with self.lock:
+            data = self.load()
+            seen = data.get("seen_at")
+            if not seen or now - seen < minutes * 60 or now - data.get("watch_alerted", 0) < 3600:
+                return ""
+            data["watch_alerted"] = now
+            self.save(data)
+        from datetime import datetime
+        from .context import ALASKA
+        when = datetime.fromtimestamp(seen, ALASKA)
+        text = (f"⚠️ *Donna's workstation hasn't checked in since {when:%-I:%M %p}* ({int((now - seen) // 60)} minutes). "
+                "The Mac mini may be off or asleep, Chrome may have closed, or her session stopped. Check it with Chrome "
+                "Remote Desktop; on the Mac, Terminal: tail -15 ~/Donna/logs/$(date +%F).log")
+        owner = os.environ.get("OWNER_SLACK_ID", "U4KFSQCDQ").split(",")[0].strip()
+        for where in (owner, self.desk.desk_id):
+            try:
+                self.desk.slack.chat_postMessage(channel=where, text=text)
+            except Exception as e:
+                print(time.strftime("%H:%M"), "watchdog: not posted:", e, flush=True)
+        return "alerted"
+
+    def signed_out(self, job_id: str = "", note: str = "") -> None:
         """Alliant signed her out: say so where people will see it (the office channel, and Scott directly), at most once
         an hour; a ticket thread alone is easy to miss. She clicks Reconnect and a filled-in Sign in herself; this is
         when that wasn't enough (an empty field, a code or phone approval, another account)."""
@@ -316,7 +349,7 @@ class Jobs:
         self.warned = time.time()
         text = ("⚠️ *Alliant signed Donna out* on her workstation, so she can't enter tickets. Please sign her back in "
                 "(Chrome Remote Desktop → the Alliant tab in her Claude group → sign in → \"Stay signed in? Yes\"), then tap "
-                "*🤖 Donna, enter it* below (or on the waiting ticket).")
+                "*🤖 Donna, enter it* below (or on the waiting ticket)." + (f"\n_What she saw: {note}_" if note else ""))
         blocks = [{"type": "section", "text": {"type": "mrkdwn", "text": text}}] + ([button(job_id)] if job_id else [])
         self.desk.slack.chat_postMessage(channel=self.desk.desk_id, text=text, blocks=blocks)
         owner = os.environ.get("OWNER_SLACK_ID", "U4KFSQCDQ").split(",")[0].strip()

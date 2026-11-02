@@ -563,6 +563,8 @@ def make_handler(chat: Chat, public_url: str):
             m = re.fullmatch(r"/api/donna/jobs/([\d.]+)/result", path)
             if m:  # Donna's workstation: a finished Alliant job
                 return self._worker("POST", f"/jobs/{m.group(1)}/result")
+            if path == "/api/donna/jobs/alert":  # Donna's workstation: Alliant signed her out between jobs
+                return self._worker("POST", "/jobs/alert")
             if path == "/api/donna/jobs/notebook":  # Donna's workstation adding a line to her notebook
                 return self._worker("NOTEBOOK_ADD", "")
             m = re.fullmatch(r"/api/donna/jobs/([\d.]+)/file", path)

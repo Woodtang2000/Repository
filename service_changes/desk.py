@@ -1252,6 +1252,9 @@ class Desk:
                         return self.reply(500, b"{}")
                     print(time.strftime("%H:%M"), "alliant jobs file:", f.group(1), out, flush=True)
                     return self.reply(200, json.dumps({"ok": out}).encode())
+                if self.path == "/jobs/alert":  # Donna, between jobs: Alliant signed her out
+                    body = json.loads(self.rfile.read(min(int(self.headers.get("Content-Length") or 0), 4000)) or b"{}")
+                    return self.reply(200, json.dumps({"ok": desk.jobs().alert(str(body.get("note") or ""))}).encode())
                 m = re.fullmatch(r"/jobs/([\d.]+)/result", self.path)
                 if m:  # Donna's workstation reporting a finished job
                     try:
@@ -1887,6 +1890,10 @@ class Desk:
                     self.verify_pass(now)
                     self.stockroom_pass(now)
                     self.owner_brief_pass(now)
+                    try:  # her workstation went quiet for 20 minutes: tell Scott (alliant_jobs.watchdog)
+                        self.jobs().watchdog(now)
+                    except Exception as e:
+                        print(time.strftime("%H:%M"), "watchdog error:", e, flush=True)
                     self.scorecard_pass(now)
                     self.notices_pass()
                     # Route passes share an office pass from the last few seconds: during a burst of drivers they

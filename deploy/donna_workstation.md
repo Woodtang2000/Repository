@@ -2,10 +2,11 @@
 
 A LaunchAgent runs `~/Donna/donna_worker.sh` every minute while Donna's user is logged in. The script asks the
 server for the next Alliant job (a cheap request; nothing happens when the queue is empty). When there is one, it starts
-Claude Code with Chrome connected, and that one session works **the whole day in one Alliant tab**, the way a person
-keeps Alliant open all day: each job, its report, then it waits for the next with `next_job.sh` (a quiet loop that
-checks every 30 seconds, so waiting costs nothing), until 10 PM. Every Claude session gets its own Chrome tab group
-and can't see the last one's tabs, so one session per day means one tab and one sign-in per day. Every run is
+Claude Code with Chrome connected, and that one session works **around the clock in one Alliant tab**: each job, its
+report, then it waits for the next with `next_job.sh` (a quiet loop that checks every 30 seconds) and clicks the Alliant
+title bar every 5 minutes so Alliant never goes idle. It ends at 4 AM and launchd starts the next one a minute later.
+If she finds Alliant signed out she alerts Scott; if her workstation stops checking in for 20 minutes, the server
+alerts him (WATCHDOG_MINUTES). Every run is
 logged in `~/Donna/logs/<date>.log`. launchd never starts a second copy while one is still running, so she takes one
 job at a time. "Donna pause" in Scott's private messages stops her taking jobs; a job lost for 30 minutes goes back in
 the queue.
@@ -42,28 +43,24 @@ chmod +x ~/Donna/next_job.sh
 cat > ~/Donna/donna_worker.sh <<'EOF'
 #!/bin/bash
 # Donna's Alliant work loop: launchd runs this every minute (deploy/donna_workstation.md in the Service Desk repo).
-# One Claude session works the whole day in one Alliant tab; a new one starts only after the last one ends.
+# One Claude session at a time, around the clock, in one Alliant tab: it keeps Alliant awake between jobs and ends at
+# 4 AM so the next one starts fresh (same Alliant session, new tab, no sign-in).
 export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
 export BASH_DEFAULT_TIMEOUT_MS=600000 BASH_MAX_TIMEOUT_MS=600000   # her 5-minute waits for the next job
 LOG="$HOME/Donna/logs/$(date +%F).log"
-[ "$(date +%H)" -ge 22 ] && exit 0   # after 10 PM: no new session until morning (a job asked late waits for it)
-JOB="$("$HOME/Donna/next_job.sh" | tail -1)"
-case "$JOB" in *'"id"'*) ;; *) exit 0 ;; esac
-echo "=== $(date) day session starts with job: $JOB" >> "$LOG"
+echo "=== $(date) session starts" >> "$LOG"
 cd "$HOME/Donna"
 ENABLE_CLAUDEAI_MCP_SERVERS=false claude -p --chrome --permission-mode auto "You are Donna at your Alliant workstation, \
-working the whole day in ONE Alliant tab, the way a person keeps Alliant open all day. Your first job is already taken \
-for you: $JOB
+working around the clock in ONE Alliant tab, the way a person keeps Alliant open all day. \
 Get your rules first: curl -s -H \"Authorization: Bearer \$(cat ~/.donna_worker_token)\" \
-https://chat.snowwhitelinen.com/api/donna/jobs/rules . Follow them exactly, including reading your Alliant notes. \
-Open Alliant once, in one tab, and keep it open: do the job, report it with the curl command in the rules, then wait \
-for the next one by running ~/Donna/next_job.sh (it waits up to 5 minutes and prints the next job, or NONE). On NONE, \
-keep Alliant awake: click once on the Alliant program window's own title bar (the strip across the top of the \
-Alliant window with its name in it, inside the remote screen); never anywhere else, never a key. Then run it again. Never close the tab, never open a new one, never \
-start over. Keep going until 10 PM Alaska time \
-(check with: date), then disconnect from the page's bar above the remote screen and stop. Always report every job \
-you take, even if you have to stop." >> "$LOG" 2>&1
-echo "=== $(date) day session done (exit $?)" >> "$LOG"
+https://chat.snowwhitelinen.com/api/donna/jobs/rules . Follow them exactly, including reading your Alliant notes and \
+your notebook. Open Alliant once, in one tab, and keep it open. Then loop: run ~/Donna/next_job.sh (it waits up to 5 \
+minutes and prints the next job, or NONE). A job: do it and report it with the curl command in the rules. NONE: keep \
+Alliant awake as your rules say (one click on the Alliant window's title bar, nothing else; if Alliant is signed out, \
+send the alert in your rules), then run it again. Never close the tab, never open a new one, never start over. Keep \
+going until 4 AM Alaska time (check with: date), then stop (a fresh session starts right after). Always report every \
+job you take, even if you have to stop." >> "$LOG" 2>&1
+echo "=== $(date) session done (exit $?)" >> "$LOG"
 EOF
 chmod +x ~/Donna/donna_worker.sh
 cat > ~/Library/LaunchAgents/com.donna.worker.plist <<EOF

@@ -213,10 +213,16 @@ what you actually saved.
    sign-in for the day), waiting for the next with ~/Donna/next_job.sh. Each time it says NONE, click once on the
    **Alliant program window's title bar** (the strip across the top of the Alliant window, with its name in it, inside
    the remote screen) so Alliant doesn't sign you out for being idle, then wait again. Only there: never a key, never
-   a click on a field, button, menu or list, and if a box or message is open, leave it and just wait. Never close it while there may be another job; closing it makes Chrome ask "Leave site?", which
-   blocks the browser until someone clicks it. When the day is done (10 PM), disconnect from the
-   page's own bar **above** the remote screen (the Windows App web client's Disconnect, outside Windows: the session
-   and Alliant keep running) and leave the tab as it is. Never use any Sign out, Log off or Disconnect menu inside
+   a click on a field, button, menu or list, and if a box or message is open, leave it and just wait.
+   **If that check finds Alliant signed out** (its User/Password box, a Windows sign-in you can't click through, or
+   "Disconnected" that Reconnect doesn't fix), tell Scott right away, then keep waiting and checking:
+
+       curl -s -X POST -H "Authorization: Bearer $(cat ~/.donna_worker_token)" -H "Content-Type: application/json" \
+         -d '{"note": "what the screen shows"}' https://chat.snowwhitelinen.com/api/donna/jobs/alert
+
+   Never close the Alliant tab; closing it makes Chrome ask "Leave site?", which blocks the browser until someone
+   clicks it. Your session runs around the clock and ends at 4 AM: then just stop, leaving the tab as it is (the next
+   session reconnects to the same running Alliant). Never use any Sign out, Log off or Disconnect menu inside
    the remote desktop.
 3. If a reconnect ever lands on a Windows desktop **without Alliant open** (the server ended an idle session), or on
    Alliant's own login box (User / Password) with nothing filled in, don't start or sign in to Alliant yourself:
