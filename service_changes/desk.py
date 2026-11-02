@@ -1061,7 +1061,8 @@ class Desk:
                     and not all(c.already_done for c in r.changes)]  # a store already done (stopped the other day): skip
             if not keep:
                 pending.pop(key, None)
-                return f"None of the {group[0]} locations have that in Alliant, so there's nothing to change."
+                return (f"None of the {len(group[1])} {group[0]} locations have that left to change in Alliant (none, or "
+                        "already done), so there's nothing to do.")
             parts, results = [parts[i] for i in keep], [results[i] for i in keep]
         questions = list(dict.fromkeys(q for r in results for q in r.questions))
         if questions:
@@ -1073,11 +1074,13 @@ class Desk:
                     from .checks import stop_inventory
                     inv = sum(stop_inventory(c) or 0 for r in results for c in r.changes
                               if c.change.action == Action.stop and not c.change.inventory)
-                    asked = (f"That's {len(parts)} {group[0]} locations, {inv} in inventory in all. For all of them, "
+                    asked = (f"{group[0]} has {len(group[1])} locations; {len(parts)} of them still have that to change "
+                             f"({inv} in inventory in all; the rest have none or are already done). For all of them, "
                              "what should the inventory be: zero (picked up), cut down (to how many, or by half), or "
                              "left as is for now?")
                 else:
-                    asked = f"That's {len(parts)} {group[0]} locations. For all of them: {other[0]}"
+                    asked = (f"{group[0]} has {len(group[1])} locations; {len(parts)} of them still have that to change. "
+                             f"For all of them: {other[0]}")
             pending[key] = {"text": text, "asked": asked, "at": now, "user": owner, "key": key}
             return asked
         said = []
@@ -1091,10 +1094,14 @@ class Desk:
             if days and said:  # Homer is Tuesday: a Friday special needs a route the office arranges
                 said[results.index(r)] += (f" ({part.invoice_date} isn't their delivery day, which is {days}: the "
                                            "office will pick a route for it, or say their regular day instead)")
+        if group and 0 < len(said) <= 3:  # a few stores: each one, with how many there are in all
+            said[0] = (f"Of the {len(group[1])} {group[0]} locations, {len(said)} still have that to change (the rest "
+                       f"have none or are already done): {said[0]}")
         if group and len(said) > 3:  # a read-back of 20 stores is too long to hear: the count and one example
             lines = sum(len(r.changes) for r in results)
-            said = [f"{len(said)} {group[0]} locations, {lines} item lines in all. For example, {said[0]}; and the "
-                    f"same at the other {len(said) - 1}"]
+            said = [f"{len(said)} of the {len(group[1])} {group[0]} locations still have that to change (the rest "
+                    f"have none or are already done), {lines} item lines in all. For example, {said[0]}; and the same "
+                    f"at the other {len(said) - 1}"]
         pending[key] = {"text": text, "parts": parts, "results": results, "confirm": True, "at": now, "user": owner,
                         "key": key}
         return "; ".join(said) + ". Want me to put that in?"
