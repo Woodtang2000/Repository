@@ -183,9 +183,9 @@ what you actually saved.
 ## Finishing every job
 
 1. Leave Alliant on the Customer Center screen.
-2. **Keep the Alliant tab open between jobs**: your session takes job after job in that same tab (one sign-in for
-   the whole batch). Never close it while there may be another job; closing it makes Chrome ask "Leave site?", which
-   blocks the browser until someone clicks it. When the session is done (no job for 15 minutes), disconnect from the
+2. **Keep the Alliant tab open between jobs**: your session takes job after job in that same tab all day (one
+   sign-in for the day), waiting for the next with ~/Donna/next_job.sh. Never close it while there may be another job; closing it makes Chrome ask "Leave site?", which
+   blocks the browser until someone clicks it. When the day is done (10 PM), disconnect from the
    page's own bar **above** the remote screen (the Windows App web client's Disconnect, outside Windows: the session
    and Alliant keep running) and leave the tab as it is. Never use any Sign out, Log off or Disconnect menu inside
    the remote desktop.
