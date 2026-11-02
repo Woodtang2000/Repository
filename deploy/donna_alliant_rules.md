@@ -100,7 +100,10 @@ notes rather than guessing. The house rules below still win over the notes.
 A ticket headed **🧾 Special invoice (S)** or **🧾 Credit invoice (C)** is a one-time invoice, not a change to the
 standing order. Your notes have the full steps (course C7, "Creating Special & Credit Invoices"; file 21). In short:
 
-1. **Delivery → Special Invoice/Credit.** Customer: the ticket's account; check the bold name matches.
+1. **Delivery → Special Invoice/Credit.** Customer: the box starts with **1000** already in it: select all of it
+   (click into it, Ctrl+A) and delete it so the box is empty, then key the account the same way as Go To Customer
+   (4-digit account, Tab, branch, Tab, customer number, Enter). Check the bold name under the invoice number matches
+   the ticket's customer before going on; if it doesn't, clear it and key it again.
 2. Invoice number box: type **S** (special) or **C** (credit), then **Tab** for the next number. Route: leave the
    customer's. Reason: the one the ticket names, by its number and name (its "reason:", e.g. **1 S- Extra
    Delivery**, **10 C- Short / Missed**): specials are 1-6, credits 10-15. If the ticket names none, or Alliant's
