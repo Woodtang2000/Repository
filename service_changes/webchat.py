@@ -448,6 +448,9 @@ def make_handler(chat: Chat, public_url: str):
                 return self._send(200, b"ok", "text/plain")
             if u.path == "/api/donna/jobs/next":  # Donna's workstation: the next Alliant job
                 return self._worker("GET", "/jobs/next")
+            again = re.fullmatch(r"/api/donna/jobs/([\d.]+)", u.path)
+            if again:  # one of her jobs again, in plain text
+                return self._worker("GET", f"/jobs/{again.group(1)}")
             if u.path == "/api/donna/jobs/rules":  # her house rules for Alliant (deploy/donna_alliant_rules.md)
                 return self._worker("RULES", "")
             if u.path == "/api/donna/jobs/notes" or u.path.startswith("/api/donna/jobs/notes/"):  # Alliant University

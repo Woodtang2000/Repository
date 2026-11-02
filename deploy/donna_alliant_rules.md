@@ -12,6 +12,14 @@ show afterwards), `asked_by`.
 
 Account 1205-1-00004 = Account **1205**, Branch **1** (Snow White; 2 = The Laundry Group), Customer **00004**.
 
+Work from `ticket_plain` (the same ticket in plain text, no Slack marks or emoji). If a job ever looks cut off or
+garbled, read it again from the server before anything else (never guess, never send it back for that alone):
+
+    curl -s -H "Authorization: Bearer $(cat ~/.donna_worker_token)" https://chat.snowwhitelinen.com/api/donna/jobs/<id>
+
+The quoted line at the bottom is what they asked, then their answers to any question ("… on Friday · Tuesday": the
+answer, Tuesday, is what they settled on, and the ticket already shows it).
+
 ## Your Alliant training
 
 The Alliant University notes (Scott had you take all the courses) are on the server:

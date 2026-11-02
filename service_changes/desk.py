@@ -1107,8 +1107,11 @@ class Desk:
         """Scott (or Bill) said yes: the ticket(s) in #service-desk, queued for her workstation (unless DONNA_ALLIANT=off)."""
         owner = p["user"]
         first = self.name(owner).split()[0] if self.name(owner) else "Scott"
+        lines = p["text"].splitlines()  # what they asked, plus their answers to her questions ("The answer: Tuesday")
+        said = lines[0] + "".join(f" · {ln.split(':', 1)[1].strip()}" for ln in lines[1:]
+                                  if ln.startswith(("The answer:", "Correction:")))
         if typed:
-            src = {**typed, "user": owner, "text": p["text"].split("\n")[0]}
+            src = {**typed, "user": owner, "text": said}
             where = f"{first}, in a private message"
         else:  # by voice: his private messages with her keep the record and get her readback. Posting to his user id
             # opens that conversation with the chat:write the app has (conversations.open would need im:write).
@@ -1116,7 +1119,7 @@ class Desk:
             r = _post(self.slack, channel or owner, f"{'📱 You texted me' if texted else '🎙️ You asked me'}: "
                       f"_{_short(p['text'].splitlines()[0], 300)}_", {"kind": "voice_change"})
             channel = r.get("channel") or channel or owner
-            src = {"ts": r["ts"], "user": owner, "text": p["text"].splitlines()[0]}
+            src = {"ts": r["ts"], "user": owner, "text": said}
             if texted:  # he hears back the way he asked: by text
                 src["owner_sms"] = "+1" + texted.group(1)
             where = f"{first}, by {'text' if texted else 'voice'}"
@@ -1184,6 +1187,19 @@ class Desk:
                 self.wfile.write(data)
 
             def do_GET(self):  # Donna's workstation asking for the next Alliant job
+                again = re.fullmatch(r"/jobs/([\d.]+)", self.path)
+                if again:  # one of her jobs again, as plain text, when what she got was cut off
+                    job = desk.jobs().load()["jobs"].get(again.group(1))
+                    if not job:
+                        return self.reply(404, b"{}")
+                    from .alliant_jobs import plain_ticket
+                    out = (f"Job {job['id']} for {job.get('account', '')} (asked by {job.get('asked_by', '')}, "
+                           f"status {job['status']})\n\n{plain_ticket(job.get('ticket', ''))}\n").encode()
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/plain; charset=utf-8")
+                    self.send_header("Content-Length", str(len(out)))
+                    self.end_headers()
+                    return self.wfile.write(out)
                 if self.path != "/jobs/next":
                     return self.reply(404, b"{}")
                 try:
@@ -1191,7 +1207,10 @@ class Desk:
                 except Exception as e:
                     print(time.strftime("%H:%M"), "alliant jobs error:", e, flush=True)
                     return self.reply(500, b"{}")
-                self.reply(200, json.dumps({"job": job}).encode())
+                if job:  # the ticket in plain words too: no Slack markup or emoji for her to mangle
+                    from .alliant_jobs import plain_ticket
+                    job = {**job, "ticket_plain": plain_ticket(job.get("ticket", ""))}
+                self.reply(200, json.dumps({"job": job}, ensure_ascii=False).encode())
 
             def do_POST(self):
                 f = re.fullmatch(r"/jobs/([\d.]+)/file\?name=([\w.-]{1,60})", self.path)

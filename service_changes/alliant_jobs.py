@@ -27,6 +27,21 @@ SIGNED_OUT = re.compile(r"alliant needs signing in|alliant isn't open|alliant is
 STALE_MINUTES = 30  # a job "working" longer than this goes back in the queue (the workstation lost it)
 
 
+EMOJI = {"🧾": "", "➕": "Add:", "➖": "Decrease:", "🔢": "Set:", "⛔": "Stop:", "🔄": "Restart:", "📏": "Size:", "✏️": "Change:",
+         "⚠️": "WARNING:", "❓": "QUESTION:", "⏸️": "ON HOLD:", "☑️": "", "📝": "Note:", "•": "-", "·": "|", "→": "->"}
+
+
+def plain_ticket(text: str) -> str:
+    """A ticket as plain text: no Slack bold/italic/code marks, links or emoji; quotes kept."""
+    for k, v in EMOJI.items():
+        text = text.replace(k, v)
+    text = re.sub(r"<(?:https?|mailto)[^|>]*\|([^>]*)>", r"\1", text)
+    text = re.sub(r":[a-z0-9_+-]+:", "", text)
+    text = re.sub(r"[*_`]", "", text).replace("&gt;", ">").replace("&lt;", "<").replace("&amp;", "&")
+    text = re.sub(r"[^\x09\x0a\x20-\x7e]", "", text)
+    return "\n".join(re.sub(r"[ \t]{2,}", " ", ln).strip() for ln in text.splitlines())
+
+
 def button(ts: str) -> dict:
     return {"type": "actions", "block_id": "donna", "elements": [
         {"type": "button", "action_id": ACTION, "value": ts, "text": {"type": "plain_text", "text": "🤖 Donna, enter it"}}]}

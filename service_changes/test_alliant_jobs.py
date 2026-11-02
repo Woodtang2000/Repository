@@ -235,3 +235,15 @@ def test_the_routes_driver_hears_about_a_special(tmp_path):
     jobs.result("100.1", "entered", "Made special invoice S211 for Midas.", readback="50 bar mops on Thursday")
     posted = [text for ch, text in slack.thread if text.startswith("🧾 *Special for")]
     assert posted and "invoice S211: going out *Thursday*" in posted[0] and "• 50  TOWEL BAR MOP GOLD STRIPE 5-01-01" in posted[0]
+
+
+def test_the_ticket_in_plain_text():
+    from .alliant_jobs import plain_ticket
+    t = ("*5045-1-00000*  HOMER GOLF COURSE\n🧾 *Special invoice (S)* · delivery Tuesday · reason: *1 S- Extra Delivery*\n"
+         "• *10*  TOWEL BAR MOP GOLD STRIPE `5-01-01` _(not on the account: one-time line, Add Line, RS)_\n"
+         "&gt; One-time drop on Friday · Tuesday\n<https://x.slack.com/p1|Scott, in a private message> · React :white_check_mark:")
+    out = plain_ticket(t)
+    assert "Special invoice (S) | delivery Tuesday | reason: 1 S- Extra Delivery" in out
+    assert "- 10 TOWEL BAR MOP GOLD STRIPE 5-01-01 (not on the account: one-time line, Add Line, RS)" in out
+    assert "> One-time drop on Friday | Tuesday" in out and "Scott, in a private message" in out
+    assert all(ord(ch) < 128 for ch in out)
