@@ -329,9 +329,7 @@ class Jobs:
         from datetime import datetime
         from .context import ALASKA
         when = datetime.fromtimestamp(seen, ALASKA)
-        text = (f"⚠️ *Donna's workstation hasn't checked in since {when:%-I:%M %p}* ({int((now - seen) // 60)} minutes). "
-                "The Mac mini may be off or asleep, Chrome may have closed, or her session stopped. Check it with Chrome "
-                "Remote Desktop; on the Mac, Terminal: tail -15 ~/Donna/logs/$(date +%F).log")
+        text = f"⚠️ Donna's workstation isn't responding (nothing since {when:%-I:%M %p}) – please check it."
         owner = os.environ.get("OWNER_SLACK_ID", "U4KFSQCDQ").split(",")[0].strip()
         for where in (owner, self.desk.desk_id):
             try:
@@ -347,9 +345,7 @@ class Jobs:
         if time.time() - getattr(self, "warned", 0) < 3600:
             return
         self.warned = time.time()
-        text = ("⚠️ *Alliant signed Donna out* on her workstation, so she can't enter tickets. Please sign her back in "
-                "(Chrome Remote Desktop → the Alliant tab in her Claude group → sign in → \"Stay signed in? Yes\"), then tap "
-                "*🤖 Donna, enter it* below (or on the waiting ticket)." + (f"\n_What she saw: {note}_" if note else ""))
+        text = "⚠️ Donna has been logged out of Alliant – please reconnect."
         blocks = [{"type": "section", "text": {"type": "mrkdwn", "text": text}}] + ([button(job_id)] if job_id else [])
         self.desk.slack.chat_postMessage(channel=self.desk.desk_id, text=text, blocks=blocks)
         owner = os.environ.get("OWNER_SLACK_ID", "U4KFSQCDQ").split(",")[0].strip()

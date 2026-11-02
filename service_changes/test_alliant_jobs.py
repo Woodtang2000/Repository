@@ -175,7 +175,7 @@ def test_signed_out_is_announced_once(tmp_path):
     jobs.next()
     jobs.result("100.1", "needs_person", "Alliant needs signing in")
     alerts = [p for p in posted if p[1] is None]
-    assert [p[0] for p in alerts] == ["CDESK", "U4KFSQCDQ"] and "Alliant signed Donna out" in alerts[0][2]
+    assert [p[0] for p in alerts] == ["CDESK", "U4KFSQCDQ"] and "logged out of Alliant" in alerts[0][2]
     assert all(p[3]["blocks"][-1]["elements"][0]["value"] == "100.1" for p in alerts)  # the re-send button rides along
     jobs.signed_out()
     assert len([p for p in posted if p[1] is None]) == 2  # at most once an hour
@@ -256,8 +256,8 @@ def test_watchdog_and_signed_out_alert(tmp_path):
     seen = jobs.load()["seen_at"]
     assert jobs.watchdog(seen + 10 * 60) == ""  # 10 minutes quiet: fine
     assert jobs.watchdog(seen + 25 * 60) == "alerted"
-    assert any("hasn't checked in since" in text for _, text in slack.thread)
+    assert any("Donna's workstation isn't responding" in text for _, text in slack.thread)
     assert jobs.watchdog(seen + 30 * 60) == ""  # once an hour
     n = len(slack.thread)
     assert jobs.alert("Alliant User/Password box, empty") == "alerted"
-    assert any("What she saw: Alliant User/Password box, empty" in text for _, text in slack.thread[n:])
+    assert any(text == "⚠️ Donna has been logged out of Alliant – please reconnect." for _, text in slack.thread[n:])
