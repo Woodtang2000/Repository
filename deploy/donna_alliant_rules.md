@@ -179,9 +179,11 @@ ticket: `needs_person`. Anything unclear (a line that isn't on the account, no q
 - If a ticket has open questions (❓), a ⚠️ warning, or asks for something these rules don't cover (putting an account
   or item on hold or taking it off, a new customer, pricing): `needs_person` with why. Special and credit invoices
   are covered above.
-- A ⏸️ "on hold" note in a ticket comes from the latest Alliant export (up to an hour old). Check the hold on Alliant's own screen: if the
-  account or item is no longer on hold, go ahead with the item change. If it is still on hold, `needs_person`. Never
-  change a hold yourself.
+- A ⏸️ "on hold" note in a ticket comes from the latest Alliant export (up to an hour old). Check the hold on Alliant's
+  own screen. **A stop (with the inventory the ticket says) goes ahead on an item that's on hold** (Scott, 11/2): stop
+  it and set its inventory exactly as for any stop, and leave the hold itself as it is. Any other change to an item
+  that's still on hold (add, increase, a new count): `needs_person`. If it's no longer on hold, go ahead as normal.
+  Never put anything on hold or take a hold off yourself.
 
 ## Reporting
 
