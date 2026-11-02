@@ -873,8 +873,7 @@ class Desk:
         owner = self.is_owner(user)
         if user in AR_USERS and re.match(r"^\s*donna,?\s+(?:score\s*card|scores|stats)\s*(?:yesterday)?\s*$",
                                          ev.get("text", ""), re.I):  # Scott and Bill: today so far, or yesterday
-            self.slack.chat_postMessage(channel=channel, text=self.scorecard_text(
-                1 if "yesterday" in ev.get("text", "").lower() else 0)[:3900], unfurl_links=False)
+            self.send_scorecard(channel, 1 if "yesterday" in ev.get("text", "").lower() else 0)
             return "scorecard"
         if owner and re.match(r"^\s*donna,?\s+(?:notebook|notes)\s*$", ev.get("text", ""), re.I):
             from . import notebook  # what she has learned on Alliant's screens
@@ -1337,7 +1336,11 @@ class Desk:
                 + (text or "(nothing posted)"))
 
     def scorecard_text(self, days_back: int = 1) -> str:
-        """The scorecard (scorecard.py) for yesterday, or today so far: read from #service-desk's tickets."""
+        return self.scorecard(days_back)[0]
+
+    def scorecard(self, days_back: int = 1) -> tuple[str, str]:
+        """The scorecard (scorecard.py) for yesterday, or today so far, read from #service-desk's tickets: (the Slack
+        message, the path of its PDF in the house style, "" if the PDF couldn't be made)."""
         from . import scorecard
         start, end, title = scorecard.day_window(datetime.now(ALASKA), days_back)
         msgs, cursor = [], None
@@ -1349,7 +1352,24 @@ class Desk:
             cursor = (r.get("response_metadata") or {}).get("next_cursor")
             if not cursor or len(msgs) > 3000:
                 break
-        return scorecard.build(msgs, meta, todo_bar.body, set(self.routes.values()), self.desk_id, start, end, title)
+        text = scorecard.build(msgs, meta, todo_bar.body, set(self.routes.values()), self.desk_id, start, end, title)
+        path = os.path.join(self.data_dir, "scorecards", f"Donna scorecard {start:%Y-%m-%d}.pdf")
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            scorecard.pdf(scorecard.stats(msgs, meta, todo_bar.body, set(self.routes.values()), self.desk_id, start, end),
+                          title, path)
+        except Exception as e:  # the message still goes
+            print(time.strftime("%H:%M"), "scorecard pdf error:", str(e)[:200], flush=True)
+            path = ""
+        return text, path
+
+    def send_scorecard(self, to: str, days_back: int = 1) -> None:
+        """The scorecard PDF in someone's private messages with Donna, with the short version as its message."""
+        text, path = self.scorecard(days_back)
+        first = self.slack.chat_postMessage(channel=to, text=text[:3900], unfurl_links=False)
+        if path:
+            self.slack.files_upload_v2(channel=first.get("channel") or to, thread_ts=None, file=path,
+                                       filename=os.path.basename(path), title=os.path.basename(path)[:-4])
 
     def scorecard_pass(self, now: float) -> None:
         """Every morning from SCORECARD_HOUR (7): yesterday's scorecard to Scott and Bill (SCORECARD_TO), once."""
@@ -1368,9 +1388,8 @@ class Desk:
 
         def send():
             try:
-                text = self.scorecard_text(1)
                 for who in [u.strip() for u in os.environ.get("SCORECARD_TO", "U4KFSQCDQ,U9SGPJP0C").split(",") if u.strip()]:
-                    self.slack.chat_postMessage(channel=who, text=text[:3900], unfurl_links=False)
+                    self.send_scorecard(who, 1)
                 print(time.strftime("%H:%M"), "scorecard sent", flush=True)
             except Exception as e:
                 print(time.strftime("%H:%M"), "scorecard error:", e, flush=True)
