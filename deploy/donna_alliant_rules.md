@@ -108,32 +108,18 @@ standing order. Your notes have the full steps (course C7, "Creating Special & C
 5. **Charges** (special invoices): click the **Charges** button so the customer's own standing charges go on, as on
    their regular invoice: fuel charge, service charge, inventory maintenance charge and the like. Keep those lines;
    never add a charge the customer doesn't have, never change an amount. (A credit gets no charges.)
-6. Top checkboxes: **Finalize unchecked** (a special goes to the driver's handheld for that day). On a special, check
-   **Print invoice** so saving prints just this one invoice (see step 9). Leave the others as they are.
+6. Top checkboxes: **Finalize unchecked** (a special goes to the driver's handheld for that day). Leave the others
+   as they are; don't print from this screen.
 7. **Save.** If Alliant says it's out of balance, type the subtotal, tax and total exactly as it shows them into the
-   verification boxes, and save.
-8. Check it: **Delivery → Invoices / Delivery Tickets**, the date, **Refresh** (with Include Non-Printed Invoices if
-   needed): the new S (or C) number is there for this customer. Don't print from this list: it brings up every ticket
-   for the day.
-9. **The copy for Kirk** (special invoices only): saving prints just this invoice (Print invoice checked, or Alliant
-   prints a special on its own) and opens the Windows print box. If it lists a printer named for the **Depot**
-   (where Kirk pulls the routes), print to that and you're done: say "printed at the depot" in your note. Otherwise
-   choose **Microsoft Print to PDF** (never any other real or redirected printer) and save it as the
-   invoice number (S0148777.pdf) in **Remote Desktop Virtual Drive → Downloads** (under This PC / Redirected drives):
-   a file saved there downloads to this Mac through Chrome. (A **Remote Desktop Virtual Printer**, if offered, works
-   too.) Then **uncheck Print invoice** again (the checkboxes are remembered for the next special). Then send it:
-
-       F=$(find ~/Downloads -name '*.pdf' -mmin -5 | xargs ls -t | head -1); curl -s -X POST \
-         -H "Authorization: Bearer $(cat ~/.donna_worker_token)" -H "Content-Type: application/pdf" \
-         --data-binary @"$F" "https://chat.snowwhitelinen.com/api/donna/jobs/<id>/file?name=S0148777.pdf"
-
-   Then print that same PDF at the depot from this Mac (the depot printer is set up on it, over the office VPN):
-
-       P=$(lpstat -p | awk '/[Dd]epot/{print $2; exit}'); [ -n "$P" ] && lp -d "$P" "$F"
-
-   It goes to Kirk in Slack, who pulls the routes and sends it to the customer, and it's on the depot printer. If there's no Remote Desktop Virtual
-   Drive to save to, or no PDF comes down to ~/Downloads, don't print anything else: say so in your note, with what
-   the Save box offered (Kirk is still told to print it from Alliant).
+   verification boxes, and save. Note the new invoice number (S…).
+8. **Email it to Kirk** (special invoices only): **Delivery → Invoices / Delivery Tickets**. In the dropdown choose
+   **Range of invoices**, and put the new S number as both the first and the last invoice (so it's only this one;
+   never the whole day's list). Refresh, check that just that invoice is listed for this customer, then check
+   **One time email** and enter **donna+specials@snowwhitelinen.com** as the address, and send it. Uncheck One time
+   email again afterwards if it stays checked. That address comes back to the service desk, which sends the PDF to
+   Kirk in Slack automatically (he pulls the routes and sends it to the customer). Never email it anywhere else.
+9. If the One time email box or the Range of invoices choice isn't there, or it won't send: don't print instead.
+   Say so in your note (Kirk is still told to print it from Alliant).
 10. Report `entered` with the invoice number and its lines in your note, never amounts or prices.
 
 A credit is only from a ticket Scott or Bill asked for ("Scott, by voice" or "Bill, …" on it); anyone else's credit

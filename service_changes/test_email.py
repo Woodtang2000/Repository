@@ -226,3 +226,21 @@ def test_a_branch_2_customer_anywhere_makes_the_whole_account_the_laundry_group(
     assert company_for("1204-1-00000") == "The Laundry Group" and company_for("1204-2-00001") == "The Laundry Group"
     assert company_for("5045-1-00000") == "Snow White Linen"
     Alliant.from_dir(str(tmp_path / "none"))  # leave no Laundry Group numbers behind for other tests
+
+
+def test_a_special_alliant_emailed_goes_to_kirk_not_the_desk(desk):
+    ed, slack, sent, inbox, seen = desk
+    posts, uploads = [], []
+    slack.chat_postMessage = lambda channel, text, **kw: posts.append((channel, text)) or {"channel": "DKIRK", "ts": "1.1"}
+    slack.files_upload_v2 = lambda **kw: uploads.append(kw)
+    ed.attachments = lambda mid: [{"id": "att1", "filename": "S0148777.pdf", "content_type": "application/pdf"}]
+    ed.attachment = lambda mid, aid: b"%PDF-1.7 invoice"
+    m = mail(5, "invoices@alliantcloud.com", "Your invoice is attached", subject="Invoice S0148777")
+    m["to"] = [{"email": "donna+specials@snowwhitelinen.com"}]
+    inbox.append(m)
+    ed.run_once()
+    assert posts and posts[0][0] == "U5WUV01JA" and "Special invoice S0148777" in posts[0][1]
+    assert uploads and uploads[0]["filename"] == "S0148777.pdf" and uploads[0]["content"].startswith(b"%PDF")
+    assert not [p for p in slack.posts if p["meta"].get("kind") == "ticket"] and not sent  # no ticket, no reply
+    ed.run_once()
+    assert len(uploads) == 1  # once

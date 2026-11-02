@@ -177,7 +177,9 @@ class Jobs:
         if note:
             self.desk.slack.chat_postMessage(channel=self.desk.desk_id, thread_ts=job_id, text=f"🤖 Donna: {note}"[:3000],
                                              unfurl_links=False)
-        if job["status"] == "entered" and "Special invoice (S)" in body(t) and not job.get("pdf"):
+        if job["status"] == "entered" and "Special invoice (S)" in body(t) and not job.get("pdf") and re.search(
+                r"couldn'?t|could not|not there|won'?t send|didn'?t send|wasn'?t sent|not sent|no pdf|no one.?time", note, re.I):
+            # the PDF normally comes by Alliant's one-time email (email_desk.special_pdf); only when she says it didn't
             to = os.environ.get("SPECIALS_TO", "U5WUV01JA")
             try:  # the special is in Alliant but its PDF didn't come through: Kirk still needs to know
                 self.desk.slack.chat_postMessage(channel=to, text=f"🧾 Donna made a special invoice for *{meta(t).get('account', '')}*"

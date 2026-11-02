@@ -23,6 +23,19 @@ def _call(method: str, path: str, params: dict | None = None, body: dict | None 
         return json.loads(r.read() or b"{}")
 
 
+def attachments(message_id: str) -> list[dict]:
+    """A received email's attachments: [{id, filename, content_type, size}], metadata only."""
+    return _call("GET", f"/v1/email/inbound-messages/{message_id}/attachments").get("data", [])
+
+
+def attachment(message_id: str, attachment_id: str) -> bytes:
+    """One attachment's raw bytes."""
+    req = urllib.request.Request(_host() + f"/v1/email/inbound-messages/{message_id}/attachments/{attachment_id}",
+                                 headers={"Authorization": f"Bearer {os.environ['BIRD_API_KEY']}"})
+    with urllib.request.urlopen(req, timeout=60) as r:
+        return r.read()
+
+
 def received(since_iso: str, inbound_address_id: str = "") -> list[dict]:
     """Emails received since `since_iso`, oldest first, each with its plain-text body."""
     params = {"received_after": since_iso, "limit": 100}

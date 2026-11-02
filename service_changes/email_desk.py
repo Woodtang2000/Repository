@@ -223,9 +223,55 @@ class EmailDesk(TextDesk):
             "event_type": KIND, "event_payload": {"kind": self.signup_kind, "phone": email_key(addr),
                                                   "accounts": accounts[:1], "name": who}})
 
+    def special_pdf(self, m: dict) -> bool:
+        """A special invoice Alliant emailed (Donna's one-time email to SPECIALS_EMAIL, donna+specials@...): its PDF
+        goes to Kirk in Slack (SPECIALS_TO), who pulls the routes. Never a customer ticket. True if it was one."""
+        to = " ".join((a.get("email") or "") for a in (m.get("to") or []) + (m.get("cc") or []) if isinstance(a, dict)).lower()
+        want = os.environ.get("SPECIALS_EMAIL", "donna+specials@snowwhitelinen.com").lower()
+        if want not in to:
+            return False
+        said = f"{m.get('subject') or ''} {m.get('text') or ''}"
+        files = [a for a in (self.attachments(m["id"]) or []) if (a.get("filename") or "").lower().endswith(".pdf")
+                 or "pdf" in (a.get("content_type") or "")]
+        number = re.search(r"\b(S\d{4,})\b", said + " " + " ".join(a.get("filename") or "" for a in files))
+        who = os.environ.get("SPECIALS_TO", "U5WUV01JA")
+        text = (f"🧾 *Special invoice {number.group(1) if number else ''}* from Alliant, made by Donna: here's the PDF to "
+                "send to the customer.").replace("  ", " ")
+        if not files:
+            self.slack.chat_postMessage(channel=who, text=text.replace("here's the PDF", "the email had no PDF; please "
+                                                                          "print it from Alliant") )
+            return True
+        first = self.slack.chat_postMessage(channel=who, text=text)
+        for a in files[:3]:
+            data = self.attachment(m["id"], a["id"])
+            name = re.sub(r"[^\w.-]", "", a.get("filename") or "") or f"{number.group(1) if number else 'special'}.pdf"
+            self.slack.files_upload_v2(channel=first.get("channel") or who, thread_ts=first.get("ts"), content=data,
+                                       filename=name, title=f"Special invoice {number.group(1) if number else ''}".strip())
+        print(time.strftime("%H:%M"), f"specials: {number.group(1) if number else 'a special'} PDF to Kirk", flush=True)
+        return True
+
+    def special_pdf_safe(self, m: dict) -> bool:
+        try:
+            return self.special_pdf(m)
+        except Exception as e:  # a Slack or Bird hiccup: say so, and don't turn it into a customer ticket
+            print(time.strftime("%H:%M"), "specials: PDF not passed on:", str(e)[:200], flush=True)
+            return "+specials" in str(m.get("to") or "").lower()
+
+    def attachments(self, message_id: str) -> list[dict]:
+        return bird.attachments(message_id)
+
+    def attachment(self, message_id: str, attachment_id: str) -> bytes:
+        return bird.attachment(message_id, attachment_id)
+
     def inbound(self, since: datetime) -> list[dict]:
         out = []
         for m in self.fetch(since.strftime("%Y-%m-%dT%H:%M:%SZ")):
+            if m.get("id") in self.state["seen"]:
+                pass
+            elif self.special_pdf_safe(m):
+                self.state["seen"].append(m["id"])  # handled here: never a ticket
+                self.save()
+                continue
             sender = email_key(real_sender(m))
             subject = m.get("subject") or ""
             mid = m.get("message_id") or ""
