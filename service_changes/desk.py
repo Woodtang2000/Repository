@@ -76,7 +76,7 @@ OWNER_ACTIONABLE = ACTIONABLE | {Category.credit_invoice}
 # Scott telling Donna a change himself (owner_change): worth parsing as one; "yes" / "no" to her readback.
 CHANGE_Q = re.compile(r"\b(change|add|stop|cancel|take (?:off|away)|remove|increase|decrease|raise|lower|cut|bump|drop|"
                       r"swap|switch|replace|set|make (?:it|that|them)|new wearer|put\b.{0,40}\bon|start|more|fewer|less|"
-                      r"credit|special (?:invoice|delivery|order)|extra|send|deliver|invoice)\b", re.I)
+                      r"credit|specials?|extra|send|deliver|invoice|one.?time|drop (?:off|some)|bring|order|need)\b", re.I)
 YES = re.compile(r"^\W*(yes|yeah|yep|yup|sure|correct|right|do it|go ahead|go for it|please do|put it in|enter it|"
                  r"sounds good|ok(?:ay)?|that's (?:it|right)|perfect)\b", re.I)
 NO = re.compile(r"^\W*(no|nope|cancel|never ?mind|don't|wait|hold on|scratch that)\b", re.I)
