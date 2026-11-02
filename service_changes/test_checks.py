@@ -742,3 +742,19 @@ def test_a_special_on_a_day_they_arent_delivered_is_flagged():
     assert off_day(p("Friday"), a) == "Tue" and off_day(p("Tuesday"), a) == "" and off_day(p("11/6"), a) == ""
     assert "⚠️ *Friday isn't their delivery day* (Tue): the office picks the route for it" in ticket(check(p("Friday"), a), a)
     assert "isn't their delivery day" not in ticket(check(p("Tuesday"), a), a)
+
+
+def test_stop_all_the_items_means_every_line_on_the_account():
+    from .checks import check, ticket
+    from .context import Alliant, Customer
+    from .schema import Action, Category, Change, ParsedMessage
+    a = Alliant(customers=[Customer("5045-1-00000", "HOMER GOLF COURSE", "5", ["Tue"])],
+                items={"5045-1-00000": {"APRON WHITE BIB": 80, "TOWEL BAR MOP GOLD STRIPE": 60}},
+                autocount={"5045-1-00000": {"APRON WHITE BIB": 80, "TOWEL BAR MOP GOLD STRIPE": 60}})
+    for said in ("all items", "all the items", "everything", "all of it"):
+        r = check(ParsedMessage(category=Category.item_change, account_number="5045-1-00000", summary="s",
+                                changes=[Change(action=Action.stop, item=said),
+                                         Change(action=Action.set, item=said, quantity=0, inventory=True)]), a)
+        assert sorted({c.alliant_item for c in r.changes}) == ["APRON WHITE BIB", "TOWEL BAR MOP GOLD STRIPE"], said
+        assert not r.questions, (said, r.questions)  # inventory to 0 was said: nothing to ask
+        assert "inventory 80 → *0*" in ticket(r, a)

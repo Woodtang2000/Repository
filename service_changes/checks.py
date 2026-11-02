@@ -258,6 +258,8 @@ def split_by_account(parsed: ParsedMessage) -> list[ParsedMessage]:
     return parts
 
 
+ANY_ITEM = {"item", "items", "thing", "things", "product", "product", "stuff", "line", "lines", "linen", "everything",
+            "them", "it", "of", "their", "the", "on", "account", "order", "rental", "rentals"}
 ALL_OF = re.compile(r"^\s*(?:all|every|each)\s+(?:of\s+)?(?:the\s+|their\s+|our\s+)?(.+?)\s*$", re.I)
 
 
@@ -268,10 +270,12 @@ def expand_all(parsed: ParsedMessage, alliant: Alliant) -> None:
     out = []
     for ch in parsed.changes:
         m = ALL_OF.match(ch.item or "")
-        if not m or ch.wearer or ch.action not in (Action.stop, Action.decrease, Action.set, Action.restart) or not items:
+        whole = re.fullmatch(r"\s*(?:everything|all|all of (?:it|them)|the whole (?:account|order))\s*", ch.item or "", re.I)
+        if not (m or whole) or ch.wearer or ch.action not in (Action.stop, Action.decrease, Action.set, Action.restart) or not items:
             out.append(ch)
             continue
-        words = [w.rstrip("s") if len(w) > 3 else w for w in re.findall(r"[a-z0-9]+", m.group(1).lower())]
+        words = [] if whole else [w.rstrip("s") if len(w) > 3 else w for w in re.findall(r"[a-z0-9]+", m.group(1).lower())]
+        words = [w for w in words if w not in ANY_ITEM]  # "all the items", "all their products": every line
         hits = [it for it in items if all(re.search(rf"\b{re.escape(w)}s?\b", it.lower()) for w in words)]
         if not hits:
             out.append(ch)
