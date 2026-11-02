@@ -241,17 +241,26 @@ class EmailDesk(TextDesk):
             self.slack.chat_postMessage(channel=who, text=text.replace("here's the PDF", "the email had no PDF; please "
                                                                           "print it from Alliant") )
             return True
-        first = self.slack.chat_postMessage(channel=who, text=text)
-        for i, a in enumerate(files[:3]):
-            data = self.attachment(m["id"], a["id"])
-            name = re.sub(r"[^\w.-]", "", a.get("filename") or "") or f"{number.group(1) if number else 'special'}.pdf"
-            self.slack.files_upload_v2(channel=first.get("channel") or who, thread_ts=first.get("ts"), content=data,
-                                       filename=name, title=f"Special invoice {number.group(1) if number else ''}".strip())
-            if i == 0 and number:  # the customer's copy, with Donna's note (specials.py), once the job's report is in
-                from . import specials
-                specials.save_pdf(self.data_dir, number.group(1), data)
+        pdfs = [(re.sub(r"[^\w.-]", "", a.get("filename") or "") or f"{number.group(1) if number else 'special'}.pdf",
+                 self.attachment(m["id"], a["id"])) for a in files[:3]]
+        if number:  # the customer's copy first (specials.py): nothing on Kirk's side can hold it up
+            from . import specials
+            specials.save_pdf(self.data_dir, number.group(1), pdfs[0][1])
+            try:
                 print(time.strftime("%H:%M"), "specials: customer email:",
                       specials.try_send(self.data_dir, self.alliant, number.group(1)) or "waiting for her report", flush=True)
+            except Exception as e:
+                print(time.strftime("%H:%M"), "specials: customer email failed:", str(e)[:300], flush=True)
+        first = self.slack.chat_postMessage(channel=who, text=text)
+        for name, data in pdfs:
+            try:
+                self.slack.files_upload_v2(channel=first.get("channel") or who, thread_ts=first.get("ts"), content=data,
+                                           filename=name, title=f"Special invoice {number.group(1) if number else ''}".strip())
+            except Exception as e:  # e.g. the Slack app lacks files:write: Kirk still has the message
+                print(time.strftime("%H:%M"), "specials: PDF not uploaded to Slack:", str(e)[:300], flush=True)
+                self.slack.chat_postMessage(channel=first.get("channel") or who, thread_ts=first.get("ts"),
+                                            text="(The PDF couldn't be attached here; please print it from Alliant.)")
+                break
         print(time.strftime("%H:%M"), f"specials: {number.group(1) if number else 'a special'} PDF to Kirk", flush=True)
         return True
 

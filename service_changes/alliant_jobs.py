@@ -209,7 +209,9 @@ class Jobs:
                     from . import specials
                     specials.save_job(self.desk.data_dir, number.group(1), (meta(t) or {}).get("account", ""),
                                       readback or (meta(t) or {}).get("readback", ""))
-                    specials.try_send(self.desk.data_dir, self.desk.alliant, number.group(1))
+                    print(time.strftime("%H:%M"), "specials: customer email:",
+                          specials.try_send(self.desk.data_dir, self.desk.alliant, number.group(1)) or "waiting for the PDF",
+                          flush=True)
                 except Exception as e:
                     print(time.strftime("%H:%M"), "specials: customer email not sent:", e, flush=True)
             try:
