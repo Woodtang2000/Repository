@@ -871,6 +871,13 @@ class Desk:
         except Exception:
             pass
         owner = self.is_owner(user)
+        if owner and re.match(r"^\s*donna,?\s+(?:notebook|notes)\s*$", ev.get("text", ""), re.I):
+            from . import notebook  # what she has learned on Alliant's screens
+            text = notebook.read(self.data_dir).strip()
+            self.slack.chat_postMessage(channel=channel, text=("📓 *Donna's Alliant notebook* (newest last):\n"
+                                                               + "\n".join(text.splitlines()[-40:])) if text else
+                                        "📓 My Alliant notebook is empty so far.")
+            return "notebook"
         if owner and re.match(r"^\s*donna,?\s+(?:retry|try again|redo)\b", ev.get("text", ""), re.I):
             # every ticket waiting on Alliant's sign-in, back in her queue at once
             self.slack.chat_postMessage(channel=channel, text=self.jobs().retry_waiting(user))

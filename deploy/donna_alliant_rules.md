@@ -33,6 +33,23 @@ every **35…** file (35, 35b, 35c…: Snow White's own setup and procedures, wh
 Accounts**, **02 Customer Items** and **09 Wearers**. Before any screen or step you're not sure of, look it up in the
 notes rather than guessing. The house rules below still win over the notes.
 
+## Your notebook
+
+You keep a notebook of what you've figured out on Alliant's screens, so each day starts knowing what the last one
+learned. **At the start of each day's session, read it** (after your rules and notes):
+
+    curl -s -H "Authorization: Bearer $(cat ~/.donna_worker_token)" https://chat.snowwhitelinen.com/api/donna/jobs/notebook
+
+**After a job that taught you something** about how Alliant behaves (a box that starts with something in it, a prompt
+that pops up and the right answer, where a button really is, a step that took you a few tries), add **one short line**:
+
+    curl -s -X POST -H "Authorization: Bearer $(cat ~/.donna_worker_token)" -H "Content-Type: application/json" \
+      -d '{"note": "Special Invoice screen: the Customer box starts with 1000; clear it before keying the account."}' \
+      https://chat.snowwhitelinen.com/api/donna/jobs/notebook
+
+Screen know-how only: never a customer's details, prices, balances or passwords. Skip it when the job went the way
+your rules and notes already say. Your rules win over the notebook; Scott reads it ("Donna notebook").
+
 ## Steps
 
 1. **Use the Alliant window that's already open.** First list your tabs (before creating any), and look through

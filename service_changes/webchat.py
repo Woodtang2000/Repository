@@ -457,6 +457,8 @@ def make_handler(chat: Chat, public_url: str):
                 return self._worker("GET", f"/jobs/{again.group(1)}")
             if u.path == "/api/donna/jobs/rules":  # her house rules for Alliant (deploy/donna_alliant_rules.md)
                 return self._worker("RULES", "")
+            if u.path == "/api/donna/jobs/notebook":  # what she has learned on Alliant's screens (notebook.py)
+                return self._worker("NOTEBOOK", "")
             if u.path == "/api/donna/jobs/notes" or u.path.startswith("/api/donna/jobs/notes/"):  # Alliant University
                 return self._worker("NOTES", unquote(u.path[len("/api/donna/jobs/notes"):].lstrip("/")))
             if u.path == "/api/donna":  # the simple shortcut: .../api/donna?key=...&text=what he said
@@ -561,6 +563,8 @@ def make_handler(chat: Chat, public_url: str):
             m = re.fullmatch(r"/api/donna/jobs/([\d.]+)/result", path)
             if m:  # Donna's workstation: a finished Alliant job
                 return self._worker("POST", f"/jobs/{m.group(1)}/result")
+            if path == "/api/donna/jobs/notebook":  # Donna's workstation adding a line to her notebook
+                return self._worker("NOTEBOOK_ADD", "")
             m = re.fullmatch(r"/api/donna/jobs/([\d.]+)/file", path)
             if m:  # Donna's workstation: the PDF of a special invoice she made, for Kirk
                 name = re.sub(r"[^\w.-]", "", (parse_qs(urlparse(self.path).query).get("name") or ["invoice.pdf"])[0])[:60]
@@ -651,6 +655,18 @@ def make_handler(chat: Chat, public_url: str):
             if len(key) < 24 or not hmac.compare_digest(given.encode(), key.encode()):
                 time.sleep(1)
                 return self._send(401, b'{"error":"bad key"}', "application/json")
+            if method in ("NOTEBOOK", "NOTEBOOK_ADD"):
+                from . import notebook
+                if method == "NOTEBOOK":
+                    return self._send(200, (notebook.read(chat.data_dir) or "(nothing in the notebook yet)").encode(),
+                                      "text/plain; charset=utf-8")
+                n = min(int(self.headers.get("Content-Length") or 0), 4000)
+                raw = self.rfile.read(n).decode("utf-8", "replace")
+                try:
+                    raw = json.loads(raw).get("note", "")
+                except (ValueError, AttributeError):
+                    pass
+                return self._send(200, json.dumps({"ok": notebook.add(chat.data_dir, raw)}).encode(), "application/json")
             if method == "RULES":
                 with open(os.path.join(REPO, "deploy", "donna_alliant_rules.md"), "rb") as f:
                     return self._send(200, f.read(), "text/markdown; charset=utf-8")
