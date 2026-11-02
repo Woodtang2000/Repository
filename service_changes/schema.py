@@ -93,8 +93,8 @@ class ParsedMessage(BaseModel):
     summary: str = Field(description="One line saying what was asked.")
     service: Optional[ServiceFlag] = Field(None, description="Only for service_code: what to flag and why.")
     invoice_date: Optional[str] = Field(None, description=(
-        "special_order: the day it's delivered as said ('Thursday', 'tomorrow', '11/5'); credit_invoice: the day the "
-        "credit is for, if said. Null if not said."))
+        "special_order: the day it's delivered exactly as said ('Friday', 'tomorrow', '11/5'), even if it isn't the "
+        "customer's usual delivery day; credit_invoice: the day the credit is for, if said. Null if not said."))
     invoice_reason: Optional[str] = Field(None, description=(
         "special_order or credit_invoice: why, in a few words ('call-in order', 'extra delivery', 'short 10 bar mops "
         "last week'). Null if not said."))

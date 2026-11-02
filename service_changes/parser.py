@@ -48,7 +48,8 @@ Classify the message and extract every change in it. Rules:
   is a one-time replacement. Don't ask which.
 - A one-time extra or call-in delivery ("send Chili's 50 extra bar mops Thursday", "they need 20 more aprons for
   an event this week, just once") is special_order: one change per item, action add, quantity = how many go out
-  that one time; invoice_date = the day, invoice_reason = why. It doesn't change their standing order.
+  that one time; invoice_date = the day exactly as they said it ("Friday" stays Friday even when the customer's
+  regular day is Tuesday: never swap in their usual day), invoice_reason = why. It doesn't change their standing order.
 - A credit on a customer's bill ("credit Vato's for the 10 bar mops they were shorted", "credit invoice for 2 mats
   last week") is credit_invoice: one change per item, action add, quantity = how many to credit (always positive);
   invoice_date and invoice_reason as said.
