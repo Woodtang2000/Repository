@@ -50,7 +50,8 @@ def received(since_iso: str, inbound_address_id: str = "") -> list[dict]:
 
 def signature(company: str = "Snow White Linen") -> str:
     """Donna's sign-off on every customer email: texting is the quickest way to reach her."""
-    return (f"Donna\n{company}\nText me any time: 866-TAP-TEXT (866-827-8398)\nOffice: (907) 222-7738")
+    from .context import office_phone
+    return (f"Donna\n{company}\nText me any time: 866-TAP-TEXT (866-827-8398)\nOffice: {office_phone(company)}")
 
 
 BRANDS = {  # brand/README.md: the same logo, navy and gold as every other document
@@ -66,6 +67,7 @@ def _html(text: str, company: str = "Snow White Linen", title: str = "") -> str:
     Donna's sign-off card with her picture, and a navy footer. Tables and inline styles only (what mail apps keep);
     the plain text stays the fallback."""
     import html
+    from .context import office_phone
     b = BRANDS.get(company, BRANDS["Snow White Linen"])
     base = os.environ.get("WEBCHAT_PUBLIC_URL", "https://chat.snowwhitelinen.com").rstrip("/")
     body, _, sig = text.rpartition("\n\nDonna\n")
@@ -108,7 +110,7 @@ def _html(text: str, company: str = "Snow White Linen", title: str = "") -> str:
             f'<tr><td style="padding:24px 28px 8px">{heading}{content}<p style="margin:0 0 6px">Thank you,</p>{card}</td></tr>'
             f'<tr><td style="padding:16px 28px;background:{b["navy"]};color:#ffffff;font:12px/1.5 Arial,sans-serif">'
             f'<b>{html.escape(b["name"])}</b> · {html.escape(b["addr"])}<br>'
-            f'Text us any time: <span style="color:{b["gold"]}">866-TAP-TEXT (866-827-8398)</span> · Office (907) 222-7738'
+            f'Text us any time: <span style="color:{b["gold"]}">866-TAP-TEXT (866-827-8398)</span> · Office {office_phone(company)}'
             f'</td></tr></table></td></tr></table>')
 
 

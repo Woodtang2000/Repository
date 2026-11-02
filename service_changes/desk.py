@@ -1478,7 +1478,7 @@ class Desk:
         held = {x.strip() for x in os.environ.get("STOP_EMAILS_HOLD", "").split(",") if x.strip()}
         if acct.split("-")[0] in held and src not in ("text", "email", "phone"):
             return []  # e.g. Safeway (4000): changes we make on our side aren't emailed to the stores
-        from .context import company_for
+        from .context import company_for, office_phone
         from .sms import plain
         card = self.alliant.cards.get(acct, {})
         already = (p.get("email_to") or "").lower()  # an emailed request got its readback in its own thread
@@ -1496,7 +1496,7 @@ class Desk:
             bird.send(e, f"{company}: a change to your service for {name}",
                       f"Hello,\n\nThis confirms a change to your {company} service for {name} ({acct}), requested {how} "
                       f"and entered today:\n\n{what}\n\nIf this doesn't look right, just reply to this email or call us at "
-                      f"(907) 222-7738.\n\nThank you,\n\n" + bird.signature(company), key=f"change/{acct}/{p.get('src_ts', '')}",
+                      f"{office_phone(company)}.\n\nThank you,\n\n" + bird.signature(company), key=f"change/{acct}/{p.get('src_ts', '')}",
                       company=company)
         print(time.strftime("%H:%M"), f"change email sent for {acct} to {len(to)} invoice contact(s)", flush=True)
         return to

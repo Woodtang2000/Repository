@@ -76,6 +76,14 @@ def service_day(ts: str | float) -> str:
     return DAYS[datetime.fromtimestamp(float(ts), ALASKA).weekday()]
 
 
+OFFICE_PHONES = {"Snow White Linen": "(907) 222-7738", "The Laundry Group": "(907) 519-0761"}
+
+
+def office_phone(company: str) -> str:
+    """Each company's own office line (The Laundry Group's since 2026-11-02)."""
+    return OFFICE_PHONES.get(company, OFFICE_PHONES["Snow White Linen"])
+
+
 LAUNDRY_GROUP_NUMBERS: set[str] = set()  # account numbers with any branch 2 customer (Alliant.from_dir fills it)
 
 

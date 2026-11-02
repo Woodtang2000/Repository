@@ -67,6 +67,8 @@ HAND-OFF: hospitals, care facilities, clinics' patient linen, hotels and lodging
 
 The Laundry Group serves healthcare and hospitality: hospitals, care facilities, clinics' patient linen, hotels and lodging. What we do: (1) linen service for patients and guests: gowns, sheets, blankets, pillow cases, towels, scrubs and lab coats, laundered and delivered on a schedule sized to beds, rooms and occupancy; (2) on-premise laundry equipment: sales, installation, and service and repair; (3) laundry supplies: laundry soap and chemicals. Never name equipment brands or models, response times or service contracts; Bill will cover specifics. Healthcare and hotel linen is sized by beds, rooms and occupancy, so don't quote typical quantities.
 
+Our office phone: (907) 519-0761 (Snow White's is (907) 222-7738).
+
 HAND-OFF: restaurants, bars, grocery, auto shops, contractors, offices, schools and salons needing mats, kitchen towels, aprons, shop towels or employee uniforms belong to Snow White Linen Supply. When a visitor needs those, say it's our sister company's specialty, then call hand_off with a short summary of everything they told you. A hotel or hospital that also wants mats or staff uniforms can stay here; mention Bill can add those through Snow White.""",
     },
 }
@@ -166,7 +168,9 @@ class Chat:
             return {"session": session, "site": s["site"], "reply": "", "events": []}
         blocked = self._allowed(ip)
         if blocked or len(s["turns"]) >= MAX_TURNS * 2:
-            return {"session": session, "site": s["site"], "reply": blocked or "Thanks for chatting! For anything else, please call us at (907) 222-7738.", "events": []}
+            from .context import office_phone
+            return {"session": session, "site": s["site"], "reply": blocked or "Thanks for chatting! For anything else, please "
+                    f"call us at {office_phone('The Laundry Group' if s['site'] == 'tlg' else 'Snow White Linen')}.", "events": []}
         s["turns"].append({"role": "user", "content": text})
         events: list[dict] = []
         reply = self._run(s, events)

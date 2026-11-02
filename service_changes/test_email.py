@@ -270,3 +270,11 @@ def test_the_customer_gets_the_special_with_its_pdf_once_whichever_half_comes_fi
     specials.save_pdf(d, "S0148780", b"%PDF")
     specials.save_job(d, "S0148780", "5045-1-00000", "x")
     assert specials.try_send(d, alliant, "S0148780") == "held" and len(sent) == 1
+
+
+def test_each_company_signs_with_its_own_office_phone():
+    from . import bird
+    assert bird.signature("The Laundry Group").endswith("Office: (907) 519-0761")
+    assert bird.signature("Snow White Linen").endswith("Office: (907) 222-7738")
+    html = bird._html("Hello,\n\nHi.\n\nThank you,\n\n" + bird.signature("The Laundry Group"), "The Laundry Group", "test")
+    assert "Office (907) 519-0761" in html and "/logo/tlg.png" in html and "#ffb807" in html
