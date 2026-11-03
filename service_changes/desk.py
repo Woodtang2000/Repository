@@ -879,6 +879,31 @@ class Desk:
                                metadata={"event_type": KIND, "event_payload": new})
         return f"{decision} redate {ts} by {who}"
 
+    def refresh_redate_buttons(self, days: int = 120) -> str:
+        """Redates in #route-redates posted before the two buttons, still undecided: given ✅ Approved / ❌ Unapproved."""
+        redates = self.channels.get(os.environ.get("REDATE_CHANNEL", "route-redates"))
+        if not redates:
+            return "I can't find #route-redates."
+        n = 0
+        for m in _messages(self.slack, redates, time.time() - days * 86400, include_all_metadata=True):
+            p = meta(m) or {}
+            if p.get("kind") != "redate" or not m.get("attachments"):
+                continue
+            a = [dict(att) for att in m["attachments"]]
+            blocks = a[0].get("blocks") or []
+            old = next((b for b in blocks if b.get("block_id") == "redate"), None)
+            if old and len(old.get("elements") or []) == 2:
+                continue  # already has both
+            a[0]["blocks"] = [b for b in blocks if b.get("block_id") != "redate"] + [redate_buttons()]
+            try:
+                self.slack.chat_update(channel=redates, ts=m["ts"], text="", attachments=a,
+                                       metadata={"event_type": KIND, "event_payload": p})
+                n += 1
+            except Exception as e:
+                print(time.strftime("%H:%M"), "redate buttons:", e, flush=True)
+            time.sleep(float(os.environ.get("REDATE_MOVE_PAUSE", "1.1")))
+        return f"Updated {n} undecided redate{'s' if n != 1 else ''} with ✅ Approved / ❌ Unapproved."
+
     def move_redates(self, days: int = 31) -> str:
         """Past redates in #service-desk (FYI posts for a closed / no access / moved / skipped stop), copied into
         #route-redates, oldest first, with their driver, date and an Approve button; the original says it moved.
@@ -1034,6 +1059,12 @@ class Desk:
                             self.slack.chat_postMessage(channel=channel, text=said)
                 threading.Thread(target=cards, daemon=True).start()
                 return "outreach"
+        if user in AR_USERS and re.match(r"^\s*donna,?\s+(?:redate buttons|fix redates|update redates)\s*$",
+                                         ev.get("text", ""), re.I):
+            def fix():
+                self.slack.chat_postMessage(channel=channel, text=self.refresh_redate_buttons())
+            threading.Thread(target=fix, daemon=True).start()
+            return "redate buttons"
         mv = re.match(r"^\s*donna,?\s+move\s+(?:the\s+|all\s+(?:the\s+)?)?redates?\b\D*(\d+)?", ev.get("text", ""), re.I)
         if user in AR_USERS and mv:  # Scott and Bill: copy past redates from #service-desk into #route-redates
             days = min(int(mv.group(1) or 31), 120)

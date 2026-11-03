@@ -992,3 +992,18 @@ def test_move_redates_copies_past_ones_from_the_desk_with_an_approve_button(setu
     assert desk.meta(r)["kind"] == "redate" and desk.meta(r)["moved_from"] == old["ts"]
     assert "Moved to #route-redates" in slack.find(d.desk_id, old["ts"])["text"]
     assert d.move_redates(31).startswith("No redates")  # never twice
+
+
+def test_old_redates_get_both_buttons(setup, monkeypatch):
+    slack, d = setup
+    monkeypatch.setenv("REDATE_MOVE_PAUSE", "0")
+    d.channels["route-redates"] = "CRED"
+    slack.msgs.setdefault("CRED", [])
+    old = desk.todo_bar.attachment("🗓️ *Redate* · Mike", button=False, extra=[{"type": "actions", "block_id": "redate",
+                                   "elements": [{"type": "button", "action_id": desk.REDATE_APPROVE, "value": "approve",
+                                                 "text": {"type": "plain_text", "text": "✅ Approve for payroll"}}]}])
+    slack.chat_postMessage("CRED", "", attachments=old, metadata={"event_type": desk.KIND, "event_payload": {"kind": "redate"}})
+    assert d.refresh_redate_buttons().startswith("Updated 1 ")
+    [btns] = [b for b in slack.msgs["CRED"][0]["attachments"][0]["blocks"] if b.get("block_id") == "redate"]
+    assert [e["action_id"] for e in btns["elements"]] == [desk.REDATE_APPROVE, desk.REDATE_UNAPPROVE]
+    assert d.refresh_redate_buttons().startswith("Updated 0 ")
