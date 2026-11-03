@@ -16,7 +16,9 @@ import os
 import re
 import threading
 import time
+from datetime import datetime
 
+from .context import ALASKA
 from .todo import GOLD, GREY, body, restyle, stamp
 
 FILE = "alliant_jobs.json"
@@ -129,6 +131,20 @@ class Jobs:
                                     metadata={"event_type": KIND, "event_payload": {**p, "donna": "queued"}})
         return f"queued {ts}"
 
+    def screen_task(self, text: str, user: str, reply_to: str) -> str:
+        """Scott or Bill's own instructions for work on Alliant's screens that isn't a customer ticket (the SKU center,
+        setup screens). Queued as written; her report goes back only to the private conversation it came from, so it
+        may carry the values they asked for."""
+        jid = f"{time.time():.6f}"
+        who = self.desk.name(user) or "Scott"
+        with self.lock:
+            data = self.load()
+            data["jobs"][jid] = {"id": jid, "kind": "screen_task", "account": "", "ticket": text.strip()[:6000],
+                                 "expect": [], "asked_by": who, "asked_by_id": user, "reply_to": reply_to,
+                                 "status": "queued", "at": time.time()}
+            self.save(data)
+        return jid
+
     def retry_waiting(self, user: str, days: int = 3) -> str:
         """"Donna retry": every ticket she sent back because Alliant wasn't signed in or available (the last few
         days), back in her queue in one go, instead of a tap on each."""
@@ -179,13 +195,20 @@ class Jobs:
             job = data["jobs"].get(job_id)
             if not job or job["status"] != "working":
                 return "unknown job"
-            job.update(status=status if status in ("entered", "needs_person", "ask") else "needs_person", note=note[:1500],
-                       finished=time.time())
+            job.update(status=status if status in ("entered", "needs_person", "ask") else "needs_person",
+                       note=note[:3800 if job.get("kind") == "screen_task" else 1500], finished=time.time())
             if job["status"] == "ask" and not question.strip():
                 job["status"] = "needs_person"
             data["jobs"] = {k: v for k, v in data["jobs"].items() if v["status"] in ("queued", "working")
                             or time.time() - v.get("finished", 0) < 14 * 86400}
             self.save(data)
+        if job.get("kind") == "screen_task":  # her report, privately, to whoever asked (never #service-desk)
+            head = {"entered": "✅ Done in Alliant", "ask": "❓ A question before I go on",
+                    "needs_person": "🛑 Stopped, nothing more changed"}[job["status"]]
+            text = f"🤖 *{head}* (your Alliant task from {datetime.fromtimestamp(job['at'], ALASKA):%-m/%-d %-I:%M %p})\n" + \
+                (question.strip() + "\n" if job["status"] == "ask" and question.strip() else "") + (note or "")
+            self.desk.slack.chat_postMessage(channel=job["reply_to"], text=text[:3900], unfurl_links=False)
+            return f"screen task {job['status']}"
         r = self.desk.slack.conversations_history(channel=self.desk.desk_id, latest=job_id, inclusive=True, limit=1,
                                                    include_all_metadata=True)
         t = next((m for m in r.get("messages", []) if m["ts"] == job_id), None)
@@ -326,7 +349,6 @@ class Jobs:
                 return ""
             data["watch_alerted"] = now
             self.save(data)
-        from datetime import datetime
         from .context import ALASKA
         when = datetime.fromtimestamp(seen, ALASKA)
         text = f"⚠️ Donna's workstation isn't responding (nothing since {when:%-I:%M %p}) – please check it."

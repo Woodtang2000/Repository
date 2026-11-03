@@ -82,6 +82,7 @@ REDATE = re.compile(r"redat|closed|not open|locked|no access|couldn'?t (?:get in
                     r"nobody (?:there|home)|no one (?:there|answered)|move[sd]? (?:the )?deliver|deliver(?:y|ing)? (?:on |to )?"
                     r"(?:tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)|skip(?:ped|ping)? (?:this|today|the)|"
                     r"come back|try again (?:tomorrow|later)", re.I)
+SCREEN_TASK = re.compile(r"\bSKU cent(?:er|re)\b|\bAlliant (?:screen|setup|SKU)|^\s*donna,?\s+in alliant\b", re.I)
 REDATE_FYI = re.compile(r"FYI: (?:route or schedule|hold or closure|today only)", re.I)
 REDATE_FOOTER = re.compile(r"^<[^>]+\|[^>]+> · ")
 YES = re.compile(r"^\W*(yes|yeah|yep|yup|sure|correct|right|do it|go ahead|go for it|please do|put it in|enter it|"
@@ -1094,6 +1095,15 @@ class Desk:
         if owner and cmd:  # Donna's Alliant work: "Donna pause" / "Donna resume"
             self.slack.chat_postMessage(channel=channel, text=self.jobs().pause(cmd.group(1).lower() in ("pause", "stop")))
             return "alliant pause" if cmd.group(1).lower() in ("pause", "stop") else "alliant resume"
+        if user in AR_USERS and SCREEN_TASK.search(ev.get("text", "")) and len(ev.get("text", "")) > 40:
+            # Scott or Bill's own work on Alliant's screens (the SKU center, setup): her Alliant queue, as written
+            jobs = self.jobs()
+            jid = jobs.screen_task(ev["text"], user, channel)
+            self.slack.chat_postMessage(channel=channel, text=(
+                "📋 Got it. That's work on Alliant's own screens, so it's in my Alliant queue now. I'll read the values "
+                "on the screen first and stop if they don't match what you said; my report comes back here."
+                + (" (I'm paused: say \"Donna resume\" when you're ready.)" if jobs.load().get("paused") else "")))
+            return f"screen task {jid}"
         mine = self.__dict__.get("changes", {}).get(channel, {}).get("user") == user
         if mine or (owner and CHANGE_Q.search(ev.get("text", ""))):
             said = self.owner_change(channel, ev.get("text", ""), channel, typed=ev, user=user)

@@ -112,6 +112,21 @@ your rules and notes already say. Your rules win over the notebook; Scott reads 
 7. Report `entered` with a one-line note of exactly what changed ("TOWEL BAR MOP 6-01-55: inventory 100 → 150,
    autocount 100 → 150, saved").
 
+## Screen tasks from Scott or Bill
+
+A job with `"kind": "screen_task"` isn't a customer ticket: it's Scott's or Bill's own instructions for work on
+Alliant's screens (the SKU center, a setup screen). `ticket_plain` is what they wrote; there's no account.
+- Do exactly what it says, only on the screens it names, and nothing more. When it says to stop after one, stop.
+- Read the current values **on Alliant's own screen**: the server's data doesn't have most setup fields. When it says
+  the values should be something first ("Now" values), compare every one before changing anything; if any differ,
+  change nothing and report `needs_person` with what the screen shows next to what they expected.
+- When it says to check it saved, re-open the record and read every field back.
+- Report: `entered` when done, `needs_person` when you stopped, `ask` with `"question"` when you can't tell what they
+  meant. Your note goes **only to Scott or Bill, privately**, so here it may hold the values and prices they asked
+  for (before and after, what wouldn't save). Keep it under 3,500 characters.
+- Never change a customer's pricing or account unless the task says so in as many words. Your notebook still gets
+  screen know-how only, never the values.
+
 ## Special (S) and credit (C) invoices
 
 A ticket headed **🧾 Special invoice (S)** or **🧾 Credit invoice (C)** is a one-time invoice, not a change to the
@@ -173,7 +188,8 @@ ticket: `needs_person`. Anything unclear (a line that isn't on the account, no q
 - Never type, paste or change a password or MFA code (clicking Sign in on Chrome's filled-in box, step 1, is the
   only sign-in you do). Never sign out of Windows or close the Alliant program inside the remote desktop, and don't
   close the Alliant browser tab (Finishing every job).
-- Never put prices, balances, invoice amounts or anything from A/R in your note: notes are read in Slack.
+- Never put prices, balances, invoice amounts or anything from A/R in your note: notes are read in Slack. (The one
+  exception: a screen task's note goes privately to Scott or Bill, above.)
 - Work only in the Alliant tab; never open other sites or other browsers, and never open a second Alliant tab when
   one is already open.
 - If a ticket has open questions (❓), a ⚠️ warning, or asks for something these rules don't cover (putting an account

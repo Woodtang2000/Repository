@@ -1007,3 +1007,31 @@ def test_old_redates_get_both_buttons(setup, monkeypatch):
     [btns] = [b for b in slack.msgs["CRED"][0]["attachments"][0]["blocks"] if b.get("block_id") == "redate"]
     assert [e["action_id"] for e in btns["elements"]] == [desk.REDATE_APPROVE, desk.REDATE_UNAPPROVE]
     assert d.refresh_redate_buttons().startswith("Updated 0 ")
+
+
+def test_a_sku_center_task_from_scott_goes_to_her_alliant_queue_and_reports_back_privately(setup, tmp_path):
+    slack, d = setup
+    d.data_dir = str(tmp_path)
+    slack.users["U4KFSQCDQ"] = "Scott Woodland"
+    slack.msgs["DSCOTT"] = []
+    text = ("Donna, test ONE SKU in the Alliant SKU center: 2-0413WH (Coat Chef White Buttons). Write down the current "
+            "values first. Suggested Service Price 0.570 -> 1.201. Then stop and report to me.")
+    ev = slack.say("DSCOTT", "U4KFSQCDQ", text)
+    assert d.dm(dict(ev, channel="DSCOTT")).startswith("screen task")
+    assert "in my Alliant queue" in slack.msgs["DSCOTT"][-1]["text"]
+    job = d.jobs().next()
+    assert job["kind"] == "screen_task" and "2-0413WH" in job["ticket"] and job["reply_to"] == "DSCOTT"
+    assert d.jobs().result(job["id"], "needs_person", "Suggested Service Price shows 0.610, not 0.570. Nothing changed.") \
+        == "screen task needs_person"
+    said = slack.msgs["DSCOTT"][-1]["text"]
+    assert "Stopped" in said and "0.610" in said
+    assert not [m for m in slack.msgs["D1"] if "0.610" in m.get("text", "")]  # never in #service-desk
+
+
+def test_a_sku_center_task_from_office_staff_is_not_queued(setup, tmp_path):
+    slack, d = setup
+    d.data_dir = str(tmp_path)
+    slack.msgs["DSONJA"] = []
+    ev = slack.say("DSONJA", "U2", "Donna, in the Alliant SKU center change 2-0413WH Suggested Service Price to 1.201 please")
+    d.dm(dict(ev, channel="DSONJA"))
+    assert d.jobs().next() is None
