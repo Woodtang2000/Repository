@@ -1175,7 +1175,15 @@ class Desk:
              "text": f"{ask['q']}\nDonna asked: {ask['said']}\nAnswer: {text}" if ask else text}
         talk["ask"] = None
         reply, kind = "", "chat"
-        if not ask:
+        if not ask and owner in AR_USERS and SCREEN_TASK.search(text) and len(text) > 40:
+            # work on Alliant's own screens (the SKU center, setup), typed or pasted in the app: her Alliant queue as
+            # written; the report goes to his private Slack messages (it may hold prices, so never read aloud)
+            self.jobs().screen_task(text, owner, owner)
+            reply, kind = ("Got it. That's work on Alliant's own screens, so it's in my Alliant queue now. I'll check the "
+                           "screen's values first and stop if they don't match; my report comes to your Slack messages."
+                           + (" I'm paused, though: say Donna resume when you're ready." if self.jobs().load().get("paused")
+                              else "")), "alliant task"
+        if not reply and not ask:
             said = self.owner_change(f"voice:{owner}:{convo or 'phone'}", text, None, user=owner)
             if said:
                 reply, kind = spoken(said), "change"

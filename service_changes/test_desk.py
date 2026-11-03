@@ -1035,3 +1035,17 @@ def test_a_sku_center_task_from_office_staff_is_not_queued(setup, tmp_path):
     ev = slack.say("DSONJA", "U2", "Donna, in the Alliant SKU center change 2-0413WH Suggested Service Price to 1.201 please")
     d.dm(dict(ev, channel="DSONJA"))
     assert d.jobs().next() is None
+
+
+def test_a_sku_center_task_pasted_in_the_donna_app_goes_to_her_queue_and_reports_in_slack(setup, tmp_path):
+    slack, d = setup
+    d.data_dir = str(tmp_path)
+    slack.users["U4KFSQCDQ"] = "Scott Woodland"
+    slack.msgs["U4KFSQCDQ"] = []
+    said = d.voice("Donna, test ONE SKU in the Alliant SKU center: 2-0413WH (Coat Chef White Buttons). Write down the "
+                   "current values first, then stop and report to me.", "app")
+    assert "Alliant queue" in said and "Slack" in said
+    job = d.jobs().next()
+    assert job["kind"] == "screen_task" and job["reply_to"] == "U4KFSQCDQ"
+    d.jobs().result(job["id"], "entered", "Before: Suggested 0.570. After: 1.201. Saved and read back.")
+    assert "0.570" in slack.msgs["U4KFSQCDQ"][-1]["text"]
