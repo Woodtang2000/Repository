@@ -938,7 +938,7 @@ def test_a_redate_goes_to_route_redates_and_the_driver_hears_right_away(setup):
     p = ParsedMessage(category=Category.route_or_schedule, account_number="W1", summary="Wendy's closed; redated to Thursday")
     d.post_ticket("route-1-test", "C1", post, "Mike Driver", p, Result(p, []), [], False, [])
     [r] = [m for m in slack.msgs["CRED"] if desk.meta(m) and desk.meta(m)["kind"] == "redate"]
-    assert "Incomplete code: *CL Customer Closed*" in str(r) and "Approve for payroll" in str(r)
+    assert "Incomplete code: *CL Customer Closed*" in str(r) and "Unapproved" in str(r) and "Approved" in str(r)
     assert "Redate* · Mike Driver" in r["text"] and desk.meta(r)["date"]
     assert not [m for m in slack.msgs.get("D1", []) if desk.meta(m) and desk.meta(m).get("kind") == "ticket"]  # not the desk
     assert any("passed to the office in #route-redates" in m["text"] for m in slack.msgs["C1"])
@@ -965,7 +965,14 @@ def test_only_bill_or_scott_can_approve_a_redate_for_payroll(setup):
     m = desk.meta(r)
     assert m["kind"] == "redate_approved" and m["approved_by"] == "Bill" and m["approved_at"]
     assert "Approved for payroll · Bill" in r["text"]
-    assert not any(b.get("block_id") == "redate" for b in r["attachments"][0]["blocks"])  # button gone
+    [btns] = [b for b in r["attachments"][0]["blocks"] if b.get("block_id") == "redate"]
+    assert [e["text"]["text"] for e in btns["elements"]] == ["Change to Unapproved"]  # one button to change it
+    unapprove = dict(tap("U9SGPJP0C"), message=dict(r), actions=[{"action_id": desk.REDATE_UNAPPROVE}])
+    assert d.approve_redate(unapprove).startswith("unapproved")
+    m = desk.meta(r)
+    assert m["kind"] == "redate_unapproved" and m["payroll"] == "unapproved" and m["decided_by"] == "Bill"
+    assert "approved_by" not in m and "Unapproved for payroll · Bill" in r["text"] and "no bonus" in r["text"]
+    assert r["attachments"][0]["color"] == desk.RED
 
 
 def test_move_redates_copies_past_ones_from_the_desk_with_an_approve_button(setup, monkeypatch):

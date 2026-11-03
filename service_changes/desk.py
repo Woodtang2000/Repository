@@ -97,7 +97,8 @@ def meta(m: dict) -> dict | None:
     return md.get("event_payload") if md.get("event_type") == KIND else None
 
 
-REDATE_APPROVE = "redate_approve"
+REDATE_APPROVE, REDATE_UNAPPROVE = "redate_approve", "redate_unapprove"
+RED = "#e01e5a"
 
 
 def OUTREACH_BUTTONS(task_id: str) -> dict:
@@ -108,16 +109,27 @@ def OUTREACH_BUTTONS(task_id: str) -> dict:
         {"type": "button", "action_id": "outreach_skip", "value": task_id, "text": {"type": "plain_text", "text": "Skip"}}]}
 
 
+def redate_buttons(decided: str = "") -> dict:
+    """Payroll's yes or no on a redate (the drivers' bonus: an unapproved redate means no bonus). Undecided: ✅ Approved
+    and ❌ Unapproved; decided: one small button to change it."""
+    yes = {"type": "button", "action_id": REDATE_APPROVE, "value": "approved",
+           "text": {"type": "plain_text", "text": "✅ Approved" if not decided else "Change to Approved"}}
+    no = {"type": "button", "action_id": REDATE_UNAPPROVE, "value": "unapproved",
+          "text": {"type": "plain_text", "text": "❌ Unapproved" if not decided else "Change to Unapproved"}}
+    if not decided:
+        yes["style"], no["style"] = "primary", "danger"
+    els = [yes, no] if not decided else [no] if decided == "approved" else [yes]
+    return {"type": "actions", "block_id": "redate", "elements": els}
+
+
 def redate_bar(text: str) -> list[dict]:
-    """A redate in #route-redates: gold, with ✅ Approve for payroll (Bill or Scott only) in place of ✓ Done."""
-    return attachment(text, button=False, extra=[{"type": "actions", "block_id": "redate", "elements": [
-        {"type": "button", "action_id": REDATE_APPROVE, "value": "approve", "style": "primary",
-         "text": {"type": "plain_text", "text": "✅ Approve for payroll"}}]}])
+    """A redate in #route-redates: gold, with ✅ Approved / ❌ Unapproved (Bill or Scott only) in place of ✓ Done."""
+    return attachment(text, button=False, extra=[redate_buttons()])
 
 
 def _post(slack, channel: str, text: str, payload: dict, thread_ts: str | None = None, todo: str | None = None, **kw) -> dict:
     """todo: "button" for a gold to-do bar with ✓ Done, "own" for a gold bar on a message with its own ✅ flow (todo.py),
-    "redate" for a redate with ✅ Approve for payroll."""
+    "redate" for a redate with ✅ Approved / ❌ Unapproved."""
     if todo:
         kw["attachments"] = redate_bar(text) if todo == "redate" else attachment(text, button=todo == "button")
         text = ""
@@ -549,7 +561,7 @@ class Desk:
             day = datetime.fromtimestamp(float(src["ts"]), ALASKA)
             head = [f"🗓️ *Redate* · {author} · {day:%a %-m/%-d %-I:%M %p}"] + lines[1:]
             new = self.post(redates, "\n".join(head + ["", _quote(_short(src.get("text", ""), 300)),
-                                                       f"<{link}|{where}> · Bill: tap ✅ Approve for payroll"]),
+                                                       f"<{link}|{where}> · Bill: ✅ Approved or ❌ Unapproved for payroll"]),
                             {"kind": "redate", "src_channel": channel, "src_ts": src["ts"], "driver": author,
                              "driver_id": src.get("user"), "account": parsed.account_number or "",
                              "date": f"{day:%Y-%m-%d}"}, todo="redate")
@@ -828,14 +840,16 @@ class Desk:
             print(time.strftime("%H:%M"), "stopped items error:", str(e)[:200], flush=True)
 
     def approve_redate(self, payload: dict) -> str:
-        """✅ Approve for payroll on a redate in #route-redates: Bill or Scott only (AR_SLACK_IDS). The post turns
-        green with who and when; its metadata gets approved_by / approved_at (the HR agent reads those for payroll)."""
+        """✅ Approved or ❌ Unapproved on a redate in #route-redates: Bill or Scott only (AR_SLACK_IDS). Payroll's yes
+        or no for the drivers' bonus (an unapproved redate means no bonus). The post turns green or red with who and
+        when, and keeps one button to change it; its metadata gets payroll = approved / unapproved, decided_by and
+        decided_at (and approved_by / approved_at when approved), which the HR agent reads."""
         user = payload.get("user", {}).get("id")
         channel = (payload.get("container") or {}).get("channel_id") or (payload.get("channel") or {}).get("id")
         ts = (payload.get("container") or {}).get("message_ts")
         if user not in AR_USERS:
             self.slack.chat_postEphemeral(channel=channel, user=user,
-                                          text="Only Bill or Scott can approve redates for payroll.")
+                                          text="Only Bill or Scott can approve or unapprove redates for payroll.")
             return "ignored: not Bill or Scott"
         m = payload.get("message") if (payload.get("message") or {}).get("ts") == ts else None
         if not m:
@@ -843,19 +857,27 @@ class Desk:
                                                  include_all_metadata=True)
             m = next((x for x in r.get("messages", []) if x["ts"] == ts), None)
         p = meta(m) if m else None
-        if not p or p.get("kind") not in ("redate", "redate_approved"):
+        if not p or p.get("kind") not in ("redate", "redate_approved", "redate_unapproved"):
             return "not a redate"
-        if p.get("kind") == "redate_approved":
-            return "already approved"
+        act = next((x.get("action_id") for x in payload.get("actions", [])
+                    if x.get("action_id") in (REDATE_APPROVE, REDATE_UNAPPROVE)), REDATE_APPROVE)
+        decision = "approved" if act == REDATE_APPROVE else "unapproved"
+        if p.get("kind") == f"redate_{decision}":
+            return f"already {decision}"
         who = self.name(user) or ("Bill" if user == "U9SGPJP0C" else "Scott")
-        a = restyle(m, GREEN, status=stamp(who, "Approved for payroll"))
+        now = datetime.now(ALASKA).isoformat(timespec="minutes")
+        status = (stamp(who, "Approved for payroll") if decision == "approved"
+                  else stamp(who, "Unapproved for payroll").replace(":white_check_mark:", ":x:") + " · no bonus")
+        a = restyle(m, GREEN if decision == "approved" else RED, status=status)
         for att in a:
-            att["blocks"] = [b for b in att.get("blocks") or [] if b.get("block_id") != "redate"]
-        self.slack.chat_update(channel=channel, ts=ts, text="", attachments=a, metadata={
-            "event_type": KIND, "event_payload": {**p, "kind": "redate_approved", "approved_by": who.split()[0],
-                                                  "approved_by_id": user,
-                                                  "approved_at": datetime.now(ALASKA).isoformat(timespec="minutes")}})
-        return f"approved redate {ts} by {who}"
+            att["blocks"] = [b for b in att.get("blocks") or [] if b.get("block_id") != "redate"] + [redate_buttons(decision)]
+        new = {k: v for k, v in p.items() if k not in ("approved_by", "approved_by_id", "approved_at")}
+        new.update(kind=f"redate_{decision}", payroll=decision, decided_by=who.split()[0], decided_by_id=user, decided_at=now)
+        if decision == "approved":
+            new.update(approved_by=who.split()[0], approved_by_id=user, approved_at=now)
+        self.slack.chat_update(channel=channel, ts=ts, text="", attachments=a,
+                               metadata={"event_type": KIND, "event_payload": new})
+        return f"{decision} redate {ts} by {who}"
 
     def move_redates(self, days: int = 31) -> str:
         """Past redates in #service-desk (FYI posts for a closed / no access / moved / skipped stop), copied into
@@ -886,8 +908,8 @@ class Desk:
             link = next((ln for ln in text.splitlines() if REDATE_FOOTER.search(ln)), "")
             link = re.sub(r"\s*·.*$", "", link)
             head = f"🗓️ *Redate* · {p.get('driver') or 'driver'} · {day:%a %-m/%-d %-I:%M %p} _(moved from #{self.desk_name})_"
-            body = "\n".join([head] + keep + ([f"{link} · Bill: tap ✅ Approve for payroll"] if link
-                                                else ["Bill: tap ✅ Approve for payroll"])).strip()
+            body = "\n".join([head] + keep + ([f"{link} · Bill: ✅ Approved or ❌ Unapproved for payroll"] if link
+                                                else ["Bill: ✅ Approved or ❌ Unapproved for payroll"])).strip()
             try:
                 new = self.post(redates, body, {"kind": "redate", "src_channel": p.get("src_channel", ""),
                                                 "src_ts": p.get("src_ts", ""), "driver": p.get("driver", ""),
@@ -902,7 +924,7 @@ class Desk:
             if pause:
                 time.sleep(pause)
         return (f"Moved {moved} redate{'s' if moved != 1 else ''} from the last {days} days into #route-redates, "
-                "oldest first, each with ✅ Approve for payroll." if moved else
+                "oldest first, each with ✅ Approved / ❌ Unapproved for payroll." if moved else
                 f"No redates in #{self.desk_name} in the last {days} days to move.")
 
     def link_contact(self, payload: dict) -> str:
@@ -2060,8 +2082,8 @@ class Desk:
                 threading.Thread(target=outreach_go, daemon=True).start()
                 return
             if req.type == "interactive" and req.payload.get("type") == "block_actions" and any(
-                    x.get("action_id") == REDATE_APPROVE for x in req.payload.get("actions", [])):
-                def approve(p=req.payload):  # ✅ Approve for payroll on a redate (Bill or Scott)
+                    x.get("action_id") in (REDATE_APPROVE, REDATE_UNAPPROVE) for x in req.payload.get("actions", [])):
+                def approve(p=req.payload):  # ✅ Approved / ❌ Unapproved for payroll on a redate (Bill or Scott)
                     try:
                         print(time.strftime("%H:%M"), "redate:", self.approve_redate(p), flush=True)
                     except Exception as e:
