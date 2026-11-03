@@ -236,16 +236,34 @@
       });
       return true;
     } catch (e) {
-      if (e && e.name === "NotAllowedError") { add("note", "Allow the microphone: Settings → Apps → Safari → Microphone → Allow."); return true; }
+      if (e && e.name === "NotAllowedError") { add("note", "Allow the microphone: " + micSettings() + "."); return true; }
       if (e && e.name === "NotFoundError") {
-        add("note", "Your phone says no microphone is free right now. A phone or FaceTime call, Siri, another app that's " +
-                    "recording, or a Bluetooth headset or car that's no longer connected can hold it. Close the Donna app " +
-                    "fully (swipe it away), then open it and tap the mic again.");
+        add("note", noMic());
         return true;
       }
       why = "starting the conversation failed: " + ((e && (e.message || e.name)) || e);
       return false;
     } finally { connecting = false; if (!agent) mode(""); }
+  }
+
+  // Where to allow the microphone, for the browser this page is in (Chrome or Safari, phone or computer).
+  function micSettings() {
+    const ua = navigator.userAgent;
+    const iphone = /iPhone|iPad|iPod/.test(ua), chrome = /CriOS|Chrome/.test(ua) && !/Edg/.test(ua);
+    if (iphone) return chrome ? "Settings → Apps → Chrome → Microphone → on (and in Chrome, allow the mic for this page when it asks)"
+                              : "Settings → Apps → Safari → Microphone → Allow (and Speech Recognition)";
+    if (/Android/.test(ua)) return "Chrome: tap the icon left of the address → Permissions → Microphone → Allow";
+    return chrome ? "Chrome: click the icon left of the address → Site settings → Microphone → Allow, then reload"
+                  : "your browser's site settings → Microphone → Allow, then reload";
+  }
+  function noMic() {
+    const computer = !/iPhone|iPad|iPod|Android/.test(navigator.userAgent);
+    return computer
+      ? "This computer has no microphone it can use. Plug in or connect a headset or mic (a Mac mini has none built in), " +
+        "or check System Settings → Sound → Input, then reload this page."
+      : "Your phone says no microphone is free right now. A phone or FaceTime call, Siri, another app that's recording, " +
+        "or a Bluetooth headset or car that's no longer connected can hold it. Close the Donna app fully (swipe it " +
+        "away), then open it and tap the mic again.";
   }
 
   let current = null;  // the microphone while it's listening: tapping the mic again stops it and sends what you said
@@ -283,7 +301,8 @@
     rec.onerror = e => {
       if (auto) return;  // the phone wouldn't let her start listening on her own: onend asks for a tap
       if (e.error === "not-allowed" || e.error === "service-not-allowed")
-        add("note", "Allow the microphone for this page: Settings → Apps → Safari → Microphone → Allow (and Speech Recognition).");
+        add("note", "Allow the microphone for this page: " + micSettings() + ".");
+      else if (e.error === "audio-capture") add("note", noMic());
     };
     rec.onend = () => {
       clearTimeout(quiet); listening = false; current = null; mode("");
