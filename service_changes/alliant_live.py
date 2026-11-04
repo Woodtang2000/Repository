@@ -147,13 +147,13 @@ ORDER BY w.pp_dt_ordr DESC, w.pp_line""",
     # 7. SKU catalog read-back (the SKU update project): the SKU group's whole row and its sizes. Prices and costs:
     #    Scott / office only (summary() drops them for everyone else).
     "sku": """
-SELECT TOP 1 * FROM dbo.riskugrp s WITH (NOLOCK) WHERE s.sg_skugrup = %(sku)s""",
+SELECT TOP 1 * FROM dbo.riskugrp s WITH (NOLOCK) WHERE LTRIM(RTRIM(s.sg_skugrup)) = %(sku)s""",
 }
 # The sizes table's SKU column, found in INFORMATION_SCHEMA at run time (not guessed); its rows are read with it.
 SQL_SIZE_COLUMN = """
 SELECT TOP 1 COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
 WHERE TABLE_NAME = 'inskusiz' AND COLUMN_NAME LIKE '%skugrup%' ORDER BY ORDINAL_POSITION"""
-SQL_SIZES = "SELECT TOP 60 * FROM dbo.inskusiz z WITH (NOLOCK) WHERE z.{col} = %(sku)s"
+SQL_SIZES = "SELECT TOP 60 * FROM dbo.inskusiz z WITH (NOLOCK) WHERE LTRIM(RTRIM(z.{col})) = %(sku)s"
 SQL_DESCRIBE = """
 SELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS
 WHERE TABLE_NAME IN ('ricustmr', 'riempitm', 'riskugrp', 'inskusiz', 'popending_wo', 'OnHoldReasons')

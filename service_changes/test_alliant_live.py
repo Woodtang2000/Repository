@@ -18,7 +18,7 @@ class Cursor:
             self.rows = [{"COLUMN_NAME": "sz_skugrup"}]
         elif "inskusiz" in sql:
             self.rows = [{"sz_size": "L", "sz_price": 1.201, "sz_lrc": 18.23}]
-        elif "riskugrp s WITH (NOLOCK) WHERE" in sql:
+        elif "riskugrp s WITH (NOLOCK) WHERE LTRIM(RTRIM(s.sg_skugrup))" in sql:
             self.rows = [{"sg_skugrup": "2-0413WH", "sg_desc": "COAT CHEF WHITE", "sg_mspr": 0.57, "sg_maxwash": 32}]
         else:
             self.rows = [dict(r) for r in self.db.rows]
