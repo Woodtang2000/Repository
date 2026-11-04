@@ -1,5 +1,14 @@
 # Running the Service Desk on Amazon Lightsail
 
+> **Since 11/4/2026 Donna runs on agent-server** (AWS EC2, Tailscale `agent-server`), as the Linux account `donna`,
+> code in `/home/donna/Repository`, settings in `/etc/service-desk.env`. The Lightsail server is rollback only, with its
+> services disabled. Dropbox note: "/Scott Woodland/Alliant Operations/Donna - moved to agent-server 2026-11-04.md".
+> Deploy an update from agent-server as ubuntu: `sudo bash /home/donna/Repository/deploy/update.sh`
+> (it won't run where Donna's services are disabled, so there are never two Donnas). Python commands such as the phone
+> setup: `sudo systemd-run --pipe --wait -p User=donna -p EnvironmentFile=/etc/service-desk.env
+> -p WorkingDirectory=/home/donna/Repository /home/donna/Repository/.venv/bin/python -m service_changes.phone_agent --setup`.
+> The rest of this page is how it was first set up on Lightsail.
+
 The desk needs a machine that stays on and can hold a live connection to Slack (`--listen`, Slack Socket Mode).
 A small Lightsail server does that. The scripts here set it up as a service that starts on boot and restarts itself
 if it crashes.
@@ -155,7 +164,7 @@ Ctrl+C stops watching the log, not the desk.
 |---|---|
 | See what it is doing | `journalctl -u service-desk -f` |
 | Last Dropbox data update | `tail ~/dropbox_sync.log` |
-| Get the latest code | `cd ~/Repository && bash deploy/update.sh` |
+| Get the latest code | `sudo bash /home/donna/Repository/deploy/update.sh` (agent-server) |
 | Stop it | `sudo systemctl stop service-desk` |
 | Go live | `sudo nano /etc/service-desk.env`: set `DESK_CHANNEL`, `ROUTE_CHANNELS` (e.g. `route-1,route-2`) and `SERVICE_DESK_LIVE=1`, then `sudo systemctl restart service-desk` |
 

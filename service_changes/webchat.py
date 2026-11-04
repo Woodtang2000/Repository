@@ -113,10 +113,13 @@ class Chat:
     def system(self, site: str) -> str:
         c = COMPANIES[site]
         line = os.environ.get("TEXT_LINE", "").strip()  # set once the customer text line is approved, e.g. "(866) TAP-TEXT, (866) 827-8398"
+        email = ((site != "sw" and os.environ.get("EMAIL_REPLY_TO_TLG", "").strip()) or "service@snowwhitelinen.com")
+        spelled = (" \"TAP-TEXT\" is just how the number spells out on a phone keypad, not a keyword: they text the number "
+                   "and write what they need in their own words." if "TAP" in line.upper() else "")
         next_time = (f"Tell them that for the fastest service next time they can text {line}: it recognizes them by their "
-                     "phone number, can answer questions about their own account, and texts back when a change is entered. "
-                     "They can also email service@snowwhitelinen.com." if line else
-                     "Mention that next time they can also email service@snowwhitelinen.com.")
+                     "phone number, can answer questions about their own account, and texts back when a change is entered."
+                     f"{spelled} They can also email {email}." if line else
+                     f"Mention that next time they can also email {email}.")
         url = os.environ.get("PORTAL_URL", "").strip()  # the customer portal's sign-in page (Alliant Online)
         portal = (PORTAL_HELP.replace("{url}", url) if url else
                   "CUSTOMER PORTAL: if someone needs help logging in to the online customer portal, get their name, "
