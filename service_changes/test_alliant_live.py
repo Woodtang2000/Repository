@@ -118,3 +118,10 @@ def test_bad_parameters_are_refused():
         live.lookup("garment", barcode="x' OR 1=1 --")
     with pytest.raises(ValueError):
         live.lookup("anything_else", account="1205-1-00004")
+
+
+def test_a_stopped_items_zero_inventory_shows_in_the_summary():
+    r = {"lookup": "items", "params": {"acct": 5045}, "note": "Live", "rows": [
+        {"sku": "5-01-01", "inventory": 0, "autocount": 0, "d_mon": 0, "d_tue": 1, "on_hold": False, "stop_date": "2026-10-29"}]}
+    line = live.summary(r).splitlines()[2]
+    assert "inventory=0" in line and "autocount=0" in line and "d_mon" not in line and "on_hold" not in line

@@ -50,7 +50,8 @@ SELECT TOP 300 {ACCT} AS account, LTRIM(RTRIM(i.ei_skugrup)) AS sku, RTRIM(s.sg_
        RTRIM(i.ei_size_a) AS size_a, RTRIM(i.ei_size_b) AS size_b, i.ei_ras_qty AS inventory,
        i.ei_auto_ct AS autocount, RTRIM(i.ei_freq) AS frequency, i.ei_mon AS d_mon, i.ei_tue AS d_tue,
        i.ei_wed AS d_wed, i.ei_thu AS d_thu, i.ei_fri AS d_fri, i.ei_sat AS d_sat, i.ei_sun AS d_sun,
-       i.ei_hold AS on_hold, i.ei_stop_dt AS stop_date
+       i.ei_hold AS on_hold, i.ei_stop_dt AS stop_date, i.ei_season AS seasonal, i.ei_sstopdt AS seasonal_stop,
+       i.ei_restart_dt AS restart_date
 FROM dbo.riempitm i WITH (NOLOCK)
 JOIN dbo.ricustmr c WITH (NOLOCK) ON c.cu_ID = i.ei_CUID
 LEFT JOIN dbo.riskugrp s WITH (NOLOCK) ON s.sg_skugrup = i.ei_skugrup
@@ -61,7 +62,7 @@ ORDER BY i.ei_skugrup""",
     "wearers": f"""
 SELECT TOP 300 {ACCT} AS account, LTRIM(RTRIM(e.em_empl)) AS wearer, RTRIM(e.em_firstn) AS first,
        RTRIM(e.em_lastn) AS last, e.em_locker AS locker, e.em_CostCenter AS department, e.em_startdt AS start_date,
-       e.em_stop_dt AS stop_date, RTRIM(g.is_garment) AS barcode, LTRIM(RTRIM(g.is_skugrup)) AS sku,
+       e.em_stop_dt AS stop_date, LTRIM(RTRIM(g.is_garment)) AS barcode, LTRIM(RTRIM(g.is_skugrup)) AS sku,
        RTRIM(s.sg_desc) AS item, RTRIM(g.is_size_a) AS size_a, RTRIM(g.is_size_b) AS size_b,
        RTRIM(g.is_proc_st) AS status, RTRIM(st.st_desc) AS status_desc
 FROM dbo.riemploy e WITH (NOLOCK)
@@ -74,7 +75,7 @@ WHERE {ONE_ACCOUNT} AND LTRIM(RTRIM(e.em_empl)) <> '0'
 ORDER BY e.em_empl, g.is_skugrup""",
     # 3. Garment by barcode: in service (ingarmis), else retired in the last 2 years (inghist).
     "garment": f"""
-SELECT TOP 5 RTRIM(g.is_garment) AS barcode, {ACCT} AS account, RTRIM(c.cu_name) AS customer,
+SELECT TOP 5 LTRIM(RTRIM(g.is_garment)) AS barcode, {ACCT} AS account, RTRIM(c.cu_name) AS customer,
        LTRIM(RTRIM(g.is_empl)) AS wearer, LTRIM(RTRIM(RTRIM(e.em_firstn) + ' ' + RTRIM(e.em_lastn))) AS wearer_name,
        LTRIM(RTRIM(g.is_skugrup)) AS sku, RTRIM(s.sg_desc) AS item, RTRIM(g.is_size_a) AS size_a,
        RTRIM(g.is_size_b) AS size_b, RTRIM(g.is_proc_st) AS status, RTRIM(st.st_desc) AS status_desc,
@@ -88,9 +89,9 @@ OUTER APPLY (SELECT TOP 1 x.em_firstn, x.em_lastn FROM dbo.riemploy x WITH (NOLO
              WHERE x.em_cuid = g.is_CUID AND x.em_empl = g.is_empl ORDER BY x.em_startdt DESC) e
 LEFT JOIN dbo.instatus st WITH (NOLOCK) ON RTRIM(st.st_code) = RTRIM(g.is_proc_st)
 LEFT JOIN dbo.insrvcod sv WITH (NOLOCK) ON RTRIM(sv.se_code) = RTRIM(g.is_srv_cod)
-WHERE g.is_garment = %(barcode)s""",
+WHERE LTRIM(RTRIM(g.is_garment)) = %(barcode)s""",
     "garment_retired": f"""
-SELECT TOP 5 RTRIM(g.gh_garment) AS barcode, {ACCT} AS account, RTRIM(c.cu_name) AS customer,
+SELECT TOP 5 LTRIM(RTRIM(g.gh_garment)) AS barcode, {ACCT} AS account, RTRIM(c.cu_name) AS customer,
        LTRIM(RTRIM(g.gh_empl)) AS wearer, LTRIM(RTRIM(g.gh_skugrup)) AS sku, RTRIM(s.sg_desc) AS item,
        RTRIM(g.gh_size_a) AS size_a, RTRIM(g.gh_size_b) AS size_b, g.gh_stat_dt AS retired_date,
        CASE RTRIM(g.gh_proc_st) WHEN 'D' THEN 'Deassigned' WHEN 'R' THEN 'Ragged out' ELSE RTRIM(g.gh_proc_st) END AS retired_as,
@@ -98,15 +99,21 @@ SELECT TOP 5 RTRIM(g.gh_garment) AS barcode, {ACCT} AS account, RTRIM(c.cu_name)
 FROM dbo.inghist g WITH (NOLOCK)
 LEFT JOIN dbo.ricustmr c WITH (NOLOCK) ON c.cu_ID = g.gh_CUID
 LEFT JOIN dbo.riskugrp s WITH (NOLOCK) ON s.sg_skugrup = g.gh_skugrup
-WHERE g.gh_garment = %(barcode)s AND g.gh_stat_dt >= DATEADD(year, -2, GETDATE())
+WHERE g.gh_stat_dt >= DATEADD(year, -2, GETDATE()) AND LTRIM(RTRIM(g.gh_garment)) = %(barcode)s 1 = 1
 ORDER BY g.gh_stat_dt DESC""",
     # 4. Holds / seasonal: the account's status and stop date, and every item line on hold.
     "holds": f"""
 SELECT TOP 100 {ACCT} AS account, RTRIM(c.cu_name) AS name, c.cu_active AS active, c.cu_stopdt AS account_stop_date,
+       RTRIM(r.oh_desc) AS account_hold_reason, c.cu_sstopdt AS seasonal_stop, c.cu_restart AS seasonal_restart,
+       c.cu_restart_dt AS restart_date, c.cu_SeasonalRoll AS seasonal_roll,
        LTRIM(RTRIM(i.ei_empl)) AS wearer, LTRIM(RTRIM(i.ei_skugrup)) AS sku, RTRIM(s.sg_desc) AS item,
-       i.ei_hold AS on_hold, i.ei_stop_dt AS item_stop_date
+       i.ei_hold AS on_hold, i.ei_holdout AS hold_out, i.ei_season AS item_seasonal, i.ei_sstopdt AS item_seasonal_stop,
+       i.ei_restart_dt AS item_restart, i.ei_stop_dt AS item_stop_date
 FROM dbo.ricustmr c WITH (NOLOCK)
-LEFT JOIN dbo.riempitm i WITH (NOLOCK) ON i.ei_CUID = c.cu_ID AND i.ei_hold = 1
+LEFT JOIN dbo.OnHoldReasons r WITH (NOLOCK) ON r.oh_ID = c.cu_OnHoldReason
+LEFT JOIN dbo.riempitm i WITH (NOLOCK) ON i.ei_CUID = c.cu_ID
+          AND (i.ei_hold = 1 OR i.ei_season = 1 OR i.ei_sstopdt > '1900-01-02' OR i.ei_holdout > '1900-01-02')
+          AND (i.ei_stop_dt IS NULL OR i.ei_stop_dt < '1900-01-02' OR i.ei_stop_dt > GETDATE())
 LEFT JOIN dbo.riskugrp s WITH (NOLOCK) ON s.sg_skugrup = i.ei_skugrup
 WHERE {ONE_ACCOUNT}""",
     # 5. Next delivery: route days, and any delivery ticket already created for today or later.
@@ -121,17 +128,22 @@ WHERE {ONE_ACCOUNT}
 ORDER BY h.hh_date""",
     # 6. Work orders: wearer garment orders (popending_wo) with what has been received.
     "work_orders": f"""
-SELECT TOP 50 w.pp_po AS po, w.pp_line AS line, LTRIM(RTRIM(w.pp_empl)) AS wearer, LTRIM(RTRIM(w.pp_skugrup)) AS sku,
-       RTRIM(w.pp_desc) AS item, RTRIM(w.pp_size_a) AS size_a, RTRIM(w.pp_size_b) AS size_b,
-       d.pd_ordered AS qty_ordered, d.pd_received AS qty_received, d.pd_expected AS expected_date,
-       d.pd_rcv_dt AS received_date, h.ph_date AS po_date
+SELECT TOP 50 w.pp_wo AS work_order, w.pp_po AS po, w.pp_line AS line, LTRIM(RTRIM(w.pp_empl)) AS wearer,
+       LTRIM(RTRIM(w.pp_skugrup)) AS sku, RTRIM(w.pp_desc) AS item, RTRIM(w.pp_size_a) AS size_a,
+       RTRIM(w.pp_size_b) AS size_b, w.pp_ordered AS qty, d.pd_received AS qty_received, w.pp_released AS released,
+       w.pp_dt_ordr AS ordered_date, w.pp_delv_dt AS delivery_date, d.pd_expected AS expected_date,
+       d.pd_rcv_dt AS received_date, RTRIM(em.ei_emblem) AS emblem,
+       CASE WHEN d.pd_received >= w.pp_ordered THEN 'received' WHEN d.pd_received > 0 THEN 'part received'
+            WHEN w.pp_released = 1 THEN 'released' ELSE 'open' END AS status
 FROM dbo.popending_wo w WITH (NOLOCK)
 JOIN dbo.ricustmr c WITH (NOLOCK) ON c.cu_ID = w.pp_cuid
 LEFT JOIN dbo.podetail d WITH (NOLOCK) ON d.pd_po = w.pp_po AND d.pd_line = w.pp_line
-LEFT JOIN dbo.poheader h WITH (NOLOCK) ON h.ph_po = w.pp_po
+OUTER APPLY (SELECT TOP 1 x.ei_emblem FROM dbo.riempitm x WITH (NOLOCK)
+             WHERE x.ei_CUID = w.pp_cuid AND x.ei_empl = w.pp_empl AND x.ei_skugrup = w.pp_skugrup) em
 WHERE {ONE_ACCOUNT} AND (%(wearer)s = '' OR LTRIM(RTRIM(w.pp_empl)) = %(wearer)s)
-  AND (h.ph_date >= DATEADD(day, -180, GETDATE()) OR d.pd_received < d.pd_ordered)
-ORDER BY h.ph_date DESC, w.pp_line""",
+  AND (w.pp_dt_ordr >= DATEADD(day, -180, GETDATE())
+       OR (w.pp_dt_ordr >= DATEADD(year, -2, GETDATE()) AND ISNULL(d.pd_received, 0) < w.pp_ordered))
+ORDER BY w.pp_dt_ordr DESC, w.pp_line""",
     # 7. SKU catalog read-back (the SKU update project): the SKU group's whole row and its sizes. Prices and costs:
     #    Scott / office only (summary() drops them for everyone else).
     "sku": """
@@ -384,7 +396,7 @@ def is_priced(field: str) -> bool:
 # The SKU lookup reads whole rows, and Alliant's column names don't always say "price" (lrc, brc...): anyone but Scott
 # or the office sees only these fields of it (an allow-list, so a new or cryptic column is never shown by mistake).
 SKU_SAFE = {"sg_skugrup", "sg_desc", "sg_supergr", "sg_type", "sg_garment", "sg_discontinued", "sg_phaseout",
-            "sg_maxwash", "sg_explife", "sg_weight", "sg_pvendor", "sg_pvstyle", "sg_color", "sg_style", "sg_matsize"}
+            "sg_maxwash", "sg_explife", "sg_exp_wks", "sg_maxrewashes", "sg_weight", "sg_pvendor", "sg_pvstyle", "sg_color", "sg_style", "sg_matsize"}
 SIZE_SAFE = re.compile(r"(?:^|_)(?:size|siz|size_a|size_b|sizea|sizeb|desc|skugrup)$", re.I)
 
 
@@ -407,12 +419,17 @@ def rows_for(result: dict, audience: str) -> list[dict]:
     return result["rows"] if audience in ("owner", "office") else without_prices(result["rows"], result["lookup"])
 
 
+COUNTS = {"inventory", "autocount", "quantity", "qty", "qty_received", "washes", "max_washes", "sg_maxwash",
+          "sg_exp_wks", "sg_explife"}
+
+
 def summary(result: dict, audience: str = "staff", limit: int = 5) -> str:
     rows = rows_for(result, audience)
     head = f"{result['lookup'].replace('_', ' ')} {' '.join(str(v) for v in result['params'].values())}: {len(rows)} row(s)"
     lines = [head, result["note"]]
     for r in rows[:limit]:
-        lines.append("  " + "; ".join(f"{k}={v}" for k, v in r.items() if v not in ("", None, 0) and k != "sizes"))
+        lines.append("  " + "; ".join(f"{k}={v}" for k, v in r.items() if k != "sizes" and v not in ("", None)
+                                      and not (v in (0, False) and (k.startswith("d_") or k not in COUNTS))))
         for z in (r.get("sizes") or [])[:12]:
             lines.append("    size: " + "; ".join(f"{k}={v}" for k, v in z.items() if v not in ("", None)))
     if len(rows) > limit:
