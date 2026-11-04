@@ -125,3 +125,10 @@ def test_a_stopped_items_zero_inventory_shows_in_the_summary():
         {"sku": "5-01-01", "inventory": 0, "autocount": 0, "d_mon": 0, "d_tue": 1, "on_hold": False, "stop_date": "2026-10-29"}]}
     line = live.summary(r).splitlines()[2]
     assert "inventory=0" in line and "autocount=0" in line and "d_mon" not in line and "on_hold" not in line
+
+
+def test_a_fresh_read_back_skips_the_cache(db):
+    d, data = db
+    live.lookup("items", data, account="1205-1-00004")
+    r = live.lookup("items", data, fresh=True, account="1205-1-00004")
+    assert len(d.calls) == 2 and "cached" not in r["note"]

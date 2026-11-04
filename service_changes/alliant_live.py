@@ -312,9 +312,10 @@ def _run(conn, lookup: str, params: dict) -> list[dict]:
     return [{k: (_clean(v) if k != "sizes" else v) for k, v in r.items()} for r in rows]
 
 
-def lookup(name: str, data_dir: str = DATA, **kw) -> dict:
-    """One fixed lookup, live when it can be, else from the hourly files.
-    -> {"lookup", "params", "rows", "source": "live" | "files", "at", "note"}"""
+def lookup(name: str, data_dir: str = DATA, fresh: bool = False, **kw) -> dict:
+    """One fixed lookup, live when it can be, else from the hourly files. fresh=True skips the 2-minute cache (a
+    read-back right after Donna saves must see the new value, not one from before the save); it still counts
+    toward the hourly limit. -> {"lookup", "params", "rows", "source": "live" | "files", "at", "note"}"""
     if name not in LOOKUPS:
         raise ValueError(f"unknown lookup {name}")
     params = _params(name, **kw)
@@ -324,7 +325,7 @@ def lookup(name: str, data_dir: str = DATA, **kw) -> dict:
     if configured() and os.environ.get("ALLIANT_LIVE_OFF", "") != "1":
         try:
             with _State(data_dir) as st:
-                hit = st.data["cache"].get(key)
+                hit = None if fresh else st.data["cache"].get(key)
                 if hit:
                     _log(data_dir, f"{name} {shown} cached rows={len(hit['rows'])}")
                     return {"lookup": name, "params": shown, "rows": hit["rows"], "source": "live", "at": hit["when"],
