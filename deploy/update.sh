@@ -13,7 +13,7 @@ if [ "$(systemctl is-enabled service-desk 2>/dev/null || true)" != "enabled" ]; 
   exit 1
 fi
 as_owner git -C "$REPO" pull --ff-only
-as_owner "$REPO/.venv/bin/pip" install -q --upgrade anthropic pydantic slack_sdk reportlab
+as_owner "$REPO/.venv/bin/pip" install -q --upgrade anthropic pydantic slack_sdk reportlab pymssql
 sudo systemctl daemon-reload   # picks up any change to the service files
 sudo systemctl restart service-desk
 for s in service-desk-sms service-desk-email service-desk-webchat; do   # texting, email and website chat
