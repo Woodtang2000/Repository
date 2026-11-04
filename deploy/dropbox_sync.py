@@ -7,6 +7,11 @@ The Dropbox app uses "App folder" access, so it can only see Dropbox/Apps/<app n
 Each check compares the PDF's content hash with the last one used; only a changed PDF is downloaded, rebuilt
 with refresh_data.sh (which refuses an incomplete build) and loaded by restarting the desk.
 Standard library only, so it runs with the system python3.
+
+LOCAL COPY (agent-server, 11/4): the Alliant Feed's hourly pull writes the same app folder on this server, under the
+alliantfeed account's Dropbox (DESK_LOCAL_FEED, default below). When `donna` can read feed_done.txt there, the feed
+files, money files and Alliant University notes are copied from it directly, with no Dropbox round trip; anything that
+can't be read there comes from Dropbox as before. Only ever reads that folder; never writes to it.
 """
 import json
 import os
@@ -108,6 +113,92 @@ FEED_REQUIRED = {"customers.csv": {"account", "name", "route", "service_days"},
                  "wearers.csv": {"account", "employee", "first", "last"}}
 STALE_HOURS = 36
 DATA = os.path.join(REPO, "service_changes", "data")
+LOCAL_FEED = os.environ.get("DESK_LOCAL_FEED", "/home/alliantfeed/Dropbox/Scott Woodland/Apps/SWL Service Desk")
+
+
+class DropboxSource:
+    """The app folder through the Dropbox API."""
+    name = "Dropbox"
+
+    def __init__(self, auth):
+        self.auth = auth
+
+    def version(self, path):  # None when it isn't there
+        m = _meta(self.auth, path)
+        return m["content_hash"] if m else None
+
+    def modified(self, path):
+        m = _meta(self.auth, path)
+        return datetime.strptime(m["server_modified"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc) if m else None
+
+    def read(self, path) -> bytes:
+        return _download(self.auth, path)
+
+    def notes(self, folder):  # [(path relative to folder, version)] of the .md files
+        if _meta(self.auth, folder) is None:
+            return None
+        entries, body, url = [], {"path": folder, "recursive": True}, "https://api.dropboxapi.com/2/files/list_folder"
+        while True:
+            raw, _ = post(url, headers={**self.auth, "Content-Type": "application/json"}, body=json.dumps(body).encode())
+            r = json.loads(raw)
+            entries += [e for e in r["entries"] if e[".tag"] == "file" and e["name"].endswith(".md")]
+            if not r.get("has_more"):
+                break
+            url, body = url + "/continue", {"cursor": r["cursor"]}
+        return [(e["path_display"][len(folder) + 1:], e["content_hash"]) for e in entries]
+
+
+class LocalSource:
+    """The same app folder, as the Alliant Feed writes it on this server (read only). A file's version is its size and
+    modification time, so nothing is read until it has changed."""
+    name = "local copy"
+
+    def __init__(self, root):
+        self.root = root
+
+    def _p(self, path):
+        rel = path.lstrip("/")
+        if ".." in rel.split("/"):
+            raise ValueError("path outside the folder")
+        return os.path.join(self.root, rel)
+
+    def version(self, path):
+        try:
+            st = os.stat(self._p(path))
+        except OSError:
+            return None
+        return f"local:{st.st_size}:{st.st_mtime_ns}" if os.access(self._p(path), os.R_OK) else None
+
+    def modified(self, path):
+        try:
+            return datetime.fromtimestamp(os.path.getmtime(self._p(path)), timezone.utc)
+        except OSError:
+            return None
+
+    def read(self, path) -> bytes:
+        with open(self._p(path), "rb") as f:
+            return f.read()
+
+    def notes(self, folder):
+        top = self._p(folder)
+        if not os.path.isdir(top) or not os.access(top, os.R_OK | os.X_OK):
+            return None
+        out = []
+        for d, _, files in os.walk(top):
+            for n in files:
+                if n.endswith(".md"):
+                    full = os.path.join(d, n)
+                    rel = os.path.relpath(full, top).replace(os.sep, "/")
+                    v = self.version(folder + "/" + rel)
+                    if v:
+                        out.append((rel, v))
+        return out
+
+
+def local_source():
+    """The local copy when donna can read it (feed_done.txt readable), else None."""
+    src = LocalSource(LOCAL_FEED)
+    return src if src.version("/feed_done.txt") else None
 
 
 def _meta(auth, path):
@@ -141,21 +232,22 @@ def _rows(path):
         return set(r.fieldnames or []), sum(1 for _ in r)
 
 
-def sync_feed(conf, auth, done_meta) -> bool:
-    """The nightly Alliant SQL feed (customers.csv … holds.csv, feed_done.txt written last). Returns True when the
-    desk's data is now from the feed (installed now or already current)."""
-    if done_meta["content_hash"] == conf.get("feed_hash"):
+def sync_feed(conf, src, version) -> bool:
+    """The Alliant SQL feed (customers.csv … holds.csv, feed_done.txt written last), from `src` (the local copy or
+    Dropbox). Returns True when the desk's data is now from the feed (installed now or already current)."""
+    key = "feed_local" if isinstance(src, LocalSource) else "feed_hash"
+    if version == conf.get(key):
         return True
-    log(f"New Alliant feed in Dropbox (feed_done.txt {done_meta.get('server_modified')}), downloading")
+    log(f"New Alliant feed in the {src.name} (feed_done.txt {src.modified('/feed_done.txt'):%Y-%m-%d %H:%M}Z), copying")
     tmp = tempfile.mkdtemp()
     try:
         with open(os.path.join(tmp, "feed_done.txt"), "wb") as f:
-            f.write(_download(auth, "/feed_done.txt"))
+            f.write(src.read("/feed_done.txt"))
         for name in FEED_FILES + sorted(OPTIONAL - set(FEED_FILES)):
-            if name in OPTIONAL and _meta(auth, "/" + name) is None:
+            if name in OPTIONAL and src.version("/" + name) is None:
                 continue
             with open(os.path.join(tmp, name), "wb") as f:
-                f.write(_download(auth, "/" + name))
+                f.write(src.read("/" + name))
         # Check before replacing anything: every file there with its columns, and not far fewer customers than now.
         for name, need in FEED_REQUIRED.items():
             cols, n = _rows(os.path.join(tmp, name))
@@ -178,47 +270,39 @@ def sync_feed(conf, auth, done_meta) -> bool:
                 os.remove(os.path.join(DATA, stale))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
-    conf["feed_hash"] = done_meta["content_hash"]
+    conf[key] = version
     save(conf)
     # The feed refreshes hourly now: the desk, texting and email reload when feed_done.txt changes, no restart needed.
     log(f"Alliant feed installed ({new_n} customers); Donna reloads it by herself.")
     return True
 
 
-def feed_age_hours(done_meta) -> float:
-    t = datetime.strptime(done_meta["server_modified"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
-    return (datetime.now(timezone.utc) - t).total_seconds() / 3600
+def feed_age_hours(src) -> float:
+    t = src.modified("/feed_done.txt")
+    return (datetime.now(timezone.utc) - t).total_seconds() / 3600 if t else 1e9
 
 
 NOTES_DIR = "/alliant_university"  # the Alliant University notes, for #alliant-help (service_changes/alliant_help.py)
 
 
-def sync_notes(conf, auth) -> None:
-    """Mirror Dropbox/Apps/<app>/alliant_university/ into data/alliant_university/, downloading only changed files.
-    The desk reads the folder on each question, so no restart is needed."""
-    if _meta(auth, NOTES_DIR) is None:
+def sync_notes(conf, src) -> None:
+    """Mirror <app folder>/alliant_university/ into data/alliant_university/, copying only changed files. The desk
+    reads the folder on each question, so no restart is needed."""
+    entries = src.notes(NOTES_DIR)
+    if entries is None:
         return
-    entries, body, url = [], {"path": NOTES_DIR, "recursive": True}, "https://api.dropboxapi.com/2/files/list_folder"
-    while True:
-        raw, _ = post(url, headers={**auth, "Content-Type": "application/json"}, body=json.dumps(body).encode())
-        r = json.loads(raw)
-        entries += [e for e in r["entries"] if e[".tag"] == "file" and e["name"].endswith(".md")]
-        if not r.get("has_more"):
-            break
-        url, body = url + "/continue", {"cursor": r["cursor"]}
     old, new, local = conf.get("notes_hashes", {}), {}, os.path.join(DATA, "alliant_university")
     changed = 0
-    for e in entries:
-        rel = e["path_display"][len(NOTES_DIR) + 1:]
+    for rel, version in entries:
         if ".." in rel.split("/"):
             continue
-        new[rel] = e["content_hash"]
+        new[rel] = version
         dest = os.path.join(local, rel)
-        if old.get(rel) == e["content_hash"] and os.path.exists(dest):
+        if old.get(rel) == version and os.path.exists(dest):
             continue
         os.makedirs(os.path.dirname(dest), exist_ok=True)
         with open(dest + ".new", "wb") as f:
-            f.write(_download(auth, e["path_lower"]))
+            f.write(src.read(f"{NOTES_DIR}/{rel}"))
         os.replace(dest + ".new", dest)
         changed += 1
     for rel in set(old) - set(new):
@@ -232,7 +316,7 @@ def sync_notes(conf, auth) -> None:
         log(f"Alliant University notes: {changed} file(s) updated, {len(new)} in all.")
 
 
-def sync_private(conf, auth) -> None:
+def sync_private(conf, src) -> None:
     """Mirror the Scott-and-Bill-only money files into data/private/ (folder 700, files 600), only when changed. The
     desk reads them fresh on each private question, so no restart is needed."""
     local = os.path.join(DATA, "private")
@@ -240,16 +324,16 @@ def sync_private(conf, auth) -> None:
     os.chmod(local, 0o700)
     old, new, changed = conf.get("private_hashes", {}), {}, 0
     for name in PRIVATE_FILES:
-        meta = _meta(auth, f"{PRIVATE_DIR}/{name}")
-        if meta is None:
+        version = src.version(f"{PRIVATE_DIR}/{name}")
+        if version is None:
             continue
-        new[name] = meta["content_hash"]
+        new[name] = version
         dest = os.path.join(local, name)
-        if old.get(name) == meta["content_hash"] and os.path.exists(dest):
+        if old.get(name) == version and os.path.exists(dest):
             continue
         fd = os.open(dest + ".new", os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         with os.fdopen(fd, "wb") as f:
-            f.write(_download(auth, meta["path_lower"]))
+            f.write(src.read(f"{PRIVATE_DIR}/{name}"))
         os.replace(dest + ".new", dest)
         changed += 1
     if changed:
@@ -260,22 +344,43 @@ def sync_private(conf, auth) -> None:
 
 def sync():
     conf = load()
-    token = access_token(conf)
-    auth = {"Authorization": f"Bearer {token}"}
-    try:
-        sync_notes(conf, auth)
-    except Exception as e:  # never let the notes get in the way of the customer data
-        log(f"Alliant University notes not synced: {e}")
-    try:
-        sync_private(conf, auth)
-    except Exception as e:
-        log(f"Private Scott-and-Bill files not synced: {e}")
-    done = _meta(auth, "/feed_done.txt")
-    if done and sync_feed(conf, auth, done) and feed_age_hours(done) <= STALE_HOURS:
-        return  # the feed is current: the PDF is only a fallback
-    if done:
-        log(f"Alliant feed is {feed_age_hours(done):.0f} hours old; checking the PDF fallback.")
-    sync_pdf(conf, auth)
+    local = local_source()
+    _dbx = []
+
+    def dropbox():  # only signs in to Dropbox when something has to come from there
+        if not _dbx:
+            _dbx.append(DropboxSource({"Authorization": f"Bearer {access_token(conf)}"}))
+        return _dbx[0]
+
+    for what, step in (("Alliant University notes", sync_notes), ("Private Scott-and-Bill files", sync_private)):
+        try:
+            step(conf, local) if local else step(conf, dropbox())
+        except Exception as e:  # never let these get in the way of the customer data
+            if local:
+                log(f"{what}: local copy not readable ({type(e).__name__}); using Dropbox.")
+                try:
+                    step(conf, dropbox())
+                except Exception as e2:
+                    log(f"{what} not synced: {e2}")
+            else:
+                log(f"{what} not synced: {e}")
+    src = local
+    version = local.version("/feed_done.txt") if local else None
+    if local:
+        try:
+            if sync_feed(conf, local, version) and feed_age_hours(local) <= STALE_HOURS:
+                return  # the feed is current: the PDF is only a fallback
+        except OSError as e:  # a file the feed wrote that donna can't read yet: this round from Dropbox
+            log(f"Alliant feed: local copy not readable ({type(e).__name__}: {e.filename}); using Dropbox.")
+        src = None
+    if src is None:
+        src = dropbox()
+        version = src.version("/feed_done.txt")
+        if version and sync_feed(conf, src, version) and feed_age_hours(src) <= STALE_HOURS:
+            return
+    if version:
+        log(f"Alliant feed is {feed_age_hours(src):.0f} hours old; checking the PDF fallback.")
+    sync_pdf(conf, dropbox().auth)
 
 
 def sync_pdf(conf, auth):
