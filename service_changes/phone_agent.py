@@ -522,6 +522,9 @@ def limit(aid: str, label: str, kind: str) -> None:
     longest, quiet = LIMITS[kind]
     try:
         cc = _api("GET", f"/v1/convai/agents/{aid}").get("conversation_config") or {}
+        pr = (cc.get("agent") or {}).get("prompt") or {}
+        if pr.get("tools") is not None:  # ElevenLabs reads back both; an update may name tools one way only
+            pr.pop("tool_ids", None)
         cc.setdefault("conversation", {})["max_duration_seconds"] = longest
         cc.setdefault("turn", {})["silence_end_call_timeout"] = quiet
         _api("PATCH", f"/v1/convai/agents/{aid}", {"conversation_config": cc})

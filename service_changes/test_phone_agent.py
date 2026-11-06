@@ -195,9 +195,12 @@ def test_transfer_to_the_office_in_the_current_shape_and_the_older_one():
 def test_call_limits_keep_the_agents_other_settings(monkeypatch):
     from . import phone_agent as pa
     calls = []
-    agent = {"conversation_config": {"agent": {"first_message": "Hi"}, "tts": {"voice_id": "v1"}}}
+    agent = {"conversation_config": {"agent": {"first_message": "Hi", "prompt": {"tools": [{"name": "end_call"}],
+                                                                              "tool_ids": ["t1"]}},
+                                     "tts": {"voice_id": "v1"}}}
     monkeypatch.setattr(pa, "_api", lambda m, path, body=None: calls.append((m, body)) or (agent if m == "GET" else {}))
     pa.limit("agent_x", "Donna – customer line", "line")
     sent = calls[-1][1]["conversation_config"]
     assert sent["conversation"]["max_duration_seconds"] == 600 and sent["turn"]["silence_end_call_timeout"] == 45
     assert sent["agent"]["first_message"] == "Hi" and sent["tts"]["voice_id"] == "v1"  # nothing else changed
+    assert "tool_ids" not in sent["agent"]["prompt"] and sent["agent"]["prompt"]["tools"] == [{"name": "end_call"}]
