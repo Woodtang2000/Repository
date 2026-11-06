@@ -253,6 +253,8 @@ def send_sms(to: str, body: str) -> None:
     last = phone_key(_last_numbers().get(phone_key(to), ""))
     frm = next((n for n in mine if phone_key(n) == last), mine[0])  # digits only: "+18668278398" = "(866) 827-8398"
     _twilio("POST", "Messages.json", {"From": "+1" + phone_key(frm), "To": to, "Body": plain(body)[:1500]})
+    from . import comms
+    comms.log("out", "text", to, plain(body)[:1500])  # #customer-messages: everything Donna sends
 
 
 def inbound(since: datetime) -> list[dict]:
@@ -629,6 +631,9 @@ class TextDesk:
         return handled
 
     def handle(self, phone: str, body: str, sid: str) -> None:
+        if not getattr(self, "_replaying", False):  # #customer-messages: what they sent (once, not again on approval)
+            from . import comms
+            comms.log("in", self.word, phone, body)
         key = self.key(phone)
         if contact_key(phone) in blocked(self.data_dir):  # the office blocked them: no answer, nothing about any account
             self.log(phone, "blocked: ignored")
@@ -987,11 +992,13 @@ class TextDesk:
         names = " and ".join(self.name(self.alliant, a) for a in now)
         said, send = [self.set_up.format(names=names)], self.send
         self.send = lambda _to, msg: said.append(msg)  # the welcome and the answer to what they sent go out together
+        self._replaying = True
         try:
             for body, sid in (p or {}).get("held", [])[-3:]:  # what they sent before being set up (the latest few)
                 self.handle(to, body, sid)
         finally:
             self.send = send
+            self._replaying = False
         reply = "\n\n".join(dict.fromkeys(said))  # the same acknowledgement twice reads as once
         self.send(to, reply)
         if card:  # nothing out of sight: the card's thread says what Donna sent them (any ticket is in #service-desk)

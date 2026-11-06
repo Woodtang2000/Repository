@@ -124,6 +124,8 @@ def send(task_id: str, rep: dict, by: str) -> str:
             "reply_to": [rep["email"]], "subject": e["subject"], "text": e["body"], "html": html(e["body"]),
             "category": "marketing", "tags": ["outreach"]}
     bird._call("POST", "/v1/email/messages", body=body, key=f"outreach-{task_id}")
+    from . import comms
+    comms.log("out", "email", e["to"], f"(sales outreach in {rep['name']}'s name, OK'd by {by})\nSubject: {e['subject']}\n{e['body']}")
     when = datetime.now(ALASKA).strftime("%-m/%-d %-I:%M %p")
     patch("Task", task_id, {"Status": "Completed", "Outcome__c": OUTCOME,
                             "Description": ((t.get("Description") or "") + f"\n\nSent by Donna in {rep['name'].split()[0]}'s "

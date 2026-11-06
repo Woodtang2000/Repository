@@ -461,6 +461,9 @@ class Phone:
 
     def office_note(self, call: dict, turn: Turn, verified: bool) -> None:
         from . import todo
+        if not verified and call.get("line") == "customers" and turn.summary:  # (a verified one is logged by ticket())  # #customer-messages: what the caller asked for
+            from . import comms
+            comms.log("in", "call", call.get("from", ""), turn.summary, name=turn.caller_name or "")
         masked = f"…{digits(call['from'])[-4:]}"
         if not verified and call["line"] == "customers" and len(digits(call["from"])) == 10:
             # Who they probably are, with "Add to <account>" buttons: one tap links the number and their request
@@ -493,6 +496,9 @@ class Phone:
 
     def ticket(self, sid: str, call: dict, turn: Turn) -> None:
         """A verified customer's change: the same ✅ ticket a text makes, so desk.py texts them when it's entered."""
+        if call.get("line") == "customers" and turn.summary:  # #customer-messages: what the caller asked for
+            from . import comms
+            comms.log("in", "call", call.get("from", ""), turn.summary, name=turn.caller_name or "")
         from .checks import check, readback, ticket
         from .parser import parse_message
         from .run import fill_item_matches

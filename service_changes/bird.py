@@ -136,3 +136,6 @@ def send(to: str, subject: str, text: str, in_reply_to: str = "", key: str = "",
         body["attachments"] = [{"filename": a["filename"], "content": base64.b64encode(a["content"]).decode()}
                                for a in attachments[:5]]
     _call("POST", "/v1/email/messages", body=body, key=key)
+    from . import comms
+    comms.log("out", "email", to, f"Subject: {subject}\n{text}" + (f"\n(attached: {', '.join(a['filename'] for a in attachments[:5])})"
+                                                                   if attachments else ""))
