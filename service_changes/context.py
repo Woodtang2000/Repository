@@ -87,6 +87,27 @@ def office_phone(company: str) -> str:
 LAUNDRY_GROUP_NUMBERS: set[str] = set()  # account numbers with any branch 2 customer (Alliant.from_dir fills it)
 
 
+def sub_account(account: str | None) -> bool:
+    """Accounts we serve for another company that bills them (UniFirst: Safeway 4000, Costco 7192): their Alliant
+    card's email is that company's billing, not the store. SUB_ACCOUNTS, comma separated account numbers."""
+    held = {x.strip() for x in os.environ.get("SUB_ACCOUNTS", "4000,7192").split(",") if x.strip()}
+    return bool(account) and account.split("-")[0] in held
+
+
+def customer_emails(alliant, account: str, data_dir: str | None = None) -> list[str]:
+    """Who Donna emails about this account (garments arrived, changes, stops, specials, announcements): the invoice
+    contacts on its Alliant card; for a sub-account, only the contacts the office linked to that location
+    (customer_emails.csv: a store's or department's manager), never the billing company's address."""
+    if sub_account(account):
+        from .email_desk import load_emails  # (imports this module)
+        path = os.path.join(data_dir or os.environ.get("SERVICE_DESK_DATA", os.path.join(os.path.dirname(__file__), "data")),
+                            "customer_emails.csv")
+        return [e for e, r in load_emails(path).items() if account in r["accounts"]]
+    card = (getattr(alliant, "cards", {}) or {}).get(account, {})
+    return list(dict.fromkeys(e.strip().lower() for e in re.split(r"[;,\s]+", card.get("email") or "")
+                              if re.fullmatch(r"[^@\s]+@[^@\s]+\.\w+", e.strip())))
+
+
 def company_for(account: str | None) -> str:
     """Which company signs a message to this account: branch 2 is The Laundry Group, and so is every location of an
     account number that has any branch 2 customer (Scott: "a -2 in any of the customers: a Laundry Group customer for

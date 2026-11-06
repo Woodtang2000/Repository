@@ -69,8 +69,8 @@ def try_send(data_dir: str, alliant, number: str) -> str:
         open(done, "w").write("held")
         return "held"
     card = getattr(alliant, "cards", {}).get(acct, {})
-    to = list(dict.fromkeys(e.strip().lower() for e in re.split(r"[;,\s]+", card.get("email") or "")
-                            if re.fullmatch(r"[^@\s]+@[^@\s]+\.\w+", e.strip())))
+    from .context import customer_emails  # a sub-account (Costco, Safeway): its own linked contacts only
+    to = customer_emails(alliant, acct, data_dir)
     if not to:
         open(done, "w").write("no email on the card")
         return "no email"

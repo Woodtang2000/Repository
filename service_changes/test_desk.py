@@ -735,6 +735,7 @@ def test_change_email_to_the_invoice_contact(monkeypatch):
     sent = []
     monkeypatch.setattr(bird, "send", lambda to, subject, text, in_reply_to="", key="", company="": sent.append((to, subject, text)))
     monkeypatch.delenv("CHANGE_EMAILS", raising=False)
+    monkeypatch.setenv("SUB_ACCOUNTS", "")
     d = SimpleNamespace(alliant=Alliant(customers=[Customer("5045-1-00000", "HOMER GOLF COURSE", "5", ["Tue"])],
                                         cards={"5045-1-00000": {"email": "ap@homergolf.com; Owner@HomerGolf.com"}}))
     customer = "All done! bar mops changed from 50 to 60 a week (Homer Golf Course). Donna entered it for you.\nThanks so much!"
@@ -1098,3 +1099,15 @@ def test_a_contact_can_be_added_to_every_location_or_the_ones_picked(setup, monk
     d.link_contact(tap({"action_id": "link_sel", "value": _json.dumps({"sel": 1, "m": 0})},
                        {"link": {"link_pick": {"selected_options": [{"value": "1950-1-00002"}, {"value": "1950-1-00003"}]}}}))
     assert desk.meta(slack.find("NC", card["ts"]))["accounts"] == ["1950-1-00002", "1950-1-00003"]
+
+
+
+def test_a_sub_account_is_never_emailed_at_its_billing_company(tmp_path, monkeypatch):
+    from .context import Alliant, Customer, customer_emails
+    monkeypatch.delenv("SUB_ACCOUNTS", raising=False)  # default: Safeway 4000 and Costco 7192
+    a = Alliant(customers=[Customer("7192-1-00001", "COSTCO 1342 DELI", "2", ["Tue"]), Customer("1205-1-00004", "MIDAS", "1", ["Mon"])],
+                cards={"7192-1-00001": {"email": "billing@unifirst.com"}, "1205-1-00004": {"email": "bob@midas.com"}})
+    assert customer_emails(a, "7192-1-00001", str(tmp_path)) == []  # not UniFirst's billing
+    assert customer_emails(a, "1205-1-00004", str(tmp_path)) == ["bob@midas.com"]
+    (tmp_path / "customer_emails.csv").write_text("email,accounts,name\ndeli1342@costco.com,7192-1-00001,Deli manager\n")
+    assert customer_emails(a, "7192-1-00001", str(tmp_path)) == ["deli1342@costco.com"]  # the department, once linked

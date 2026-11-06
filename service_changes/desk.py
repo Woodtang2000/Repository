@@ -1953,9 +1953,8 @@ class Desk:
         from .sms import plain
         card = self.alliant.cards.get(acct, {})
         already = (p.get("email_to") or "").lower()  # an emailed request got its readback in its own thread
-        to = [e for e in dict.fromkeys(x.strip().lower() for x in re.split(r"[;,\s]+", card.get("email") or "")
-                                       if re.fullmatch(r"[^@\s]+@[^@\s]+\.\w+", x.strip()))
-              if e != already]
+        from .context import customer_emails  # a sub-account (Costco, Safeway): its own linked contacts only
+        to = [e for e in customer_emails(self.alliant, acct, getattr(self, "data_dir", None)) if e != already]
         if not to:
             return []
         name = next((c.name for c in self.alliant.customers if c.account == acct), card.get("name", acct)).title()

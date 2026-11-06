@@ -48,9 +48,8 @@ class Notices:
         os.replace(self._path() + ".tmp", self._path())
 
     def emails(self, acct: str) -> list[str]:
-        card = self.desk.alliant.cards.get(acct, {})
-        return list(dict.fromkeys(e.strip().lower() for e in re.split(r"[;,\s]+", card.get("email") or "")
-                                  if re.fullmatch(r"[^@\s]+@[^@\s]+\.\w+", e.strip())))
+        from .context import customer_emails  # a sub-account (Costco, Safeway): its own linked contacts only
+        return customer_emails(self.desk.alliant, acct, getattr(self.desk, "data_dir", None))
 
     def pass_(self) -> dict:
         """Look at the feed once; returns what was sent."""

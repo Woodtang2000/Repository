@@ -86,10 +86,10 @@ class Announcer:
             if hit:
                 phones["+1" + num] = hit
         emails = {}
+        from .context import customer_emails  # a sub-account (Costco, Safeway): its own linked contacts only
         for acct in accounts:
-            for e in re.split(r"[;,\s]+", (self.desk.alliant.cards.get(acct, {}).get("email") or "")):
-                e = e.strip().lower()
-                if re.fullmatch(r"[^@\s]+@[^@\s]+\.\w+", e) and e not in emails:
+            for e in customer_emails(self.desk.alliant, acct, self.desk.data_dir):
+                if e not in emails:
                     emails[e] = acct
         return phones, emails
 

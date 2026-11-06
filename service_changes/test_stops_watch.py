@@ -15,6 +15,7 @@ def make(tmp_path, items, autocount, **kw):
 
 
 def run(d, monkeypatch, mails, day, hour=8):
+    monkeypatch.setenv("SUB_ACCOUNTS", "")  # these tests use 4000 numbers as an ordinary customer
     monkeypatch.setattr(notices.Notices, "_send", lambda self, acct, to, subject, body, kind, note: mails.append((to, subject, body)))
     w = stops_watch.StopsWatch(d, today=day)
     w.now = datetime(day.year, day.month, day.day, hour)
