@@ -203,4 +203,4 @@ def test_call_limits_keep_the_agents_other_settings(monkeypatch):
     sent = calls[-1][1]["conversation_config"]
     assert sent["conversation"]["max_duration_seconds"] == 600 and sent["turn"]["silence_end_call_timeout"] == 45
     assert sent["agent"]["first_message"] == "Hi" and sent["tts"]["voice_id"] == "v1"  # nothing else changed
-    assert "tool_ids" not in sent["agent"]["prompt"] and sent["agent"]["prompt"]["tools"] == [{"name": "end_call"}]
+    assert "tools" not in sent["agent"]["prompt"] and sent["agent"]["prompt"]["tool_ids"] == ["t1"]  # shared tools by id

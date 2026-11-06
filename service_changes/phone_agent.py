@@ -523,7 +523,11 @@ def limit(aid: str, label: str, kind: str) -> None:
     try:
         cc = _api("GET", f"/v1/convai/agents/{aid}").get("conversation_config") or {}
         pr = (cc.get("agent") or {}).get("prompt") or {}
-        if pr.get("tools") is not None:  # ElevenLabs reads back both; an update may name tools one way only
+        # ElevenLabs reads tools back both ways, but an update may name them one way only: keep shared tools by
+        # their ids (the app agent's ask_donna), the phone agents' own tools as they are
+        if pr.get("tool_ids"):
+            pr.pop("tools", None)
+        else:
             pr.pop("tool_ids", None)
         cc.setdefault("conversation", {})["max_duration_seconds"] = longest
         cc.setdefault("turn", {})["silence_end_call_timeout"] = quiet
