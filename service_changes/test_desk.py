@@ -1069,3 +1069,32 @@ def test_a_driver_note_with_nothing_to_enter_goes_to_route_notes(setup):
     p2 = ParsedMessage(category=Category.route_or_schedule, account_number="W1", summary="Move service day to Thursday")
     d.post_ticket("route-1-test", "C1", post2, "Mike Driver", p2, Result(p2, []), [], False, [])
     assert [m for m in slack.msgs["D1"] if desk.meta(m) and desk.meta(m).get("kind") == "ticket"]
+
+
+def test_a_contact_can_be_added_to_every_location_or_the_ones_picked(setup, monkeypatch):
+    import json as _json
+    from types import SimpleNamespace
+    from . import sms
+    slack, d = setup
+    monkeypatch.setattr(d, "is_office", lambda u: u == "U2")
+    sites = [SimpleNamespace(account=a, name=n, route="1") for a, n in
+             (("1950-1-00000", "MATSON NAVIGATION (UNIFORMS)"), ("1950-1-00002", "MATSON NAVIGATION (TOWER)"),
+              ("1950-1-00003", "MATSON NAVIGATION (WAREHOUSE)"), ("1205-1-00004", "MIDAS"))]
+    monkeypatch.setattr(d.alliant, "customers", sites)
+    name = lambda a: next((c.name for c in sites if c.account == a), "")
+    btns = sms.link_buttons(["1950-1-00000"], [], name, sms.locations(d.alliant, ["1950-1-00000"]))
+    ids = [e["action_id"] for e in btns["elements"]]
+    assert "link_all" in ids and "link_pick" in ids and "link_sel" in ids
+    pick = next(e for e in btns["elements"] if e["action_id"] == "link_pick")
+    assert [o["value"] for o in pick["options"]] == ["1950-1-00000", "1950-1-00002", "1950-1-00003"]  # not Midas
+    slack.msgs["NC"] = []
+    card = slack.chat_postMessage("NC", "", metadata={"event_type": desk.KIND, "event_payload": {
+        "kind": "email_signup", "phone": "ancpayables@matson.com", "accounts": ["1950-1-00000"]}}, attachments=[{"blocks": []}])
+    slack.conversations_history = lambda channel, **kw: {"messages": [slack.find(channel, card["ts"])]}
+    tap = lambda act, state=None: {"user": {"id": "U2"}, "container": {"channel_id": "NC", "message_ts": card["ts"]},
+                                   "actions": [act], **({"state": {"values": state}} if state else {})}
+    d.link_contact(tap({"action_id": "link_all", "value": _json.dumps({"all": "1950", "m": 0})}))
+    assert desk.meta(slack.find("NC", card["ts"]))["accounts"] == ["1950-1-00000", "1950-1-00002", "1950-1-00003"]
+    d.link_contact(tap({"action_id": "link_sel", "value": _json.dumps({"sel": 1, "m": 0})},
+                       {"link": {"link_pick": {"selected_options": [{"value": "1950-1-00002"}, {"value": "1950-1-00003"}]}}}))
+    assert desk.meta(slack.find("NC", card["ts"]))["accounts"] == ["1950-1-00002", "1950-1-00003"]

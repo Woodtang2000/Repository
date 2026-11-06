@@ -981,8 +981,21 @@ class Desk:
         p = meta(m) if m else None
         if not p or not str(p.get("kind", "")).endswith("_signup"):
             return "not a sign-up card"
+        if act.get("action_id") == "link_pick":
+            return "locations picked (waiting for Add to picked)"
         choice = json.loads(act.get("value") or "{}")
         who = self.name(user).split()[0] if self.name(user) else "office"
+        picked = [o["value"] for blk in ((payload.get("state") or {}).get("values") or {}).values()
+                  for aid, v in blk.items() if aid == "link_pick" for o in (v.get("selected_options") or [])]
+        if choice.get("sel"):  # the locations picked in the card's list
+            if not picked:
+                self.slack.chat_postEphemeral(channel=card_ch, user=user, text="Pick one or more locations first, then tap Add to picked.")
+                return "nothing picked"
+            targets = picked
+        elif choice.get("all"):  # every location of that customer
+            targets = sorted(c.account for c in self.alliant.customers if c.account.split("-")[0] == str(choice["all"]))
+        else:
+            targets = [choice.get("a")]
         if choice.get("b"):  # an imposter or a competitor fishing: never answered again, off every account
             from .sms import block
             block(self.data_dir, p.get("phone", ""), by=self.name(user), why=(p.get("request") or "")[:200])
@@ -993,13 +1006,14 @@ class Desk:
             self.slack.chat_update(channel=card_ch, ts=ts, text="", attachments=a,
                                    metadata={"event_type": KIND, "event_payload": {**p, "kind": "blocked"}})
             return f"blocked {p.get('phone')}"
-        a = restyle(m, GOLD, status=f"⏳ {'Moving' if choice.get('m') else 'Adding'} to {choice.get('a')} · {who}")
+        a = restyle(m, GOLD, status=f"⏳ {'Moving' if choice.get('m') else 'Adding'} to "
+                                    f"{targets[0] if len(targets) == 1 else f'{len(targets)} locations'} · {who}")
         for att in a:
             att["blocks"] = [b for b in att.get("blocks") or [] if b.get("block_id") != "link"]
         self.slack.chat_update(channel=card_ch, ts=ts, text="", attachments=a, metadata={
-            "event_type": KIND, "event_payload": {**p, "accounts": [choice.get("a")], "approved_by": user,
+            "event_type": KIND, "event_payload": {**p, "accounts": targets, "approved_by": user,
                                                   "move": bool(choice.get("m"))}})
-        return f"{'move' if choice.get('m') else 'add'} {p.get('phone')} -> {choice.get('a')}"
+        return f"{'move' if choice.get('m') else 'add'} {p.get('phone')} -> {', '.join(targets[:5])}"
 
     def announcer(self):
         """Messages to many customers at once, sent only when the office taps Send (announce.py)."""

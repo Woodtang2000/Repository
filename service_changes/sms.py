@@ -342,7 +342,15 @@ def person(slack, user: str) -> str:
         return "someone"
 
 
-def link_buttons(accounts: list[str], current: list[str], name) -> dict | None:
+def locations(alliant: Alliant, accounts: list[str]) -> list[str]:
+    """Every location of the customers these accounts belong to (1950-1-00000 -> all of 1950-*), best matches first:
+    the contact may handle all of them (Matson, VNPCC) or only some (one Midas manager)."""
+    base = {a.split("-")[0] for a in accounts if a}
+    out = list(accounts) + sorted(c.account for c in alliant.customers if c.account.split("-")[0] in base)
+    return list(dict.fromkeys(out))[:100]
+
+
+def link_buttons(accounts: list[str], current: list[str], name, choices: list[str] | None = None) -> dict | None:
     """The card's buttons: "Add to <best match>" (and the next two), or, when the number is already on other accounts,
     "Move to <best>" (taken off the others: people change jobs) and "Add <best> too" (owners with several accounts)."""
     els = []
@@ -357,6 +365,24 @@ def link_buttons(accounts: list[str], current: list[str], name) -> dict | None:
             els.append({"type": "button", "action_id": f"link_add{i + 1}", "value": json.dumps({"a": a, "m": 0}),
                         **({"style": "primary"} if i == 0 else {}),
                         "text": {"type": "plain_text", "text": f"Add to {label}"}})
+    choices = [a for a in (choices or []) if a not in current]
+    sites = [a for a in choices if accounts and a.split("-")[0] == accounts[0].split("-")[0]]
+    if len(sites) > 1:  # a contact for several locations: all of them, or the ones the office picks
+        base = accounts[0].split("-")[0]
+        els.append({"type": "button", "action_id": "link_all", "value": json.dumps({"all": base, "m": 0}),
+                    "text": {"type": "plain_text", "text": f"Add to all {len(sites)} {(name(accounts[0]) or base).title()[:24]} locations"},
+                    "confirm": {"title": {"type": "plain_text", "text": "Add to every location?"},
+                                "text": {"type": "plain_text", "text": f"Link this contact to all {len(sites)} locations of "
+                                         f"{(name(accounts[0]) or base).title()[:40]}?"},
+                                "confirm": {"type": "plain_text", "text": "Add to all"},
+                                "deny": {"type": "plain_text", "text": "Cancel"}}})
+    if len(choices) > 1:
+        els.append({"type": "multi_static_select", "action_id": "link_pick",
+                    "placeholder": {"type": "plain_text", "text": "Pick locations…"},
+                    "options": [{"text": {"type": "plain_text", "text": f"{a} {(name(a) or '').title()}"[:75]}, "value": a}
+                                for a in choices]})
+        els.append({"type": "button", "action_id": "link_sel", "value": json.dumps({"sel": 1, "m": 0}),
+                    "text": {"type": "plain_text", "text": "Add to picked"}})
     els.append({"type": "button", "action_id": "link_block", "style": "danger", "value": json.dumps({"b": 1}),
                 "text": {"type": "plain_text", "text": "Block"},
                 "confirm": {"title": {"type": "plain_text", "text": "Block this caller?"},
@@ -461,7 +487,7 @@ def signup_card(slack, desk_id: str, alliant: Alliant, phone: str, who: str, sai
                      + (" Their request is handled as soon as it's added." if request else ""))
     else:
         lines.append(f"I couldn't tell which customer. Type `add {phone_key(phone)} to <account number>` to approve.")
-    buttons = link_buttons(accounts, current, name)
+    buttons = link_buttons(accounts, current, name, locations(alliant, accounts))
     slack.chat_postMessage(channel=channel, text="", unfurl_links=False,
                            attachments=attachment("\n".join(lines), button=False, extra=[buttons] if buttons else None),
                            metadata={"event_type": KIND, "event_payload": {
@@ -924,8 +950,10 @@ class TextDesk:
                 if who:
                     self.approve(pl["phone"], pl["accounts"], pl.get("name", ""), move=bool(pl.get("move")),
                                  request=pl.get("request", ""), sid=m["ts"], card=(ch, m["ts"]))
-                    did = ("Moved to " if pl.get("move") else "Added to ") + ", ".join(
-                        f"{a} {self.name(self.alliant, a)}" for a in pl["accounts"]) + " · approved"
+                    names = [f"{a} {self.name(self.alliant, a)}" for a in pl["accounts"]]
+                    did = ("Moved to " if pl.get("move") else "Added to ") + (
+                        ", ".join(names) if len(names) <= 3 else f"{len(names)} locations: " + ", ".join(names[:3]) + ", …"
+                    ) + " · approved"
                     self.slack.chat_update(channel=ch, ts=m["ts"], text="",
                                            attachments=shrink(self.slack, ch, m, GREEN,
                                                               stamp(person(self.slack, who), did), lines=1),

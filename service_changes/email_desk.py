@@ -222,8 +222,8 @@ class EmailDesk(TextDesk):
             lines.append(f"Tap a button, or type `add {email_key(addr)} to <account number(s)>` for another account.")
         else:
             lines.append(f"I couldn't tell which customer. Type `add {email_key(addr)} to <account number>` to approve.")
-        from .sms import link_buttons
-        buttons = link_buttons(accounts, current, name)
+        from .sms import link_buttons, locations
+        buttons = link_buttons(accounts, current, name, locations(self.alliant, accounts))
         self.slack.chat_postMessage(channel=getattr(self, "cards_id", self.desk_id), text="", unfurl_links=False,
                                     attachments=attachment("\n".join(lines), button=False, extra=[buttons] if buttons else None),
                                     metadata={
