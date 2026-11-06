@@ -571,6 +571,18 @@ class Desk:
                           {"kind": "answer", "src_ts": src["ts"], "driver_id": src.get("user"), "msgs": replies},
                           thread_ts=src["ts"])
             return new["ts"]
+        notes = self.channels.get(os.environ.get("NOTES_CHANNEL", "route-notes"))
+        if notes and parsed.category in (Category.today_only, Category.operational_issue) and not correction \
+                and channel in self.routes.values():
+            # nothing to enter in Alliant (Scott, 11/5: channels by job): #route-notes with ✓ Done, not #service-desk
+            new = self.post(notes, "\n".join(lines + ["", _quote(_short(src.get("text", ""), 300)),
+                                                     f"<{link}|{where}> · Tap ✓ Done when seen"]),
+                            {"kind": "route_note", "src_channel": channel, "src_ts": src["ts"], "driver": author,
+                             "driver_id": src.get("user"), "account": parsed.account_number or ""}, todo="button")
+            self.post(channel, f"<@{src.get('user')}> ✅ Got it: passed to the office in #route-notes.",
+                      {"kind": "answer", "src_ts": src["ts"], "driver_id": src.get("user"), "msgs": replies},
+                      thread_ts=src["ts"])
+            return new["ts"]
         expect = expectations(result) if parsed.category in ACTIONABLE and not result.questions else []
         new = self.post(self.desk_id, text, {"kind": "ticket", "src_channel": channel, "src_ts": src["ts"],
                                              "readback": rb, "driver": author, "driver_id": src.get("user"),
@@ -960,10 +972,11 @@ class Desk:
         user = payload.get("user", {}).get("id")
         act = next((x for x in payload.get("actions", []) if x.get("action_id", "").startswith("link_")), {})
         ts = payload.get("container", {}).get("message_ts")
+        card_ch = (payload.get("container") or {}).get("channel_id") or self.desk_id  # #new-contacts or #service-desk
         if not (self.is_office(user) or self.is_owner(user)):
-            self.slack.chat_postEphemeral(channel=self.desk_id, user=user, text="Only the office can link a number to an account.")
+            self.slack.chat_postEphemeral(channel=card_ch, user=user, text="Only the office can link a number to an account.")
             return "ignored: not office"
-        r = self.slack.conversations_history(channel=self.desk_id, latest=ts, inclusive=True, limit=1, include_all_metadata=True)
+        r = self.slack.conversations_history(channel=card_ch, latest=ts, inclusive=True, limit=1, include_all_metadata=True)
         m = next((x for x in r.get("messages", []) if x["ts"] == ts), None)
         p = meta(m) if m else None
         if not p or not str(p.get("kind", "")).endswith("_signup"):
@@ -977,13 +990,13 @@ class Desk:
                                         f"(type `unblock {p.get('phone', '')}` to undo)")
             for att in a:
                 att["blocks"] = [b for b in att.get("blocks") or [] if b.get("block_id") != "link"]
-            self.slack.chat_update(channel=self.desk_id, ts=ts, text="", attachments=a,
+            self.slack.chat_update(channel=card_ch, ts=ts, text="", attachments=a,
                                    metadata={"event_type": KIND, "event_payload": {**p, "kind": "blocked"}})
             return f"blocked {p.get('phone')}"
         a = restyle(m, GOLD, status=f"⏳ {'Moving' if choice.get('m') else 'Adding'} to {choice.get('a')} · {who}")
         for att in a:
             att["blocks"] = [b for b in att.get("blocks") or [] if b.get("block_id") != "link"]
-        self.slack.chat_update(channel=self.desk_id, ts=ts, text="", attachments=a, metadata={
+        self.slack.chat_update(channel=card_ch, ts=ts, text="", attachments=a, metadata={
             "event_type": KIND, "event_payload": {**p, "accounts": [choice.get("a")], "approved_by": user,
                                                   "move": bool(choice.get("m"))}})
         return f"{'move' if choice.get('m') else 'add'} {p.get('phone')} -> {choice.get('a')}"

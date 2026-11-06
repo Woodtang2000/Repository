@@ -365,6 +365,57 @@ def link_buttons(accounts: list[str], current: list[str], name) -> dict | None:
     return {"type": "actions", "block_id": "link", "elements": els}
 
 
+_CARDS: dict = {}
+
+
+def cards_channel(slack, fallback: str) -> str:
+    """Where "who is this?" cards go: #new-contacts (CONTACTS_CHANNEL) once it exists and Donna is in it, else the office
+    channel as before. Looked up once per process."""
+    if fallback not in _CARDS:
+        name = os.environ.get("CONTACTS_CHANNEL", "new-contacts")
+        found = fallback
+        try:
+            for p in slack.conversations_list(types="public_channel,private_channel", exclude_archived=True, limit=1000):
+                for c in p["channels"]:
+                    if c.get("name") == name and c.get("is_member", True):
+                        found = c["id"]
+        except Exception as e:
+            print(time.strftime("%H:%M"), "new-contacts channel not found:", str(e)[:120], flush=True)
+        _CARDS[fallback] = found
+    return _CARDS[fallback]
+
+
+def open_card(slack, channel: str, key: str) -> dict | None:
+    """The card still waiting for this number or email, if there is one (14 days): a new call, text or email from
+    them goes onto it, so one person is one card."""
+    try:
+        r = slack.conversations_history(channel=channel, oldest=f"{time.time() - 14 * 86400:.6f}", limit=200,
+                                        include_all_metadata=True)
+    except Exception:
+        return None
+    for m in r.get("messages", []):
+        p = (m.get("metadata") or {}).get("event_payload") or {}
+        if str(p.get("kind", "")).endswith("_signup") and p.get("phone") == key and not p.get("approved_by") \
+                and m.get("thread_ts", m["ts"]) == m["ts"]:
+            return m
+    return None
+
+
+def add_to_card(slack, channel: str, m: dict, head: str, said: str, request: str = "") -> None:
+    """Someone with a card already waiting got in touch again: what they said goes in its thread, the card says so,
+    and a phone request joins the ones handled when it's approved."""
+    p = (m.get("metadata") or {}).get("event_payload") or {}
+    when = datetime.now(ALASKA).strftime("%-m/%-d %-I:%M %p")
+    slack.chat_postMessage(channel=channel, thread_ts=m["ts"], unfurl_links=False, text=f"{head} · {when}\n_{said[:1500]}_")
+    if request:
+        p = {**p, "request": ((p.get("request") or "") + "\n" + request).strip()[:3000]}
+    n = int(p.get("more", 0)) + 1
+    p["more"] = n
+    from .todo import GOLD, restyle
+    a = restyle(m, GOLD, status=f"💬 {n} more message{'s' if n != 1 else ''} from them in the thread · latest {when}")
+    slack.chat_update(channel=channel, ts=m["ts"], text="", attachments=a, metadata={"event_type": KIND, "event_payload": p})
+
+
 def signup_card(slack, desk_id: str, alliant: Alliant, phone: str, who: str, said: str, accounts: list[str],
                 by: str = "", request: str = "", current: list[str] | None = None, kind: str = "sms_signup",
                 head: str = "", data_dir: str = "", cid: dict | None = None) -> None:
@@ -374,23 +425,32 @@ def signup_card(slack, desk_id: str, alliant: Alliant, phone: str, who: str, sai
     pretty = f"({phone_key(phone)[:3]}) {phone_key(phone)[3:6]}-{phone_key(phone)[6:]}"
     head = head or (f"📱 *{by}* asks to set up {pretty} for texting" if by else f"📱 *New texter* {pretty}")
     current = [a for a in (current or []) if a]
-    lines = [head + (f": {who}" if who else ""), f"_{said[:200]}_"]
+    channel = cards_channel(slack, desk_id)
+    # always first, card or no card: remembers what they asked about, and warns when it's a different customer
+    others = other_accounts(data_dir, phone, accounts, current) if data_dir else []
+    warn = (f"⚠️ This number has also asked about or is on: " + ", ".join(f"{a} {name(a)}" for a in others[:5])
+            + ". Make sure it's really them before adding it, or Block it.") if others else ""
+    waiting = open_card(slack, channel, "+1" + phone_key(phone))
+    lines = [head + (f": {who}" if who else ""), f"_{said[:600]}_"]
     lines += caller_id_lines(cid or {}, name(accounts[0]) if accounts else "")
     if current:
         lines.append("This number is now on: " + ", ".join(f"{a} {name(a)}" for a in current))
-    others = other_accounts(data_dir, phone, accounts, current) if data_dir else []
     if others:  # the same number naming different customers: could be someone fishing, so the owner hears about it
-        warn = (f"⚠️ This number has also asked about or is on: " + ", ".join(f"{a} {name(a)}" for a in others[:5])
-                + ". Make sure it's really them before adding it, or Block it.")
         lines.append(warn)
         owner = os.environ.get("OWNER_SLACK_ID", "U4KFSQCDQ").split(",")[0].strip()
         try:
             slack.chat_postMessage(channel=owner, unfurl_links=False,
                                    text=f"⚠️ *{pretty}* is asking to be set up for *{accounts[0]} {name(accounts[0])}*, "
                                         f"but has also asked about or is on " + ", ".join(f"{a} {name(a)}" for a in others[:5])
-                                        + ". The card is in #service-desk, with a Block button if it's not legit.")
+                                        + f". The card is in #{os.environ.get('CONTACTS_CHANNEL', 'new-contacts')} "
+                                          "(or #service-desk), with a Block button if it's not legit.")
         except Exception:
             pass
+    if waiting:  # one person, one card: this goes in its thread (with any warning), not a second card
+        add_to_card(slack, channel, waiting, head + (f": {who}" if who else ""),
+                    said + (f"\n{warn}" if warn else "") + (f"\nAsking about: {accounts[0]} {name(accounts[0])}"
+                                                           if accounts and warn else ""), request)
+        return
     if accounts:
         lines.append(f"Best match: *{accounts[0]}* {name(accounts[0])}")
         if accounts[1:]:
@@ -400,7 +460,7 @@ def signup_card(slack, desk_id: str, alliant: Alliant, phone: str, who: str, sai
     else:
         lines.append(f"I couldn't tell which customer. Type `add {phone_key(phone)} to <account number>` to approve.")
     buttons = link_buttons(accounts, current, name)
-    slack.chat_postMessage(channel=desk_id, text="", unfurl_links=False,
+    slack.chat_postMessage(channel=channel, text="", unfurl_links=False,
                            attachments=attachment("\n".join(lines), button=False, extra=[buttons] if buttons else None),
                            metadata={"event_type": KIND, "event_payload": {
                                "kind": kind, "phone": "+1" + phone_key(phone), "accounts": accounts[:1], "name": who,
@@ -513,6 +573,7 @@ class TextDesk:
         self.desk_id = next(c["id"] for p in slack.conversations_list(types="public_channel,private_channel",
                                                                       exclude_archived=True, limit=1000)
                             for c in p["channels"] if c["name"] == desk)
+        self.cards_id = cards_channel(slack, self.desk_id)
         self.state_path = os.path.join(data_dir, "sms_state.json")
         try:
             with open(self.state_path) as f:
@@ -840,10 +901,15 @@ class TextDesk:
         """Office side: ✅ on a sign-up card approves it; `add <phone> to <account or name>` and `remove <phone>`
         typed in the office channel (or a driver's add, forwarded by desk.py as a card) change the phone list."""
         done = set(self.state.setdefault("cmds", []))
-        r = self.slack.conversations_history(channel=self.desk_id, oldest=f"{time.time() - 14 * 86400:.6f}", limit=200,
-                                             include_all_metadata=True)
+        msgs = []
+        for ch in dict.fromkeys([self.desk_id, getattr(self, "cards_id", self.desk_id)]):  # cards and typed commands
+            r = self.slack.conversations_history(channel=ch, oldest=f"{time.time() - 14 * 86400:.6f}", limit=200,
+                                                 include_all_metadata=True)
+            msgs += [dict(m, _ch=ch) for m in r["messages"]]
+        msgs.sort(key=lambda m: float(m["ts"]), reverse=True)
         changed = 0
-        for m in reversed(r["messages"]):
+        for m in reversed(msgs):
+            ch = m.pop("_ch")
             pl = ((m.get("metadata") or {}).get("event_payload") or {})
             if m["ts"] in done:
                 continue
@@ -852,11 +918,11 @@ class TextDesk:
                                                      for u in x.get("users", []) if not m.get("user") or u != m.get("user")), None)
                 if who:
                     self.approve(pl["phone"], pl["accounts"], pl.get("name", ""), move=bool(pl.get("move")),
-                                 request=pl.get("request", ""), sid=m["ts"])
+                                 request=pl.get("request", ""), sid=m["ts"], card=(ch, m["ts"]))
                     did = ("Moved to " if pl.get("move") else "Added to ") + ", ".join(
                         f"{a} {self.name(self.alliant, a)}" for a in pl["accounts"]) + " · approved"
-                    self.slack.chat_update(channel=self.desk_id, ts=m["ts"], text="",
-                                           attachments=shrink(self.slack, self.desk_id, m, GREEN,
+                    self.slack.chat_update(channel=ch, ts=m["ts"], text="",
+                                           attachments=shrink(self.slack, ch, m, GREEN,
                                                               stamp(person(self.slack, who), did), lines=1),
                                            metadata={"event_type": KIND, "event_payload": {**pl, "kind": "sms_approved"}})
                     done.add(m["ts"])
@@ -905,7 +971,7 @@ class TextDesk:
         return changed
 
     def approve(self, phone: str, accounts: list[str], name: str, move: bool = False, request: str = "",
-                sid: str = "") -> None:
+                sid: str = "", card: tuple | None = None) -> None:
         """Link a number (or email) to accounts. `move`: off its other accounts first (they changed jobs). `request`:
         what they asked for before being set up (a phone call's), handled now like their held texts."""
         key = self.key(phone)
@@ -926,7 +992,14 @@ class TextDesk:
                 self.handle(to, body, sid)
         finally:
             self.send = send
-        self.send(to, "\n\n".join(dict.fromkeys(said)))  # the same acknowledgement twice reads as once
+        reply = "\n\n".join(dict.fromkeys(said))  # the same acknowledgement twice reads as once
+        self.send(to, reply)
+        if card:  # nothing out of sight: the card's thread says what Donna sent them (any ticket is in #service-desk)
+            try:
+                self.slack.chat_postMessage(channel=card[0], thread_ts=card[1], unfurl_links=False,
+                                            text=f"📤 Donna {'texted' if self.word == 'text' else 'emailed'} them: {reply[:2500]}")
+            except Exception as e:
+                print(time.strftime("%H:%M"), "card thread not updated:", str(e)[:120], flush=True)
 
     def to_salesforce(self, addr: str, accounts: list[str], name: str) -> None:
         """The person just linked becomes (or fills in) a Contact on the Salesforce Account (salesforce.py); the

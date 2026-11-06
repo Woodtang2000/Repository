@@ -191,7 +191,13 @@ class EmailDesk(TextDesk):
         on_file = alliant_emails(self.alliant).get(email_key(addr), [])
         accounts = list(dict.fromkeys(on_file + accounts))  # on an Alliant card first, then Claude's guess
         head = f"📧 *{by}* asks to set up {email_key(addr)} for email" if by else f"📧 *New emailer* {email_key(addr)}"
-        lines = [head + (f": {who}" if who else ""), f"_{said[:200]}_"]
+        from .sms import add_to_card, open_card
+        cards = getattr(self, "cards_id", self.desk_id)
+        waiting = open_card(self.slack, cards, email_key(addr))
+        if waiting:  # one person, one card
+            add_to_card(self.slack, cards, waiting, head + (f": {who}" if who else ""), said)
+            return
+        lines = [head + (f": {who}" if who else ""), f"_{said[:600]}_"]
         if on_file:
             lines.append(f"On the Alliant card for: " + ", ".join(f"{a} {name(a)}" for a in on_file[:6])
                          + (f" and {len(on_file) - 6} more" if len(on_file) > 6 else ""))
@@ -207,7 +213,8 @@ class EmailDesk(TextDesk):
             try:
                 self.slack.chat_postMessage(channel=owner, unfurl_links=False, text=f"⚠️ *{email_key(addr)}* is asking to be "
                                             f"set up for *{accounts[0]} {name(accounts[0])}*, but has also asked about or is on "
-                                            + ", ".join(f"{a} {name(a)}" for a in others[:5]) + ". The card is in #service-desk.")
+                                            + ", ".join(f"{a} {name(a)}" for a in others[:5])
+                                            + f". The card is in #{os.environ.get('CONTACTS_CHANNEL', 'new-contacts')}.")
             except Exception:
                 pass
         if accounts:
@@ -217,7 +224,7 @@ class EmailDesk(TextDesk):
             lines.append(f"I couldn't tell which customer. Type `add {email_key(addr)} to <account number>` to approve.")
         from .sms import link_buttons
         buttons = link_buttons(accounts, current, name)
-        self.slack.chat_postMessage(channel=self.desk_id, text="", unfurl_links=False,
+        self.slack.chat_postMessage(channel=getattr(self, "cards_id", self.desk_id), text="", unfurl_links=False,
                                     attachments=attachment("\n".join(lines), button=False, extra=[buttons] if buttons else None),
                                     metadata={
             "event_type": KIND, "event_payload": {"kind": self.signup_kind, "phone": email_key(addr),

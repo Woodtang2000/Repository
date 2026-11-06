@@ -420,3 +420,25 @@ def test_trusted_numbers():
     finally:
         for k in ("TRUSTED_PHONES", "OWNER_PHONES", "PHONE_SECRET_U9SGPJP0C"):
             os.environ.pop(k, None)
+
+
+def test_one_person_one_card_in_new_contacts_and_its_thread_says_what_happened(desk):
+    td, slack, texts, seen = desk
+    sms._CARDS["D1"] = "NC"  # #new-contacts exists
+    td.cards_id = "NC"
+    try:
+        sms.signup_card(slack, "D1", td.alliant, "+19074069656", "Choni", "Wants 200 more shop towels at Midas", ["M4"],
+                        request="200 more shop towels for Midas", head="📞 *Phone request* from (907) 406-9656",
+                        data_dir=td.data_dir)
+        td.card("+19074069656", "Toni", "Toni at Midas", ["M4"])  # she texts two days later
+        cards = [p for p in slack.posts if p["channel"] == "NC" and p["meta"].get("kind") == "sms_signup"]
+        assert len(cards) == 1 and "Wants 200 more shop towels" in cards[0]["text"]
+        assert any("Toni at Midas" in p["text"] for p in slack.posts if p["channel"] == "NC")  # in its thread
+        assert "1 more message" in cards[0]["text"]
+        assert not [p for p in slack.posts if p["channel"] == "D1" and p["meta"].get("kind") == "sms_signup"]
+        slack.react(cards[0]["ts"])
+        td.office_pass()
+        assert any(p["channel"] == "NC" and p["text"].startswith("📤 Donna texted them") for p in slack.posts)
+        assert any(p["channel"] == "D1" and p["meta"].get("kind") == "ticket" for p in slack.posts)  # the request
+    finally:
+        sms._CARDS.clear()

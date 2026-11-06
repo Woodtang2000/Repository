@@ -1049,3 +1049,23 @@ def test_a_sku_center_task_pasted_in_the_donna_app_goes_to_her_queue_and_reports
     assert job["kind"] == "screen_task" and job["reply_to"] == "U4KFSQCDQ"
     d.jobs().result(job["id"], "entered", "Before: Suggested 0.570. After: 1.201. Saved and read back.")
     assert "0.570" in slack.msgs["U4KFSQCDQ"][-1]["text"]
+
+
+def test_a_driver_note_with_nothing_to_enter_goes_to_route_notes(setup):
+    from .checks import Result
+    from .schema import Category, ParsedMessage
+    slack, d = setup
+    d.channels["route-notes"] = "CRN"
+    slack.msgs.setdefault("CRN", [])
+    post = slack.say("C1", "U1", "Pulled the mats at Safeway, asked them to put up wet floor signs")
+    p = ParsedMessage(category=Category.operational_issue, account_number="W1", summary="Pulled mats; wet floor signs")
+    d.post_ticket("route-1-test", "C1", post, "Mike Driver", p, Result(p, []), [], False, [])
+    [n] = [m for m in slack.msgs["CRN"] if desk.meta(m) and desk.meta(m)["kind"] == "route_note"]
+    assert "wet floor" in str(n) and "Done" in str(n)
+    assert not [m for m in slack.msgs["D1"] if desk.meta(m) and desk.meta(m).get("kind") == "ticket"]
+    assert any("#route-notes" in m["text"] for m in slack.msgs["C1"])
+    # something to enter still goes to #service-desk
+    post2 = slack.say("C1", "U1", "Wendys wants to move to Thursdays from now on")
+    p2 = ParsedMessage(category=Category.route_or_schedule, account_number="W1", summary="Move service day to Thursday")
+    d.post_ticket("route-1-test", "C1", post2, "Mike Driver", p2, Result(p2, []), [], False, [])
+    assert [m for m in slack.msgs["D1"] if desk.meta(m) and desk.meta(m).get("kind") == "ticket"]
