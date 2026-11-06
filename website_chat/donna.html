@@ -226,12 +226,13 @@
       agent = await Conversation.startSession({
         signedUrl: signed_url, connectionType: "websocket",
         dynamicVariables: { donna_session: session || "", caller_name: name || "Scott" },
-        onConnect: () => { document.body.classList.add("live"); mode("listening"); status("Listening · tap to hang up"); },
+        onConnect: () => { document.body.classList.add("live"); mode("listening"); status("Listening · tap to hang up");
+                           heardAt = Date.now(); },
         onDisconnect: () => { agent = null; muted = false; document.body.classList.remove("live", "muted");
                               mode(""); status(""); },
-        onModeChange: m => { if (agent) { speaking = m.mode === "speaking"; mic();
+        onModeChange: m => { heardAt = Date.now(); if (agent) { speaking = m.mode === "speaking"; mic();
                                           mode(speaking ? "speaking" : "listening"); } },
-        onMessage: m => { if (m && m.message) add(m.source === "user" ? "me" : "her", m.message); },
+        onMessage: m => { heardAt = Date.now(); if (m && m.message) add(m.source === "user" ? "me" : "her", m.message); },
         onError: e => { add("note", "Connection trouble: " + (e && e.message ? e.message : e)); },
       });
       return true;
@@ -265,6 +266,17 @@
         "or a Bluetooth headset or car that's no longer connected can hold it. Close the Donna app fully (swipe it " +
         "away), then open it and tap the mic again.";
   }
+
+  // A live conversation is billed by the minute: a minute with nothing said either way hangs up by itself
+  // (Scott, 11/6: sessions left open on "Listening" were using up the voice credits).
+  let heardAt = 0;
+  setInterval(async () => {
+    if (agent && !speaking && heardAt && Date.now() - heardAt > 60000) {
+      try { await agent.endSession(); } catch (e) {}
+      agent = null;
+      add("note", "Hung up after a minute of quiet, to save voice minutes. Tap the mic to talk again.");
+    }
+  }, 5000);
 
   let current = null;  // the microphone while it's listening: tapping the mic again stops it and sends what you said
   async function micTap() {

@@ -512,6 +512,25 @@ def _agent_body(agent: dict, hook: dict, line: str, url: str, token: str, system
     return {"name": LABEL[line], "conversation_config": cc}
 
 
+# Credits go by the minute (Scott, 11/6: a spike from calls and app sessions left open): every call has a ceiling,
+# and a long silence ends it. Phone lines 10 minutes, the Donna app 15; silence 45 / 60 seconds.
+LIMITS = {"line": (600, 45), "app": (900, 60)}
+
+
+def limit(aid: str, label: str, kind: str) -> None:
+    """Set a voice agent's call ceiling and silence hang-up, keeping the rest of its settings exactly as they are."""
+    longest, quiet = LIMITS[kind]
+    try:
+        cc = _api("GET", f"/v1/convai/agents/{aid}").get("conversation_config") or {}
+        cc.setdefault("conversation", {})["max_duration_seconds"] = longest
+        cc.setdefault("turn", {})["silence_end_call_timeout"] = quiet
+        _api("PATCH", f"/v1/convai/agents/{aid}", {"conversation_config": cc})
+        print(f"{label}: calls end after {longest // 60} minutes at most, or {quiet} seconds of silence")
+    except SystemExit as e:  # never stop the setup over this
+        print(f"{label}: ⚠️ call limits not set ({str(e)[:200]}); set Max conversation duration and the silence "
+              "timeout in the agent's Advanced settings")
+
+
 def setup(public_url: str, data_dir: str, undo: bool = False) -> None:
     from . import phone
     from .phone import CUSTOMER_LINE
@@ -550,7 +569,9 @@ def setup(public_url: str, data_dir: str, undo: bool = False) -> None:
                 print(f"{LABEL[line]}: ElevenLabs didn't take the {system} tools ({str(e)[:200]}); trying the next way.")
         saved["agents"][line] = aid
         print(f"{LABEL[line]}: agent {aid}")
+        limit(aid, LABEL[line], "line")
     json.dump(saved, open(path, "w"))
+    limit(os.environ.get("ELEVENLABS_AGENT_ID", "agent_2401m5yb5t1vffc94cb4j5qfr67c"), "Donna app (Scott's agent)", "app")
     listed = _api("GET", "/v1/convai/phone-numbers")
     listed = listed if isinstance(listed, list) else listed.get("phone_numbers", [])
     have = {digits(n.get("phone_number", "")): n for n in listed}

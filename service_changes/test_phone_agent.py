@@ -189,3 +189,15 @@ def test_transfer_to_the_office_in_the_current_shape_and_the_older_one():
     assert new["transfers"][0]["transfer_destination"] == {"type": "phone", "phone_number": pa.OFFICE_PHONE}
     assert pa._system_tools("old")[1]["params"]["transfers"][0]["phone_number"] == pa.OFFICE_PHONE
     assert [t["name"] for t in pa._system_tools("end")] == ["end_call"]
+
+
+
+def test_call_limits_keep_the_agents_other_settings(monkeypatch):
+    from . import phone_agent as pa
+    calls = []
+    agent = {"conversation_config": {"agent": {"first_message": "Hi"}, "tts": {"voice_id": "v1"}}}
+    monkeypatch.setattr(pa, "_api", lambda m, path, body=None: calls.append((m, body)) or (agent if m == "GET" else {}))
+    pa.limit("agent_x", "Donna – customer line", "line")
+    sent = calls[-1][1]["conversation_config"]
+    assert sent["conversation"]["max_duration_seconds"] == 600 and sent["turn"]["silence_end_call_timeout"] == 45
+    assert sent["agent"]["first_message"] == "Hi" and sent["tts"]["voice_id"] == "v1"  # nothing else changed
