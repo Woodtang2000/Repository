@@ -11,6 +11,7 @@ import fcntl
 import json
 import os
 import re
+import sys
 import threading
 import time
 from datetime import datetime
@@ -94,8 +95,9 @@ def log(direction: str, kind: str, addr: str, text: str, name: str = "") -> None
     """direction "in" (from them) or "out" (Donna); kind "text", "email" or "call". Never raises."""
     if not addr or private(addr) or not (text or "").strip():
         return
-    if _client is None and not os.environ.get("SLACK_BOT_TOKEN"):  # no Slack here (tests, one-off scripts)
-        return
+    if _client is None and (not os.environ.get("SLACK_BOT_TOKEN") or "pytest" in sys.modules
+                            or os.environ.get("COMMS_LOG", "on").lower() == "off"):
+        return  # never from tests or one-off scripts (11/6: a test run posted examples to the real channel)
     if SYNC:
         _post(direction, kind, addr, text, name)
     else:

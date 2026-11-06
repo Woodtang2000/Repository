@@ -47,3 +47,11 @@ def test_scotts_and_staff_messages_are_never_logged(slack):
     comms.log("out", "text", "+19072306513", "Donna: Matson owes 1,234.00")
     comms.log("out", "email", "kirk@snowwhitelinen.com", "Special S0148780")
     assert slack.posts == []
+
+
+
+def test_tests_never_reach_the_real_slack(monkeypatch):
+    monkeypatch.setattr(comms, "_client", None)
+    monkeypatch.setenv("SLACK_BOT_TOKEN", "xoxb-real-looking")
+    monkeypatch.setattr(comms, "_post", lambda *a: (_ for _ in ()).throw(AssertionError("posted")))
+    comms.log("in", "email", "jane@acme.com", "add 200 shop towels")  # pytest is running: nothing posted
