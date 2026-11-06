@@ -95,14 +95,16 @@ def sub_account(account: str | None) -> bool:
 
 
 def customer_emails(alliant, account: str, data_dir: str | None = None) -> list[str]:
-    """Who Donna emails about this account (garments arrived, changes, stops, specials, announcements): the invoice
-    contacts on its Alliant card; for a sub-account, only the contacts the office linked to that location
-    (customer_emails.csv: a store's or department's manager), never the billing company's address."""
-    if sub_account(account):
-        from .email_desk import load_emails  # (imports this module)
-        path = os.path.join(data_dir or os.environ.get("SERVICE_DESK_DATA", os.path.join(os.path.dirname(__file__), "data")),
-                            "customer_emails.csv")
-        return [e for e, r in load_emails(path).items() if account in r["accounts"]]
+    """Who Donna emails about this account (garments arrived, changes, stops, specials, announcements). Scott, 11/6:
+    the contacts the office linked to that location first (customer_emails.csv: the store's or department's people);
+    the invoice contacts on its Alliant card (who pays the bills) only when nobody is linked. A sub-account (billed
+    through another company): its linked contacts only, never the billing company's address."""
+    from .email_desk import load_emails  # (imports this module)
+    path = os.path.join(data_dir or os.environ.get("SERVICE_DESK_DATA", os.path.join(os.path.dirname(__file__), "data")),
+                        "customer_emails.csv")
+    linked = [e for e, r in load_emails(path).items() if account in r["accounts"]]
+    if linked or sub_account(account):
+        return linked
     card = (getattr(alliant, "cards", {}) or {}).get(account, {})
     return list(dict.fromkeys(e.strip().lower() for e in re.split(r"[;,\s]+", card.get("email") or "")
                               if re.fullmatch(r"[^@\s]+@[^@\s]+\.\w+", e.strip())))

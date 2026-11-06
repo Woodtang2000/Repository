@@ -1111,3 +1111,12 @@ def test_a_sub_account_is_never_emailed_at_its_billing_company(tmp_path, monkeyp
     assert customer_emails(a, "1205-1-00004", str(tmp_path)) == ["bob@midas.com"]
     (tmp_path / "customer_emails.csv").write_text("email,accounts,name\ndeli1342@costco.com,7192-1-00001,Deli manager\n")
     assert customer_emails(a, "7192-1-00001", str(tmp_path)) == ["deli1342@costco.com"]  # the department, once linked
+
+
+
+def test_linked_contacts_get_service_emails_before_billing(tmp_path):
+    from .context import Alliant, Customer, customer_emails
+    a = Alliant(customers=[Customer("1205-1-00004", "MIDAS", "1", ["Mon"])], cards={"1205-1-00004": {"email": "ap@midas.com"}})
+    assert customer_emails(a, "1205-1-00004", str(tmp_path)) == ["ap@midas.com"]  # nobody linked: billing
+    (tmp_path / "customer_emails.csv").write_text("email,accounts,name\nmanager@midas.com,1205-1-00004;1205-1-00008,Bob\n")
+    assert customer_emails(a, "1205-1-00004", str(tmp_path)) == ["manager@midas.com"]  # linked: them, not billing
