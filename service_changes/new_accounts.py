@@ -102,6 +102,8 @@ def is_garment(sku: str, data_dir: str | None = None) -> bool:
         except OSError:
             _SKUS[d] = {}
     kind = _SKUS[d].get((sku or "").strip().upper())
+    if (sku or "").strip().startswith("4-01-"):
+        return False  # NOG: the customer's own garments we only launder; no stock, no wearers to bill (garment_check)
     return kind == "garment" if kind is not None else bool(GARMENT_SKU.match(sku or ""))
 
 
@@ -456,7 +458,7 @@ class NewAccounts:
         r = alliant_live.lookup("garment_billing", self.desk.data_dir, fresh=True, account=cust)
         if r["source"] != "live":
             return "Alliant not live; tomorrow"
-        rows = r["rows"]
+        rows = [x for x in r["rows"] if not str(x.get("sku", "")).startswith("4-01-")]  # NOG: customer-owned
         if not rows:
             return "no wearer garments yet"
         num = lambda v: int(float(v or 0))

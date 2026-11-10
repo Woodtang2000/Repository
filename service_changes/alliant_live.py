@@ -177,7 +177,7 @@ JOIN dbo.ricustmr c WITH (NOLOCK) ON c.cu_ID = i.ei_CUID
 OUTER APPLY (SELECT TOP 1 x.em_firstn, x.em_lastn FROM dbo.riemploy x WITH (NOLOCK)
              WHERE x.em_cuid = i.ei_CUID AND x.em_empl = i.ei_empl ORDER BY x.em_startdt DESC) e
 LEFT JOIN dbo.riskugrp s WITH (NOLOCK) ON s.sg_skugrup = i.ei_skugrup
-WHERE {ONE_ACCOUNT} AND LTRIM(RTRIM(i.ei_empl)) <> '0' AND LTRIM(RTRIM(i.ei_skugrup)) LIKE '2-%'
+WHERE {ONE_ACCOUNT} AND LTRIM(RTRIM(i.ei_empl)) <> '0'
   AND (i.ei_stop_dt IS NULL OR i.ei_stop_dt < '1900-01-02' OR i.ei_stop_dt > GETDATE())
 ORDER BY i.ei_empl, i.ei_skugrup""",
     # 7. SKU catalog read-back (the SKU update project): the SKU group's whole row and its sizes. Prices and costs:
