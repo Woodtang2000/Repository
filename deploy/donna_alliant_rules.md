@@ -145,7 +145,8 @@ Customer, catalogs, Customer Items and Transactions, Contacts).
   stop sequence by address; the contract fields given; the charges given (service %, inventory %, fuel per delivery).
 - Customer Items: each item **Assigned to Customer**, the price and price type the job gives, autocount and frequency
   code; then the starting inventory with **Transactions** (the quantity the job gives).
-- EOW / E4W / E12W lines: pick the week code that matches the route's cycle (EOW 5 or 6, E4W 1-4, E12W B1-B12).
+- EOW / E4W / E12W lines: pick the week code that matches the route's cycle (EOW 5 or 6, E4W 1-4, E12W B1-B12),
+  unless the job says the code was given in the request: then use exactly that code.
 - **Never type a price, price type or charge that isn't in the job.** If Alliant asks for one, or anything won't
   save: `needs_person` with exactly what and why.
 - Report `entered` with a note that **starts** `customer_number=<acct-branch-cust>; stop_sequence=<n>; codes=<sku>:<code>,...`

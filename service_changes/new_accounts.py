@@ -38,12 +38,13 @@ REQUIRED = ("request_id", "company", "account_name", "location_name", "service_a
             "invoice_email", "salesperson", "contract", "install_date", "route", "delivery_days", "rates", "lines",
             "expected_invoice")
 LINE_REQUIRED = ("sku", "description", "billing_basis", "quantity", "unit_price", "frequency")
+WEEK_CODES = {"eow": r"[56]", "e4w": r"[1-4]", "e12w": r"B(?:[1-9]|1[0-2])"}  # the exact codes each one may use
 FREQ_DELIVERIES = {"weekly": 4, "eow": 2, "e4w": 1, "e12w": 1 / 3}  # deliveries in a 4-week period, per the protocol
 GARMENT_SKU = re.compile(r"^2-")  # Snow White's garment SKUs start 2- (chef coats 2-0413WH, pants 2-2020WH...)
 
 
 def bot_id() -> str:
-    return os.environ.get("SALES_HANDOFF_BOT_ID", "").strip()
+    return os.environ.get("SALES_HANDOFF_BOT_ID", "U0CF01ML0AK").strip()  # the Sales Handoff app's bot user (11/10)
 
 
 def from_sales_handoff(ev: dict) -> bool:
@@ -69,6 +70,12 @@ def missing(req: dict) -> list[str]:
         if str(ln.get("frequency", "")).lower() not in FREQ_DELIVERIES and not re.fullmatch(
                 r"[0-9FYX]|B(?:[1-9]|1[0-2])", str(ln.get("frequency", ""))):
             out.append(f"lines[{i}].frequency ({ln.get('frequency')!r} isn't weekly, EOW, E4W, E12W or an Alliant code)")
+        fc = str(ln.get("frequency_code") or "").strip().upper()
+        if fc:  # optional: the exact Alliant week code (Scott, 11/10); it has to fit the line's frequency
+            f = str(ln.get("frequency", "")).lower()
+            if f not in WEEK_CODES or not re.fullmatch(WEEK_CODES[f], fc):
+                out.append(f"lines[{i}].frequency_code ({fc!r} doesn't fit {ln.get('frequency')!r}: EOW takes 5 or 6, "
+                           "E4W 1-4, E12W B1-B12, weekly none)")
         if str(ln.get("billing_basis", "")).title() not in ("Usage", "Inventory"):
             out.append(f"lines[{i}].billing_basis ({ln.get('billing_basis')!r}: Usage or Inventory)")
     if req.get("company") not in ("SW", "TLG"):
@@ -143,6 +150,8 @@ def instructions(req: dict) -> str:
         f = str(ln["frequency"])
         code = {"weekly": "7"}.get(f.lower(), f if not f.lower() in FREQ_DELIVERIES else f"{f.upper()} (pick the week "
                                    "code that fits the route's cycle: EOW 5 or 6, E4W 1-4, E12W B1-B12)")
+        if str(ln.get("frequency_code") or "").strip():
+            code = f"{str(ln['frequency_code']).strip().upper()} (given in the request: use exactly this code)"
         if is_garment(ln["sku"]):  # billed on the wearers (phase 2), by the auto count of garments issued
             lines.append(f"- {ln['sku']} {ln['description']}: GARMENT, account catalog only: price {ln['unit_price']}, "
                          f"price type 9. No customer item line and no starting inventory: the wearers come in phase 2.")

@@ -56,7 +56,9 @@ with Alliant's own projected invoice after entry, and again on the first real de
   - For inventory billing, the bill stays the same week to week unless the inventory or autocount is adjusted.
 - **Frequency:** each line says `"weekly"`, `"EOW"` (every other week), `"E4W"` (every 4 weeks) or `"E12W"` (every 12
   weeks). Donna sets the Alliant code: weekly = 7; EOW / E4W / E12W = the week code that fits the route's cycle
-  (5/6, 1–4, B1–B12), reported in `codes_chosen`. An office person may give an exact Alliant code instead.
+  (5/6, 1–4, B1–B12), reported in `codes_chosen`. A line may carry an optional `frequency_code`, the exact Alliant
+  code (EOW: 5 or 6; E4W: 1–4; E12W: B1–B12); when present Donna uses it instead of choosing from the route. A code
+  that doesn't fit the line's frequency, or one on a weekly line, gets `waiting`.
 - **Stop sequence:** Donna places the stop within the route by address and reports `stop_sequence`.
 - **Lost/abuse replacement, stop minimum, seasonal, AC codes:** Alliant defaults unless the request includes them.
 - **Charges:** `rates` (service %, inventory %, fuel per delivery) are set in the account and customer charge settings.
@@ -137,7 +139,8 @@ passes: **every required field present**. The person clicking confirms the route
 
 **Required** (all from the signed contract, or the office person's confirmation): everything above `optional`.
 `lines` includes every SKU the location will use, including garment SKUs with their prices and contract count
-(billed per delivery), so the catalog has them before phase 2. `billing_basis` is "Usage" or "Inventory"; an Inventory line may add `autocount`.
+(billed per delivery), so the catalog has them before phase 2. `billing_basis` is "Usage" or "Inventory"; an Inventory line may add `autocount`;
+an EOW, E4W or E12W line may add `frequency_code` (the exact Alliant code).
 
 **Optional** (leave null and Alliant's default applies; fill only when it is on the contract):
 - `customer_number`: a store number, when the contract uses store numbers.

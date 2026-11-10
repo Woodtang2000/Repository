@@ -221,3 +221,22 @@ def test_garment_watch_asks_instead_of_lowering_a_bill(d, monkeypatch):
     assert "ask" in w.check_garments("5050-1-00000")
     assert not [j for j in desk.jobs().load()["jobs"].values() if j["kind"] == "garment_fix"]
     assert "billing 11 while only 4 of 11 are issued" in "\n".join(m["text"] for m in slack.msgs[na.STOCKROOM_ID])
+
+
+def test_a_given_frequency_code_is_used_and_must_fit():
+    req = copy.deepcopy(REQ)
+    req["lines"][1]["frequency_code"] = "6"
+    assert na.missing(req) == []
+    assert "frequency 6 (given in the request: use exactly this code)" in na.instructions(req)
+    for bad, line in (("3", 1), ("B4", 1), ("5", 0)):  # E4W code on EOW, E12W code on EOW, a code on a weekly line
+        r = copy.deepcopy(REQ)
+        r["lines"][line]["frequency_code"] = bad
+        assert any("frequency_code" in g for g in na.missing(r)), bad
+    r = copy.deepcopy(REQ)
+    r["lines"][1].update(frequency="E12W", frequency_code="b11")
+    assert na.missing(r) == [] and "frequency B11 (given" in na.instructions(r)
+
+
+def test_the_sales_handoff_bot_is_known_without_a_setting(monkeypatch):
+    monkeypatch.delenv("SALES_HANDOFF_BOT_ID", raising=False)
+    assert na.bot_id() == "U0CF01ML0AK"
