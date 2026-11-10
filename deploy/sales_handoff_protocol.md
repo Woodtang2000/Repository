@@ -29,7 +29,8 @@ with Alliant's own projected invoice after entry, and again on the first real de
 - **Defaults first:** any field not in the request is left at Alliant's default. Donna never invents a value for it.
 - **Branch:** "SW" = Snow White Inc = branch 1. "TLG" = The Laundry Group = branch 2.
 - **Dondee's** isn't in Alliant (Scott, 11/10): Sales Handoff never posts Dondee's opportunities or masters, and they
-  don't count as missing a company. Donna answers any company other than SW or TLG with `waiting`.
+  don't count as missing a company. Donna answers a request naming Dondee's with `failed` and nothing entered, and
+  any other company that isn't SW or TLG with `waiting`.
 - **Account numbers:** next available. SW: 1000–9999, skipping the 6000s. TLG: the 6000s.
 - **Customer numbers:** `00000` for an account's first location, then up by 1 per location. Only when the contract uses
   the customer's own store numbers does the request carry `customer_number`. A number already in use: `failed`.
@@ -170,7 +171,7 @@ and saves only after the `stock_ok` message (section 5).
   "delivery_days": ["Tue"],
   "install_date": "2026-11-17",
   "codes_chosen": [{"sku": "10-07-05", "frequency_code": "6"}],
-  "invoice_check": {"expected_total": 110.02, "alliant_total": 110.02, "differences": []},
+  "invoice_check": {"expected_total": 119.50, "alliant_total": 119.50, "differences": []},
   "verified_live": true,
   "notes": ""
 }
