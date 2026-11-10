@@ -68,7 +68,8 @@ with Alliant's own projected invoice after entry, and again on the first real de
   - each line: `quantity` × `unit_price` × deliveries in 4 weeks (weekly 4, EOW 2, E4W 1, E12W 1/3; more than once a
     week: × delivery days per week);
   - `service_charge` = `service_charge_pct` × the lines total; `inventory_charge` = `inventory_charge_pct` × the
-    inventory-billed lines total; `fuel` = `fuel_charge` × deliveries in 4 weeks;
+    lines total too (Scott, 11/10: the inventory maintenance, service/energy and fuel charges are invoice billings on
+    all the item totals, when present, whatever the billing basis); `fuel` = `fuel_charge` × deliveries in 4 weeks;
   - `total` = all of the above, rounded to cents.
 - **Donna**, after entering, reads Alliant's projected revenue for the location over the same 4 weeks (live, read only)
   and compares line by line and in total.
@@ -111,7 +112,7 @@ passes: **every required field present**. The person clicking confirms the route
   "expected_invoice": {
     "period_weeks": 4,
     "lines": [{"sku": "5-03-01", "amount": 46.40}, {"sku": "10-07-05", "amount": 26.50}],
-    "service_charge": 13.12, "inventory_charge": 0.00, "fuel": 24.00, "total": 110.02
+    "service_charge": 13.12, "inventory_charge": 9.48, "fuel": 24.00, "total": 119.50
   },
   "phase": 1,
   "needs_stock_ok": false,
