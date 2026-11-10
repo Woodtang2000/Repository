@@ -70,6 +70,17 @@ def missing(req: dict) -> list[str]:
             out.append(f"lines[{i}].billing_basis ({ln.get('billing_basis')!r}: Usage or Inventory)")
     if req.get("company") not in ("SW", "TLG"):
         out.append("company (SW or TLG)")
+    garments = [i for i, ln in enumerate(req.get("lines") or []) if is_garment(str(ln.get("sku", "")))]
+    for i in garments:  # garments come in phase 2 with their wearers; phase 1 only puts them in the catalog
+        if str(req.get("phase", 1)) == "1" and float(req["lines"][i].get("quantity") or 0) != 0:
+            out.append(f"lines[{i}].quantity ({req['lines'][i].get('sku')} is a garment: quantity 0 in phase 1, "
+                       "the wearers and their changes come in phase 2)")
+    if garments and not req.get("needs_stock_ok"):
+        out.append("needs_stock_ok (true when there are garments, custom items or logo mats)")
+    cond = str((req.get("optional") or {}).get("conditions") or "").strip()
+    if cond:  # protocol: if it changes a charge or anything Donna would set, she asks; she never guesses a charge
+        out.append(f"optional.conditions (\"{cond[:200]}\": Scott or Bill to say how it's set up; send it again "
+                   "as an additional_charges entry, or with conditions empty if nothing needs setting)")
     return out
 
 

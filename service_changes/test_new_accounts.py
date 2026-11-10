@@ -156,3 +156,16 @@ def test_test_channel_never_reaches_alliant_or_customers(d, monkeypatch):
     e = {"type": "welcome_email_request", "request_id": "e-1", "to": {"name": "Pat", "email": "pat@teamcc.com"}}
     assert desk.new_accounts().on_message(msg(e)) == "test"
     assert not desk.jobs().load()["jobs"] and not sent
+
+
+def test_garments_in_phase_1_and_conditions_are_asked_about(d):
+    req = copy.deepcopy(REQ)
+    req["lines"].append({"sku": "2-QP14NV", "description": "PANT FR", "billing_basis": "Usage", "quantity": 22,
+                         "unit_price": 4.0, "frequency": "weekly"})
+    req["optional"]["conditions"] = "$30 each prep charge on each new issue FR garment"
+    gaps = na.missing(req)
+    assert any("quantity 0 in phase 1" in g for g in gaps)
+    assert any(g.startswith("needs_stock_ok") for g in gaps)
+    assert any("prep charge" in g for g in gaps)
+    req["lines"][-1]["quantity"], req["needs_stock_ok"], req["optional"]["conditions"] = 0, True, None
+    assert na.missing(req) == []
