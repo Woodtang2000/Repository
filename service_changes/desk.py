@@ -1050,6 +1050,10 @@ class Desk:
                               self.new_accounts().on_message({**m, "channel": new_accounts.CHANNEL, "type": "message"}), flush=True)
         except Exception as e:
             print(time.strftime("%H:%M"), "new-accounts pass:", str(e)[:200], flush=True)
+        try:  # new garment accounts: issued vs billed, once a morning (#stockroom)
+            self.new_accounts().garment_pass(now)
+        except Exception as e:
+            print(time.strftime("%H:%M"), "garment watch:", str(e)[:200], flush=True)
 
     def jobs(self):
         """Donna's Alliant work queue (alliant_jobs.py)."""

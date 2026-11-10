@@ -24,6 +24,9 @@ from .context import ALASKA
 
 CHANNEL = os.environ.get("NEW_ACCOUNTS_CHANNEL", "C0CFF0X9DMF")
 TEST_CHANNEL = "C0CG9NLBF4Y"  # #sales-handoff-test
+STOCKROOM_ID = os.environ.get("STOCKROOM_CHANNEL_ID", "C0CCYH2T96C")  # #stockroom (private): the garment watch
+STOCKROOM_PEOPLE = os.environ.get("STOCKROOM_PEOPLE", "U04CX5DR1NV,U4KLRNUG5")  # Ana, Sonja
+WATCH_DAYS, WATCH_HOUR, REMIND_DAYS = 90, 8, 3
 
 
 def test_mode() -> bool:
@@ -71,10 +74,6 @@ def missing(req: dict) -> list[str]:
     if req.get("company") not in ("SW", "TLG"):
         out.append("company (SW or TLG)")
     garments = [i for i, ln in enumerate(req.get("lines") or []) if is_garment(str(ln.get("sku", "")))]
-    for i in garments:  # garments come in phase 2 with their wearers; phase 1 only puts them in the catalog
-        if str(req.get("phase", 1)) == "1" and float(req["lines"][i].get("quantity") or 0) != 0:
-            out.append(f"lines[{i}].quantity ({req['lines'][i].get('sku')} is a garment: quantity 0 in phase 1, "
-                       "the wearers and their changes come in phase 2)")
     if garments and not req.get("needs_stock_ok"):
         out.append("needs_stock_ok (true when there are garments, custom items or logo mats)")
     cond = str((req.get("optional") or {}).get("conditions") or "").strip()
@@ -107,9 +106,11 @@ def is_garment(sku: str, data_dir: str | None = None) -> bool:
 
 
 def price_type(line: dict) -> int:
-    """House rule: inventory 14 garments / 21 other; usage 9 garments / 8 other. The SKU decides garment."""
-    g = is_garment(line.get("sku", ""))
-    return (14 if g else 21) if str(line.get("billing_basis", "")).title() == "Inventory" else (9 if g else 8)
+    """House rule: garments 9 whatever the billing (Scott, 11/10: billed per garment issued, by the auto count, never
+    14); other items inventory 21 / usage 8. The SKU decides garment."""
+    if is_garment(line.get("sku", "")):
+        return 9
+    return 21 if str(line.get("billing_basis", "")).title() == "Inventory" else 8
 
 
 def deliveries(code: str, days: int = 1) -> float:
@@ -140,6 +141,10 @@ def instructions(req: dict) -> str:
         f = str(ln["frequency"])
         code = {"weekly": "7"}.get(f.lower(), f if not f.lower() in FREQ_DELIVERIES else f"{f.upper()} (pick the week "
                                    "code that fits the route's cycle: EOW 5 or 6, E4W 1-4, E12W B1-B12)")
+        if is_garment(ln["sku"]):  # billed on the wearers (phase 2), by the auto count of garments issued
+            lines.append(f"- {ln['sku']} {ln['description']}: GARMENT, account catalog only: price {ln['unit_price']}, "
+                         f"price type 9. No customer item line and no starting inventory: the wearers come in phase 2.")
+            continue
         inv = ln["quantity"]
         auto = ln.get("autocount") or (ln["quantity"] if str(ln["billing_basis"]).title() == "Usage" else max(1, round(ln["quantity"] / 2)))
         lines.append(f"- {ln['sku']} {ln['description']}: price {ln['unit_price']}, price type {price_type(ln)}, "
@@ -299,6 +304,8 @@ class NewAccounts:
     # ---- the workstation finished: read back, invoice check, result ----------------------------------------------
 
     def job_done(self, job: dict, question: str = "") -> str:
+        if job.get("kind") == "garment_fix":
+            return self.fix_done(job, question)
         rid = job.get("request_id", "")
         rec = self.load().get(rid) or {}
         req, thread = rec.get("req") or {"request_id": rid}, rec.get("thread")
@@ -308,6 +315,8 @@ class NewAccounts:
             st = "entered" if job["status"] == "entered" else "waiting" if job["status"] == "ask" else "failed"
             self.result(req, thread, st, (question + " " if question else "") + (job.get("note") or "")[:1500],
                         customer_number=req.get("customer_number", ""))
+            if st == "entered":
+                self.start_watch(req.get("customer_number", ""))
             return f"wearers {st}"
         if job["status"] != "entered":
             st = "waiting" if job["status"] == "ask" else "failed"
@@ -345,7 +354,10 @@ class NewAccounts:
         rows = {x.get("sku"): x for x in r["rows"]}
         exp = req.get("expected_invoice") or {}
         diffs, total = [], 0.0
+        garments = [ln for ln in exp.get("lines") or [] if is_garment(str(ln.get("sku", "")))]
         for ln in exp.get("lines") or []:
+            if ln in garments:
+                continue  # billed on the wearers after phase 2; the garment watch in #stockroom follows them
             row = rows.get(ln.get("sku"))
             if not row:
                 diffs.append({"what": f"line {ln.get('sku')}", "expected": ln.get("amount"), "alliant": "not on the location"})
@@ -361,14 +373,169 @@ class NewAccounts:
             want = price_type(basis) if basis else None
             if want is not None and str(row.get("price_type", "")).split(".")[0] != str(want):
                 diffs.append({"what": f"price type {ln.get('sku')}", "expected": want, "alliant": row.get("price_type")})
-        lines_expected = round(sum(float(l.get("amount") or 0) for l in exp.get("lines") or []), 2)
+        lines_expected = round(sum(float(l.get("amount") or 0) for l in exp.get("lines") or [] if l not in garments), 2)
         out = {"live": True, "expected_lines_total": lines_expected, "alliant_lines_total": round(total, 2),
                "expected_total": exp.get("total"), "differences": diffs,
-               "not_checked": ["service_charge", "inventory_charge", "fuel"]}
+               "not_checked": ["service_charge", "inventory_charge", "fuel"]
+               + [f"line {g.get('sku')} (garment: billed on the wearers; the garment watch follows it)" for g in garments]}
         out["ok"] = not diffs and abs(lines_expected - total) <= 1.00
         if not out["ok"]:
             out["why"] = f"{len(diffs)} difference(s) between the contract and Alliant; fix before install day"
         return out
+
+    # ---- the garment watch (#stockroom) ---------------------------------------------------------------------------
+    # Scott, 11/10: garments are billed per garment issued (price type 9, by the auto count). Stock often comes in over
+    # weeks, and when an auto count isn't raised as garments are issued, we underbill. For 90 days after a new garment
+    # account's wearers are entered, Donna compares each wearer's garments issued with the auto count every morning,
+    # raises an auto count that's behind (the issued garments back it up), and tells Ana and Sonja in #stockroom what
+    # she changed. Anything else (an auto count above what's issued, a total off the contract) she asks them about.
+    # Donna helps the stockroom keep up; Ana and Sonja still decide everything that isn't routine.
+
+    def watches(self) -> dict:
+        return self.load().get("_watch") or {}
+
+    def _save_watch(self, cust: str, **kw) -> dict:
+        with self.lock:
+            data = self.load()
+            w = data.setdefault("_watch", {}).setdefault(cust, {})
+            w.update(kw)
+            self.save(data)
+            return dict(w)
+
+    def start_watch(self, cust: str) -> str:
+        """After phase 2: the contract's garment counts (per delivery, from the phase 1 request) are the target."""
+        if not re.fullmatch(r"\d{1,6}-[12]-\w{1,8}", cust or "") or cust in self.watches():
+            return ""
+        entry = next((r for r in self.load().values() if isinstance(r, dict) and r.get("req")
+                      and (r.get("result") or {}).get("customer_number") == cust), {})
+        req = entry.get("req") or {}
+        contract = {ln["sku"]: float(ln.get("quantity") or 0) for ln in req.get("lines") or []
+                    if is_garment(str(ln.get("sku", "")))}
+        self._save_watch(cust, name=req.get("location_name") or req.get("account_name") or "", contract=contract,
+                         since=time.time(), done=False)
+        return "watching"
+
+    def _tags(self) -> str:
+        return " ".join(f"<@{u.strip()}>" for u in STOCKROOM_PEOPLE.split(",") if u.strip())
+
+    def _say(self, cust: str, text: str) -> None:
+        w = self.watches().get(cust) or {}
+        if not w.get("ts"):
+            head = self.desk.slack.chat_postMessage(
+                channel=STOCKROOM_ID, unfurl_links=False,
+                text=f"🧺 *{w.get('name') or 'New account'} · {cust}*: new garment account. Every morning for {WATCH_DAYS} "
+                     "days I'll compare the garments issued to each wearer with the auto count (what we bill), raise "
+                     "an auto count that's behind, and say here what I changed. Anything unusual I'll ask you about. "
+                     + self._tags())
+            w = self._save_watch(cust, ts=head["ts"])
+        self.desk.slack.chat_postMessage(channel=STOCKROOM_ID, thread_ts=w["ts"], text=text[:3900], unfurl_links=False)
+
+    def garment_pass(self, now: float) -> None:
+        """Once a morning (from 8 AM): every new garment account still being watched."""
+        local = datetime.fromtimestamp(now, ALASKA)
+        if local.hour < WATCH_HOUR:
+            return
+        day = local.strftime("%Y-%m-%d")
+        with self.lock:
+            data = self.load()
+            if data.get("_watch_day") == day or not any(not w.get("done") for w in (data.get("_watch") or {}).values()):
+                return
+            data["_watch_day"] = day
+            self.save(data)
+        for cust, w in self.watches().items():
+            if not w.get("done"):
+                try:
+                    print(time.strftime("%H:%M"), "garment watch", cust, self.check_garments(cust, now), flush=True)
+                except Exception as e:
+                    print(time.strftime("%H:%M"), "garment watch", cust, "error:", str(e)[:200], flush=True)
+
+    def check_garments(self, cust: str, now: float | None = None) -> str:
+        from . import alliant_live
+        now = now or time.time()
+        w = self.watches().get(cust) or {}
+        r = alliant_live.lookup("garment_billing", self.desk.data_dir, fresh=True, account=cust)
+        if r["source"] != "live":
+            return "Alliant not live; tomorrow"
+        rows = r["rows"]
+        if not rows:
+            return "no wearer garments yet"
+        num = lambda v: int(float(v or 0))
+        skus: dict = {}
+        for x in rows:
+            t = skus.setdefault(x["sku"], {"item": x.get("item") or x["sku"], "inv": 0, "auto": 0, "issued": 0, "order": 0})
+            t["inv"] += num(x.get("inventory"))
+            t["auto"] += num(x.get("autocount"))
+            t["issued"] += num(x.get("issued"))
+            t["order"] += num(x.get("on_order"))
+        contract = w.get("contract") or {}
+        for sku, t in skus.items():  # the ratio rule: inventory equal to the auto count, or double it
+            q = float(contract.get(sku) or 0)
+            t["ratio"] = 2 if q and t["inv"] >= 1.5 * q else 1
+        fixes, asks = [], []
+        for x in rows:
+            t = skus[x["sku"]]
+            inv, auto, issued = num(x.get("inventory")), num(x.get("autocount")), num(x.get("issued"))
+            want = min(issued, inv) // t["ratio"]
+            who = f"#{x['wearer']} {x.get('name') or ''}".strip()
+            what = f"{x['sku']} {t['item']}"
+            if auto < want:
+                fixes.append({"wearer": x["wearer"], "who": who, "what": what, "from": auto, "to": want, "issued": issued})
+            elif auto > want and issued >= inv:
+                asks.append(f"{who} · {what}: auto count {auto}, but {issued} issued (inventory {inv})")
+            elif auto > want:
+                asks.append(f"{who} · {what}: billing {auto} while only {issued} of {inv} are issued")
+        short = {sku: t for sku, t in skus.items() if t["issued"] < t["inv"]}
+        off = [f"{t['item']}: billing {t['auto']} a delivery, the contract says {contract[sku]:g}"
+               for sku, t in skus.items() if contract.get(sku) and not short.get(sku)
+               and abs(t["auto"] - float(contract[sku])) >= 1 and not any(f["what"].startswith(sku + " ") for f in fixes)]
+        said = []
+        if fixes and not w.get("fix_job"):
+            lines = [f"- wearer {f['who']} · {f['what']}: Auto Count {f['from']} → {f['to']} ({f['issued']} issued)" for f in fixes]
+            jid = self.desk.jobs().custom_job("garment_fix", "\n".join([
+                f"GARMENT AUTO COUNT FIX (garment watch, new account {cust}). Follow your rules section "
+                "\"Garment auto count fixes\".",
+                "For each line: open the wearer's garment line and check its Auto Count shows the first number. If it "
+                "does, set it to the second number and save; if it doesn't, change nothing on that line and say so. "
+                "Change nothing else.", *lines]), {"account": cust})
+            self._save_watch(cust, fix_job=jid)
+            self._say(cust, "🔧 Billing is behind the garments issued, so I'm raising these auto counts in Alliant:\n"
+                      + "\n".join(lines[:25]) + "\nI'll confirm here when it's saved.")
+            said.append("fix")
+        if asks or off:
+            key = "|".join(asks + off)
+            if key != w.get("asked") or now - w.get("asked_at", 0) > REMIND_DAYS * 86400:
+                self._say(cust, f"❓ {self._tags()} these don't match and I've left them for you:\n"
+                          + "\n".join(f"• {a}" for a in (asks + off)[:25]))
+                self._save_watch(cust, asked=key, asked_at=now)
+                said.append("ask")
+        if short and now - w.get("short_at", 0) > REMIND_DAYS * 86400:
+            self._say(cust, "⏳ Still coming in:\n" + "\n".join(
+                f"• {t['item']}: {t['issued']} of {t['inv']} issued" + (f", {t['order']} on order" if t["order"] else
+                                                                         ", *nothing on order*") for t in short.values())
+                      + ("\n" + self._tags() + " something has nothing on order." if any(not t["order"] for t in short.values()) else ""))
+            self._save_watch(cust, short_at=now)
+            said.append("short")
+        if not fixes and not asks and not off and not short and not w.get("fix_job"):
+            self._say(cust, "✅ Every garment is issued and billing matches: " + ", ".join(
+                f"{t['item']} {t['issued']} issued, billing {t['auto']}" for t in skus.values()) + ". I've stopped watching this one.")
+            self._save_watch(cust, done=True, done_at=now)
+            return "done"
+        if now - w.get("since", now) > WATCH_DAYS * 86400:
+            self._say(cust, f"🛑 {self._tags()} {WATCH_DAYS} days are up and this account still isn't settled (above). "
+                      "I've stopped checking it daily; the Monday garment check still covers it.")
+            self._save_watch(cust, done=True, done_at=now)
+            return "timed out"
+        return ", ".join(said) or "nothing new"
+
+    def fix_done(self, job: dict, question: str = "") -> str:
+        cust = job.get("account", "")
+        self._save_watch(cust, fix_job="")
+        note = ((question + " ") if question else "") + (job.get("note") or "")
+        if job["status"] == "entered":
+            self._say(cust, "✅ Auto counts updated in Alliant. " + note[:1500])
+        else:
+            self._say(cust, f"⚠️ {self._tags()} I couldn't update the auto counts: {note[:1500]}\nPlease take a look.")
+        return f"garment fix {job['status']}"
 
     # ---- phase 2 and the welcome email ---------------------------------------------------------------------------
 
@@ -385,7 +552,8 @@ class NewAccounts:
         text = ["NEW WEARERS from #new-accounts (phase 2). Follow your rules section \"New accounts\".",
                 f"Customer {cust}. Garment prices come from the account catalog: never type one.",
                 "For each wearer: add the wearer (next wearer number unless one is given), then each garment with its "
-                "size and changes (quantity), embroidery and emblem as given."]
+                "size and changes (inventory), embroidery and emblem as given, price type 9. Auto Count: the garments "
+                "of it already issued to that wearer (0 if none yet); the garment watch raises it as they're issued."]
         for w in msg["wearers"]:
             text.append(f"- {w.get('name')}" + "".join(f" · {k} {w[k]}" for k in ("wearer_number", "locker", "department") if w.get(k)))
             for g in w.get("garments") or []:

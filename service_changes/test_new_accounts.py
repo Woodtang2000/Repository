@@ -164,8 +164,60 @@ def test_garments_in_phase_1_and_conditions_are_asked_about(d):
                          "unit_price": 4.0, "frequency": "weekly"})
     req["optional"]["conditions"] = "$30 each prep charge on each new issue FR garment"
     gaps = na.missing(req)
-    assert any("quantity 0 in phase 1" in g for g in gaps)
     assert any(g.startswith("needs_stock_ok") for g in gaps)
     assert any("prep charge" in g for g in gaps)
-    req["lines"][-1]["quantity"], req["needs_stock_ok"], req["optional"]["conditions"] = 0, True, None
+    req["needs_stock_ok"], req["optional"]["conditions"] = True, None
     assert na.missing(req) == []
+    assert na.price_type(req["lines"][-1]) == 9 and na.price_type(dict(req["lines"][-1], billing_basis="Inventory")) == 9
+    text = na.instructions(req)
+    assert "2-QP14NV PANT FR: GARMENT, account catalog only" in text and "price type 9" in text
+
+
+def _watch(d, monkeypatch, rows):
+    slack, desk = d
+    from . import alliant_live
+    monkeypatch.setattr(alliant_live, "lookup", lambda *a, **k: {"source": "live", "rows": rows, "note": ""})
+    na_ = desk.new_accounts()
+    with na_.lock:
+        data = na_.load()
+        data["opp-1-1"] = {"req": dict(REQ, lines=REQ["lines"] + [{"sku": "2-QP14NV", "quantity": 22}]),
+                           "result": {"customer_number": "5050-1-00000"}, "thread": "100.0"}
+        na_.save(data)
+    slack.msgs.setdefault(na.STOCKROOM_ID, [])
+    assert na_.start_watch("5050-1-00000") == "watching"
+    return slack, desk, na_
+
+
+def row(w, inv, auto, issued, order=0):
+    return {"wearer": w, "name": f"Wearer {w}", "sku": "2-QP14NV", "item": "PANT FR", "inventory": inv,
+            "autocount": auto, "issued": issued, "on_order": order}
+
+
+def test_garment_watch_raises_an_auto_count_that_is_behind(d, monkeypatch):
+    slack, desk, w = _watch(d, monkeypatch, [row("1", 11, 5, 11), row("2", 11, 11, 11)])
+    assert w.check_garments("5050-1-00000") == "fix"
+    jobs = [j for j in desk.jobs().load()["jobs"].values() if j["kind"] == "garment_fix"]
+    assert len(jobs) == 1 and "Auto Count 5 → 11" in jobs[0]["ticket"]
+    posts = [m["text"] for m in slack.msgs[na.STOCKROOM_ID]]
+    assert "new garment account" in posts[0] and "<@U04CX5DR1NV>" in posts[0] and "raising these auto counts" in posts[-1]
+    assert not any("$" in p for p in posts)  # counts only, never prices
+    assert w.check_garments("5050-1-00000") == "nothing new"  # one fix at a time
+    assert w.job_done({**jobs[0], "status": "entered", "note": "1 line updated"}) == "garment fix entered"
+    assert "Auto counts updated" in slack.msgs[na.STOCKROOM_ID][-1]["text"]
+
+
+def test_garment_watch_reports_what_is_still_coming_and_finishes(d, monkeypatch):
+    slack, desk, w = _watch(d, monkeypatch, [row("1", 11, 6, 6, order=5), row("2", 11, 11, 11)])
+    assert w.check_garments("5050-1-00000") == "short"
+    assert "6 of 11" in slack.msgs[na.STOCKROOM_ID][-1]["text"] or "17 of 22" in slack.msgs[na.STOCKROOM_ID][-1]["text"]
+    from . import alliant_live
+    monkeypatch.setattr(alliant_live, "lookup", lambda *a, **k: {"source": "live", "rows": [row("1", 11, 11, 11), row("2", 11, 11, 11)]})
+    assert w.check_garments("5050-1-00000") == "done"
+    assert w.watches()["5050-1-00000"]["done"] and "✅" in slack.msgs[na.STOCKROOM_ID][-1]["text"]
+
+
+def test_garment_watch_asks_instead_of_lowering_a_bill(d, monkeypatch):
+    slack, desk, w = _watch(d, monkeypatch, [row("1", 11, 11, 4, order=7), row("2", 11, 11, 11)])
+    assert "ask" in w.check_garments("5050-1-00000")
+    assert not [j for j in desk.jobs().load()["jobs"].values() if j["kind"] == "garment_fix"]
+    assert "billing 11 while only 4 of 11 are issued" in "\n".join(m["text"] for m in slack.msgs[na.STOCKROOM_ID])

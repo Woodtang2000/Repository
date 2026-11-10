@@ -213,7 +213,7 @@ class Jobs:
             data["jobs"] = {k: v for k, v in data["jobs"].items() if v["status"] in ("queued", "working")
                             or time.time() - v.get("finished", 0) < 14 * 86400}
             self.save(data)
-        if job.get("kind") in ("new_account", "new_wearers"):  # the #new-accounts thread hears (new_accounts.py)
+        if job.get("kind") in ("new_account", "new_wearers", "garment_fix"):  # #new-accounts / #stockroom (new_accounts.py)
             return self.desk.new_accounts().job_done(job, question)
         if job.get("kind") == "screen_task":  # her report, privately, to whoever asked (never #service-desk)
             head = {"entered": "✅ Done in Alliant", "ask": "❓ A question before I go on",

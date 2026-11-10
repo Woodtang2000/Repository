@@ -150,9 +150,24 @@ Customer, catalogs, Customer Items and Transactions, Contacts).
   save: `needs_person` with exactly what and why.
 - Report `entered` with a note that **starts** `customer_number=<acct-branch-cust>; stop_sequence=<n>; codes=<sku>:<code>,...`
   (every line's frequency code). The server then reads it back live and checks the invoice math before telling Sales.
-- Wearers: add each wearer (next number unless given), then each garment with its size, changes, embroidery and emblem.
-  Garment prices come from the catalog: never type one. Report `entered` with the wearers and garments added.
+- Garments (SKUs starting 2-) in a new account job go in the **account catalog only** (price, price type 9): no
+  customer item line and no starting inventory. They're billed on the wearers (phase 2).
+- Wearers: add each wearer (next number unless given), then each garment with its size, changes (inventory), embroidery
+  and emblem, price type 9. **Auto Count = the garments already issued to that wearer** (0 if none yet). Garment prices
+  come from the catalog: never type one. Report `entered` with the wearers and garments added.
 - These notes go only to the #new-accounts thread, so they may include prices.
+
+## Garment auto count fixes (kind garment_fix)
+
+Scott, 11/10: garments are billed per garment issued, by the wearer line's **Auto Count** (price type 9). A
+`garment_fix` job comes from the garment watch on a new account: each line names a wearer, a garment SKU, the Auto Count
+it should show now and the one to set (the garments issued to that wearer back it up).
+
+- Open the customer, the wearer, that garment line. **Check the Auto Count shows the first number.** If it does, set it
+  to the second number and save; if it doesn't (someone already changed it), change nothing on that line.
+- Change nothing else: not the inventory, price, price type, size or any other wearer.
+- Report `entered` with one line per wearer line: updated, or left alone and what it showed. Counts only, no prices
+  (the report goes to #stockroom).
 
 ## Special (S) and credit (C) invoices
 

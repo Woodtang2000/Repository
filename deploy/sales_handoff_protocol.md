@@ -41,8 +41,13 @@ with Alliant's own projected invoice after entry, and again on the first real de
   at the account level. No legal name or mailing bill-to; use `invoice_email`.
 - **Tax:** the office sets tax codes; Donna doesn't (except Anchorage: no sales tax).
 - **Locking:** accounts are always locked, and new SKUs are copied to customers.
-- **Price types:** inventory billing = 14 for garments, 21 for all other items. Usage billing = 9 for garments, 8 for
-  all other items. Donna decides garment or not from the SKU.
+- **Price types:** garments = 9 always (Scott, 11/10: billed per garment issued, by the auto count; 14 isn't used,
+  because stock often comes in over weeks). Other items: inventory billing = 21, usage billing = 8. Donna decides
+  garment or not from the SKU.
+- **Garments:** the line's `quantity` is the contract count billed per delivery (it's in the math). In phase 1 Donna
+  puts garments in the account catalog only; the wearers and their changes come in phase 2, each wearer's auto count
+  starting at what's already issued. For 90 days Donna's garment watch in #stockroom raises auto counts as garments are
+  issued, until billing reaches the contract count, and asks Ana and Sonja about anything else.
 - **Quantities:**
   - Usage lines: `quantity` = per delivery = autocount = starting inventory.
   - Inventory lines: `quantity` = total inventory (what is billed) = starting inventory; autocount = half of it unless
@@ -129,8 +134,8 @@ passes: **every required field present**. The person clicking confirms the route
 ```
 
 **Required** (all from the signed contract, or the office person's confirmation): everything above `optional`.
-`lines` includes every SKU the location will use, including garment SKUs with their prices (quantity 0 in phase 1),
-so the catalog has them before phase 2. `billing_basis` is "Usage" or "Inventory"; an Inventory line may add `autocount`.
+`lines` includes every SKU the location will use, including garment SKUs with their prices and contract count
+(billed per delivery), so the catalog has them before phase 2. `billing_basis` is "Usage" or "Inventory"; an Inventory line may add `autocount`.
 
 **Optional** (leave null and Alliant's default applies; fill only when it is on the contract):
 - `customer_number`: a store number, when the contract uses store numbers.
