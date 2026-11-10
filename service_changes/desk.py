@@ -1147,12 +1147,13 @@ class Desk:
                                                                + "\n".join(text.splitlines()[-40:])) if text else
                                         "📓 My Alliant notebook is empty so far.")
             return "notebook"
-        if owner and re.match(r"^\s*donna,?\s+(?:retry|try again|redo)\b", ev.get("text", ""), re.I):
+        boss = owner or user in AR_USERS  # Scott and Bill (11/10): pause, resume and retry, without owner mode
+        if boss and re.match(r"^\s*donna,?\s+(?:retry|try again|redo)\b", ev.get("text", ""), re.I):
             # every ticket waiting on Alliant's sign-in, back in her queue at once
             self.slack.chat_postMessage(channel=channel, text=self.jobs().retry_waiting(user))
             return "alliant retry"
         cmd = re.match(r"^\s*donna,?\s+(pause|stop|resume|start|go)\b", ev.get("text", ""), re.I)
-        if owner and cmd:  # Donna's Alliant work: "Donna pause" / "Donna resume"
+        if boss and cmd:  # Donna's Alliant work: "Donna pause" / "Donna resume"
             self.slack.chat_postMessage(channel=channel, text=self.jobs().pause(cmd.group(1).lower() in ("pause", "stop")))
             return "alliant pause" if cmd.group(1).lower() in ("pause", "stop") else "alliant resume"
         if user in AR_USERS and SCREEN_TASK.search(ev.get("text", "")) and len(ev.get("text", "")) > 40:

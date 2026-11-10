@@ -1120,3 +1120,17 @@ def test_linked_contacts_get_service_emails_before_billing(tmp_path):
     assert customer_emails(a, "1205-1-00004", str(tmp_path)) == ["ap@midas.com"]  # nobody linked: billing
     (tmp_path / "customer_emails.csv").write_text("email,accounts,name\nmanager@midas.com,1205-1-00004;1205-1-00008,Bob\n")
     assert customer_emails(a, "1205-1-00004", str(tmp_path)) == ["manager@midas.com"]  # linked: them, not billing
+
+
+def test_bill_can_pause_and_resume_donna_but_office_staff_cannot(setup, tmp_path):
+    slack, d = setup
+    d.data_dir = str(tmp_path)
+    slack.msgs["DBILL"], slack.msgs["DSONJA"] = [], []
+    ev = slack.say("DSONJA", "U2", "Donna pause")
+    assert d.dm(dict(ev, channel="DSONJA")) != "alliant pause"
+    assert not d.jobs().load().get("paused")
+    ev = slack.say("DBILL", "U9SGPJP0C", "Donna pause")
+    assert d.dm(dict(ev, channel="DBILL")) == "alliant pause" and d.jobs().load()["paused"]
+    ev = slack.say("DBILL", "U9SGPJP0C", "Donna resume")
+    assert d.dm(dict(ev, channel="DBILL")) == "alliant resume" and not d.jobs().load()["paused"]
+    assert not d.is_owner("U9SGPJP0C")  # pause/resume/retry only, not Scott's owner mode
