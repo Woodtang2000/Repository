@@ -69,6 +69,11 @@ def missing(req: dict) -> list[str]:
 _SKUS: dict = {}
 
 
+def is_dondees(req: dict) -> bool:
+    names = " ".join(str(req.get(k) or "") for k in ("company", "account_name", "location_name")).lower()
+    return bool(re.search(r"\bdondee", names.replace("\u2019", "'")))
+
+
 def is_garment(sku: str, data_dir: str | None = None) -> bool:
     """From Alliant's own SKU list (skus.csv: item_type "garment"); a SKU not in it: Snow White's 2- numbering."""
     import csv
@@ -223,6 +228,9 @@ class NewAccounts:
         if known and known.get("result"):  # repeats are never entered twice
             self.post(thread, "Already handled; here is the result again.", known["result"])
             return "repeat"
+        if is_dondees(req):  # Dondee's isn't in Alliant (Scott, 11/10); Sales Handoff never sends it, this is the backstop
+            self.result(req, thread, "failed", "Dondee's Laundry is not in Alliant; nothing entered")
+            return "failed: Dondee's"
         gaps = missing(req)
         if gaps:
             self.result(req, thread, "waiting", "missing or unclear: " + "; ".join(gaps))

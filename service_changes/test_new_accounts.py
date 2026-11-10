@@ -131,3 +131,11 @@ def test_welcome_email(d, monkeypatch):
     assert api_key == "bk_us1_sales" and key == "welcome-opp-1-welcome-1" and body["category"] == "transactional"
     assert "Tuesday, November 17" in body["text"] and "866-TAP-TEXT" in body["text"] and "$" not in body["text"]
     assert desk.new_accounts().on_message(msg(w)) == "repeat" and len(sent) == 1  # once per request_id
+
+
+def test_dondees_is_never_entered(d):
+    slack, desk = d
+    req = dict(copy.deepcopy(REQ), account_name="Dondee\u2019s Laundry", location_name="Dondee's - Eagle River")
+    assert desk.new_accounts().on_message(msg(req)) == "failed: Dondee's"
+    assert "not in Alliant" in slack.msgs[na.CHANNEL][-1]["text"]
+    assert not desk.new_accounts().load().get(req["request_id"], {}).get("req")
