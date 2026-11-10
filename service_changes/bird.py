@@ -7,14 +7,17 @@ import urllib.parse
 import urllib.request
 
 
-def _host() -> str:
-    m = re.match(r"b[km]_([a-z]{2}\d+)_", os.environ["BIRD_API_KEY"])
+def _host(api_key: str = "") -> str:
+    m = re.match(r"b[km]_([a-z]{2}\d+)_", api_key or os.environ["BIRD_API_KEY"])
     return f"https://{m.group(1) if m else 'us1'}.platform.bird.com"
 
 
-def _call(method: str, path: str, params: dict | None = None, body: dict | None = None, key: str = "") -> dict:
-    url = _host() + path + ("?" + urllib.parse.urlencode(params) if params else "")
-    headers = {"Authorization": f"Bearer {os.environ['BIRD_API_KEY']}", "Content-Type": "application/json"}
+def _call(method: str, path: str, params: dict | None = None, body: dict | None = None, key: str = "",
+          api_key: str = "") -> dict:
+    """api_key: another Bird key than Donna's (the Sales key for welcome emails)."""
+    api_key = api_key or os.environ["BIRD_API_KEY"]
+    url = _host(api_key) + path + ("?" + urllib.parse.urlencode(params) if params else "")
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
     if key:
         headers["Idempotency-Key"] = key
     req = urllib.request.Request(url, data=json.dumps(body).encode() if body is not None else None, method=method,

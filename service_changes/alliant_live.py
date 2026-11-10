@@ -144,6 +144,19 @@ WHERE {ONE_ACCOUNT} AND (%(wearer)s = '' OR LTRIM(RTRIM(w.pp_empl)) = %(wearer)s
   AND (w.pp_dt_ordr >= DATEADD(day, -180, GETDATE())
        OR (w.pp_dt_ordr >= DATEADD(year, -2, GETDATE()) AND ISNULL(d.pd_received, 0) < w.pp_ordered))
 ORDER BY w.pp_dt_ordr DESC, w.pp_line""",
+    # 8. Billing read-back for a new location (#new-accounts, the invoice check): each item's price, price type,
+    #    frequency and days. Prices: Scott / the #new-accounts thread only (PRICED).
+    "billing": f"""
+SELECT TOP 300 {ACCT} AS account, LTRIM(RTRIM(i.ei_skugrup)) AS sku, RTRIM(s.sg_desc) AS item,
+       i.ei_ras_qty AS inventory, i.ei_auto_ct AS autocount, RTRIM(i.ei_freq) AS frequency,
+       i.ei_unit_pr AS unit_price, i.ei_pr_type AS price_type, i.ei_mon AS d_mon, i.ei_tue AS d_tue, i.ei_wed AS d_wed,
+       i.ei_thu AS d_thu, i.ei_fri AS d_fri, i.ei_sat AS d_sat, i.ei_sun AS d_sun
+FROM dbo.riempitm i WITH (NOLOCK)
+JOIN dbo.ricustmr c WITH (NOLOCK) ON c.cu_ID = i.ei_CUID
+LEFT JOIN dbo.riskugrp s WITH (NOLOCK) ON s.sg_skugrup = i.ei_skugrup
+WHERE {ONE_ACCOUNT} AND LTRIM(RTRIM(i.ei_empl)) = '0'
+  AND (i.ei_stop_dt IS NULL OR i.ei_stop_dt < '1900-01-02' OR i.ei_stop_dt > GETDATE())
+ORDER BY i.ei_skugrup""",
     # 7. SKU catalog read-back (the SKU update project): the SKU group's whole row and its sizes. Prices and costs:
     #    Scott / office only (summary() drops them for everyone else).
     "sku": """
@@ -164,8 +177,8 @@ WHERE TABLE_NAME IN ('ricustmr', 'riempitm', 'riskugrp', 'inskusiz', 'popending_
        OR COLUMN_NAME LIKE '%pr_type%' OR COLUMN_NAME LIKE '%ptype%' OR COLUMN_NAME LIKE '%price%' OR COLUMN_NAME LIKE '%exp%'
        OR COLUMN_NAME LIKE '%wash%' OR COLUMN_NAME LIKE '%merch%')
 ORDER BY TABLE_NAME, ORDINAL_POSITION"""
-LOOKUPS = ("items", "wearers", "garment", "holds", "next_delivery", "work_orders", "sku")
-PRICED = {"sku"}  # lookups whose rows carry price / cost fields
+LOOKUPS = ("items", "wearers", "garment", "holds", "next_delivery", "work_orders", "sku", "billing")
+PRICED = {"sku", "billing"}  # lookups whose rows carry price / cost fields
 FORBIDDEN = re.compile(r"\b(insert|update|delete|merge|exec|execute|drop|alter|create|truncate|grant|revoke|into|"
                        r"openrowset|opendatasource|xp_\w+|sp_\w+|waitfor|shutdown|backup|restore)\b|;|--", re.I)
 

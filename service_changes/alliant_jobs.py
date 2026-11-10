@@ -131,6 +131,17 @@ class Jobs:
                                     metadata={"event_type": KIND, "event_payload": {**p, "donna": "queued"}})
         return f"queued {ts}"
 
+    def custom_job(self, kind: str, text: str, extra: dict) -> str:
+        """A job another part of Donna follows up herself (new_accounts.py: "new_account", "new_wearers"): queued like
+        a ticket, and its result goes back to that part, not to #service-desk."""
+        jid = f"{time.time():.6f}"
+        with self.lock:
+            data = self.load()
+            data["jobs"][jid] = {"id": jid, "kind": kind, "account": extra.get("account", ""), "ticket": text[:12000],
+                                 "expect": [], "asked_by": "Sales Handoff", "status": "queued", "at": time.time(), **extra}
+            self.save(data)
+        return jid
+
     def screen_task(self, text: str, user: str, reply_to: str) -> str:
         """Scott or Bill's own instructions for work on Alliant's screens that isn't a customer ticket (the SKU center,
         setup screens). Queued as written; her report goes back only to the private conversation it came from, so it
@@ -196,12 +207,14 @@ class Jobs:
             if not job or job["status"] != "working":
                 return "unknown job"
             job.update(status=status if status in ("entered", "needs_person", "ask") else "needs_person",
-                       note=note[:3800 if job.get("kind") == "screen_task" else 1500], finished=time.time())
+                       note=note[:3800 if job.get("kind") in ("screen_task", "new_account", "new_wearers") else 1500], finished=time.time())
             if job["status"] == "ask" and not question.strip():
                 job["status"] = "needs_person"
             data["jobs"] = {k: v for k, v in data["jobs"].items() if v["status"] in ("queued", "working")
                             or time.time() - v.get("finished", 0) < 14 * 86400}
             self.save(data)
+        if job.get("kind") in ("new_account", "new_wearers"):  # the #new-accounts thread hears (new_accounts.py)
+            return self.desk.new_accounts().job_done(job, question)
         if job.get("kind") == "screen_task":  # her report, privately, to whoever asked (never #service-desk)
             head = {"entered": "✅ Done in Alliant", "ask": "❓ A question before I go on",
                     "needs_person": "🛑 Stopped, nothing more changed"}[job["status"]]

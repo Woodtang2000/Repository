@@ -1022,6 +1022,35 @@ class Desk:
             self._announcer = Announcer(self)
         return self._announcer
 
+    def new_accounts(self):
+        """New accounts and locations from the Sales Handoff app in #new-accounts (new_accounts.py)."""
+        if "_new_accounts" not in self.__dict__:
+            from .new_accounts import NewAccounts
+            self._new_accounts = NewAccounts(self)
+        return self._new_accounts
+
+    def new_accounts_pass(self, now: float) -> None:
+        """Every 10 minutes: Sales Handoff requests in #new-accounts threads that a dropped connection missed."""
+        from . import new_accounts
+        if not new_accounts.bot_id() or now - self.__dict__.get("_na_pass", 0) < 600:
+            return
+        self._na_pass = now
+        try:
+            seen = self.new_accounts().load()
+            r = self.slack.conversations_history(channel=new_accounts.CHANNEL, oldest=f"{now - 3 * 86400:.6f}", limit=100)
+            for top in r.get("messages", []):
+                msgs = [top]
+                if top.get("reply_count"):
+                    msgs += self.slack.conversations_replies(channel=new_accounts.CHANNEL, ts=top["ts"], limit=200)["messages"][1:]
+                for m in msgs:
+                    msg = new_accounts.parse(m.get("text", ""))
+                    if msg and msg.get("request_id") and msg.get("request_id") not in seen \
+                            and msg.get("type") in ("alliant_entry_request", "alliant_wearer_request", "welcome_email_request"):
+                        print(time.strftime("%H:%M"), "new-accounts (catch-up):",
+                              self.new_accounts().on_message({**m, "channel": new_accounts.CHANNEL, "type": "message"}), flush=True)
+        except Exception as e:
+            print(time.strftime("%H:%M"), "new-accounts pass:", str(e)[:200], flush=True)
+
     def jobs(self):
         """Donna's Alliant work queue (alliant_jobs.py)."""
         if "_jobs" not in self.__dict__:
@@ -2217,6 +2246,14 @@ class Desk:
                             self.api_trouble(x)
                     threading.Thread(target=ask, daemon=True).start()
                 return
+            if channel == os.environ.get("NEW_ACCOUNTS_CHANNEL", "C0CFF0X9DMF") and ev.get("type") == "message":
+                def handoff(e=ev):  # the Sales Handoff app's requests (new_accounts.py); only its bot is acted on
+                    try:
+                        print(time.strftime("%H:%M"), "new-accounts:", self.new_accounts().on_message(e) or "-", flush=True)
+                    except Exception as x:
+                        print(time.strftime("%H:%M"), "new-accounts error:", x, flush=True)
+                threading.Thread(target=handoff, daemon=True).start()
+                return
             if channel not in watched:
                 return
             if ev.get("type") == "message" and not ev.get("bot_id") and ev.get("subtype") in (None, "thread_broadcast", "file_share") \
@@ -2291,6 +2328,7 @@ class Desk:
                         print(time.strftime("%H:%M"), "watchdog error:", e, flush=True)
                     self.scorecard_pass(now)
                     self.outreach_pass(now)
+                    self.new_accounts_pass(now)
                     self.notices_pass()
                     # Route passes share an office pass from the last few seconds: during a burst of drivers they
                     # don't queue up behind each other here. Office events (✅, "done") always get a fresh one.

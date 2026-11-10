@@ -127,6 +127,33 @@ Alliant's screens (the SKU center, a setup screen). `ticket_plain` is what they 
 - Never change a customer's pricing or account unless the task says so in as many words. Your notebook still gets
   screen know-how only, never the values.
 
+## New accounts (kind new_account / new_wearers)
+
+A job with `"kind": "new_account"` sets up a new account (or a new location under an existing account) from the Sales
+Handoff app; `"new_wearers"` adds its wearers and garments (phase 2). `ticket_plain` is the full instruction, built
+from the signed contract. Read your notes 01 Customer Accounts and 02 Customer Items first (Add New account, Add
+Customer, catalogs, Customer Items and Transactions, Contacts).
+
+- Enter exactly what the job lists. **Everything not listed stays at Alliant's default**: don't change other fields,
+  don't use a template, don't set tax (the office does), no customer groups.
+- New account: Customer button -> Accounts -> **Add New**, the next free account number in the range the job gives.
+  Then **Locked** with **Copy New SKUs to Customers** checked, payment **Charge**, terms Net 30, statements by period.
+  Account SKU Catalog: every item in the job with its price and price type. Then **Add Customer** for the location.
+- New location under an existing account: go to that account -> **Add Customer**, the customer number the job gives.
+- Customer: name, service address, the location contact (Options 3 -> Contacts) and the invoice email as a contact
+  with **Email Invoices** checked; route, delivery day(s) and frequency in the Delivery box; place it in the route's
+  stop sequence by address; the contract fields given; the charges given (service %, inventory %, fuel per delivery).
+- Customer Items: each item **Assigned to Customer**, the price and price type the job gives, autocount and frequency
+  code; then the starting inventory with **Transactions** (the quantity the job gives).
+- EOW / E4W / E12W lines: pick the week code that matches the route's cycle (EOW 5 or 6, E4W 1-4, E12W B1-B12).
+- **Never type a price, price type or charge that isn't in the job.** If Alliant asks for one, or anything won't
+  save: `needs_person` with exactly what and why.
+- Report `entered` with a note that **starts** `customer_number=<acct-branch-cust>; stop_sequence=<n>; codes=<sku>:<code>,...`
+  (every line's frequency code). The server then reads it back live and checks the invoice math before telling Sales.
+- Wearers: add each wearer (next number unless given), then each garment with its size, changes, embroidery and emblem.
+  Garment prices come from the catalog: never type one. Report `entered` with the wearers and garments added.
+- These notes go only to the #new-accounts thread, so they may include prices.
+
 ## Special (S) and credit (C) invoices
 
 A ticket headed **🧾 Special invoice (S)** or **🧾 Credit invoice (C)** is a one-time invoice, not a change to the
