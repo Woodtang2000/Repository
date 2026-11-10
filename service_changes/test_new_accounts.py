@@ -139,3 +139,20 @@ def test_dondees_is_never_entered(d):
     assert desk.new_accounts().on_message(msg(req)) == "failed: Dondee's"
     assert "not in Alliant" in slack.msgs[na.CHANNEL][-1]["text"]
     assert not desk.new_accounts().load().get(req["request_id"], {}).get("req")
+
+
+def test_test_channel_never_reaches_alliant_or_customers(d, monkeypatch):
+    slack, desk = d
+    monkeypatch.setenv("NEW_ACCOUNTS_TEST", "on")
+    sent = []
+    monkeypatch.setattr(na, "send_welcome", lambda *a: sent.append(a) or "x")
+    monkeypatch.setenv("BIRD_SALES_API_KEY", "k")
+    assert desk.new_accounts().on_message(msg(REQ)) == "test: not queued"
+    assert not desk.jobs().load()["jobs"]
+    assert "TEST MODE" in slack.msgs[na.CHANNEL][-1]["text"]
+    w = {"type": "alliant_wearer_request", "request_id": "w-1", "customer_number": "5045-1-00000",
+         "wearers": [{"name": "Pat", "garments": [{"sku": "2-0413WH", "size": "L", "changes": 11}]}]}
+    assert desk.new_accounts().on_message(msg(w)) == "test: wearers not queued"
+    e = {"type": "welcome_email_request", "request_id": "e-1", "to": {"name": "Pat", "email": "pat@teamcc.com"}}
+    assert desk.new_accounts().on_message(msg(e)) == "test"
+    assert not desk.jobs().load()["jobs"] and not sent

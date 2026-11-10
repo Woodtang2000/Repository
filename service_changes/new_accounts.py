@@ -23,6 +23,13 @@ from datetime import datetime
 from .context import ALASKA
 
 CHANNEL = os.environ.get("NEW_ACCOUNTS_CHANNEL", "C0CFF0X9DMF")
+TEST_CHANNEL = "C0CG9NLBF4Y"  # #sales-handoff-test
+
+
+def test_mode() -> bool:
+    """Pointed at #sales-handoff-test (or NEW_ACCOUNTS_TEST=on): every check runs, but nothing goes to Alliant's
+    workstation and no welcome email is sent. "Donna pause" isn't enough: a paused job still runs on "Donna resume"."""
+    return CHANNEL == TEST_CHANNEL or os.environ.get("NEW_ACCOUNTS_TEST", "").lower() in ("on", "1", "yes", "true")
 VERSION = "3.1"
 REQUIRED = ("request_id", "company", "account_name", "location_name", "service_address", "location_contact",
             "invoice_email", "salesperson", "contract", "install_date", "route", "delivery_days", "rates", "lines",
@@ -261,6 +268,17 @@ class NewAccounts:
             data = self.load()
             rec = data[rid]
             req = rec["req"]
+            if test_mode():
+                rec.update(status="test")
+                self.save(data)
+        if test_mode():
+            self.result(req, rec["thread"], "waiting", "TEST MODE: every check passed and the Alliant entry is ready, "
+                        "but nothing was sent to Alliant (this is #sales-handoff-test)", test=True)
+            return "test: not queued"
+        with self.lock:
+            data = self.load()
+            rec = data[rid]
+            req = rec["req"]
             jid = self.desk.jobs().custom_job("new_account", instructions(req),
                                               {"request_id": rid, "account": req.get("existing_alliant_account") or ""})
             rec.update(status="queued", job=jid)
@@ -363,6 +381,10 @@ class NewAccounts:
                 size = g.get("size") or "x".join(x for x in (g.get("size_a"), g.get("size_b")) if x)
                 text.append(f"    {g.get('sku')} size {size}, {g.get('changes')} changes, embroidery {g.get('embroidery') or 'none'}, "
                             f"emblem {g.get('emblem_code') or 'none'}")
+        if test_mode():
+            self.result({"request_id": rid}, thread, "waiting", f"TEST MODE: wearers for {cust} checked "
+                        f"({len(msg['wearers'])}), nothing sent to Alliant", test=True)
+            return "test: wearers not queued"
         with self.lock:
             data = self.load()
             data[rid] = {"req": {"request_id": rid, "customer_number": cust}, "thread": thread, "status": "queued"}
@@ -381,7 +403,10 @@ class NewAccounts:
         res = {"type": "welcome_email_result", "version": VERSION, "request_id": rid, "status": "failed",
                "bird_message_id": "", "notes": ""}
         key = os.environ.get("BIRD_SALES_API_KEY", "").strip()
-        if not key:
+        if test_mode():
+            res.update(status="test", notes=f"TEST MODE: the welcome email to {to.get('email') or '(no email)'} "
+                                            "was built but not sent")
+        elif not key:
             res["notes"] = "the Sales Bird key (BIRD_SALES_API_KEY) isn't set up on Donna's server yet"
         elif "@" not in (to.get("email") or ""):
             res["notes"] = "no signer email"
@@ -391,7 +416,8 @@ class NewAccounts:
                 res["status"] = "sent"
             except Exception as e:
                 res["notes"] = f"Bird didn't take it: {str(e)[:200]}"
-        self.post(thread, "Welcome email sent." if res["status"] == "sent" else f"Welcome email not sent: {res['notes']}", res)
+        self.post(thread, "Welcome email sent." if res["status"] == "sent" else res["notes"] if res["status"] == "test"
+                  else f"Welcome email not sent: {res['notes']}", res)
         if res["status"] == "sent":
             with self.lock:
                 data = self.load()
