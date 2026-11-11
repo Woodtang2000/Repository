@@ -81,8 +81,12 @@ def missing(req: dict) -> list[str]:
     if req.get("company") not in ("SW", "TLG"):
         out.append("company (SW or TLG)")
     garments = [i for i, ln in enumerate(req.get("lines") or []) if is_garment(str(ln.get("sku", "")))]
-    if garments and not req.get("needs_stock_ok"):
+    logo_mats = [i for i, ln in enumerate(req.get("lines") or []) if str(ln.get("sku", "")).strip().startswith("3-")]
+    if (garments or logo_mats) and not req.get("needs_stock_ok"):
         out.append("needs_stock_ok (true when there are garments, custom items or logo mats)")
+    for i, ln in enumerate(req.get("lines") or []):  # Scott, 11/11: only mats (10-, logo mats 3-) go less than weekly
+        if not is_mat(str(ln.get("sku", ""))) and str(ln.get("frequency", "")).lower() not in ("weekly", "7", "8"):
+            out.append(f"lines[{i}].frequency ({ln.get('sku')} isn't a mat: only mats go less often than weekly)")
     cond = str((req.get("optional") or {}).get("conditions") or "").strip()
     if cond:  # protocol: if it changes a charge or anything Donna would set, she asks; she never guesses a charge
         out.append(f"optional.conditions (\"{cond[:200]}\": Scott or Bill to say how it's set up; send it again "
@@ -91,6 +95,11 @@ def missing(req: dict) -> list[str]:
 
 
 _SKUS: dict = {}
+
+
+def is_mat(sku: str) -> bool:
+    """Mats are SKUs 10- (and logo mats 3-) (Scott, 11/11)."""
+    return (sku or "").strip().startswith(("10-", "3-"))
 
 
 def is_dondees(req: dict) -> bool:
@@ -324,8 +333,19 @@ class NewAccounts:
             return "no thread"
         if job.get("kind") == "new_wearers":
             st = "entered" if job["status"] == "entered" else "waiting" if job["status"] == "ask" else "failed"
-            self.result(req, thread, st, (question + " " if question else "") + (job.get("note") or "")[:1500],
-                        customer_number=req.get("customer_number", ""))
+            n_w = int(rec.get("wearer_count") or 0)
+            said = {"entered": f"{n_w} wearer{'s' if n_w != 1 else ''} entered" if n_w else "wearers entered",
+                    "waiting": "her workstation has a question about the wearers; Scott or Ana please see her report",
+                    "failed": "her workstation couldn't enter the wearers; Scott or Ana please see her report"}[st]
+            self.result(req, thread, st, said, customer_number=req.get("customer_number", ""))  # no names in Slack
+            note = ((question + " ") if question else "") + (job.get("note") or "")
+            if note.strip():  # her full report (it can name wearers) goes to Scott privately, never the channel
+                owner = os.environ.get("OWNER_SLACK_ID", "U4KFSQCDQ").split(",")[0].strip()
+                try:
+                    self.desk.slack.chat_postMessage(channel=owner, unfurl_links=False, text=(
+                        f"👕 Wearers for {req.get('customer_number', '')} ({st}): " + note)[:3900])
+                except Exception as e:
+                    print(time.strftime("%H:%M"), "wearer report not sent:", str(e)[:150], flush=True)
             if st == "entered":
                 self.start_watch(req.get("customer_number", ""))
             return f"wearers {st}"
@@ -557,6 +577,12 @@ class NewAccounts:
             self.post(thread, "Already handled; here is the result again.", known["result"])
             return "repeat"
         cust = msg.get("customer_number", "")
+        if re.fullmatch(r"\d{1,6}-[12]-\w{1,8}", cust or "") and not msg.get("wearers") and msg.get("wearer_count"):
+            # protocol v3.1 (11/11): names come from the Sales Handoff REST endpoint, never Slack; not built yet
+            self.result({"request_id": rid, "customer_number": cust}, thread, "waiting",
+                        f"{msg.get('wearer_count')} wearers ready, but I can't fetch them from the Sales Handoff endpoint "
+                        "yet; a person please enter them", customer_number=cust)
+            return "waiting: endpoint"
         if not re.fullmatch(r"\d{1,6}-[12]-\w{1,8}", cust or "") or not msg.get("wearers"):
             self.result({"request_id": rid}, thread, "waiting", "missing customer_number or wearers")
             return "waiting"
@@ -577,7 +603,8 @@ class NewAccounts:
             return "test: wearers not queued"
         with self.lock:
             data = self.load()
-            data[rid] = {"req": {"request_id": rid, "customer_number": cust}, "thread": thread, "status": "queued"}
+            data[rid] = {"req": {"request_id": rid, "customer_number": cust}, "thread": thread, "status": "queued",
+                         "wearer_count": len(msg["wearers"])}
             data[rid]["job"] = self.desk.jobs().custom_job("new_wearers", "\n".join(text),
                                                            {"request_id": rid, "account": cust})
             self.save(data)

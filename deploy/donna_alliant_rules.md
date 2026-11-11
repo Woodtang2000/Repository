@@ -155,7 +155,8 @@ Customer, catalogs, Customer Items and Transactions, Contacts).
   customer item line and no starting inventory. They're billed on the wearers (phase 2).
 - Wearers: add each wearer (next number unless given), then each garment with its size, changes (inventory), embroidery
   and emblem, price type 9. **Auto Count = the garments already issued to that wearer** (0 if none yet). Garment prices
-  come from the catalog: never type one. Report `entered` with the wearers and garments added.
+  come from the catalog: never type one. Report `entered` with the wearers and garments added (your report goes to
+  Scott privately; the channel only hears the count).
 - These notes go only to the #new-accounts thread, so they may include prices.
 
 ## Garment auto count fixes (kind garment_fix)

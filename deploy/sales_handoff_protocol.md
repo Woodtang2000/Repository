@@ -45,7 +45,8 @@ with Alliant's own projected invoice after entry, and again on the first real de
 - **Price types:** garments = 9 always (Scott, 11/10: billed per garment issued, by the auto count; 14 isn't used,
   because stock often comes in over weeks). Other items: inventory billing = 21, usage billing = 8. Donna decides
   garment or not from the SKU.
-- **Garments:** the line's `quantity` is the contract count billed per delivery (it's in the math). In phase 1 Donna
+- **Garments:** always `billing_basis` "Usage", price type 9 (Scott, 11/11). The line's `quantity` is the contract
+  count billed per delivery (it's in the math). In phase 1 Donna
   puts garments in the account catalog only; the wearers and their changes come in phase 2, each wearer's auto count
   starting at what's already issued. For 90 days Donna's garment watch in #stockroom raises auto counts as garments are
   issued, until billing reaches the contract count, and asks Ana and Sonja about anything else.
@@ -59,6 +60,9 @@ with Alliant's own projected invoice after entry, and again on the first real de
   (5/6, 1–4, B1–B12), reported in `codes_chosen`. A line may carry an optional `frequency_code`, the exact Alliant
   code (EOW: 5 or 6; E4W: 1–4; E12W: B1–B12); when present Donna uses it instead of choosing from the route. A code
   that doesn't fit the line's frequency, or one on a weekly line, gets `waiting`.
+- **Mats only go less than weekly** (Scott, 11/11): mats are SKUs starting 10- (logo mats 3-). Only a mat line may be
+  EOW, E4W or E12W; every other item is picked up every delivery unless the request says fewer times a week. A non-mat
+  line that isn't weekly gets `waiting`. Logo mats need a stock OK like garments.
 - **Stop sequence:** Donna places the stop within the route by address and reports `stop_sequence`.
 - **Lost/abuse replacement, stop minimum, seasonal, AC codes:** Alliant defaults unless the request includes them.
 - **Charges:** `rates` (service %, inventory %, fuel per delivery) are set in the account and customer charge settings.
@@ -148,7 +152,9 @@ an EOW, E4W or E12W line may add `frequency_code` (the exact Alliant code).
 - `tax_exempt`: true only with an exemption on file (the office sets the tax code).
 - `contract_extra`: `{"type": "Location"|"Master", "auto_renew_months", "notice_days", "price_hold"}`.
 - `master_agreement`: `{"contract_number", "pricing_terms"}` when under a master.
-- `stop_minimum`, `additional_charges` (`[{"ac_code", "description", "amount", "unit"}]`).
+- `stop_minimum`, `additional_charges` (`[{"ac_code", "description", "amount", "unit"}]`): only charges the contract
+  states, at the amount it states; nothing by default. Emblem and embroidery charges come this way with their Alliant
+  code (`MON`, `1EM`, `2EM`, `3EM`) and the agreed amount per garment (Scott, 11/11).
 - `delivery_instructions`, `internal_notes` (competitor, previous contract end).
 - `conditions`: free text from the quote. If it changes replacement charges or anything Donna would set, she asks.
 - `pricing_matched_from`: `{"customer_number", "date"}`; Donna also compares the prices with that customer.
@@ -195,6 +201,10 @@ On `entered`, Sales Handoff runs the same steps as a manual entry: the route not
 ## 3. Phase 2: garments (Sales Handoff → Donna)
 
 Posted when Ana marks the wearer list complete in Salesforce. Prices come from the catalog (phase 1 `lines`).
+**Wearer names never go in Slack** (Scott, 11/11): the Slack message only says the wearers are ready and how many;
+Donna fetches the list from the Sales Handoff REST endpoint, and her results in Slack give counts only.
+
+> Wearers ready for 2058-1-00001: 6 names.
 
 ```json
 {
@@ -202,11 +212,15 @@ Posted when Ana marks the wearer list complete in Salesforce. Prices come from t
   "version": "3.1",
   "request_id": "opp-006XXXXXXXXXXXXXXX-wearers-1",
   "customer_number": "2058-1-00001",
-  "wearers": [
-    {"name": "…", "garments": [{"sku": "…", "size": "L", "changes": 11, "embroidery": "Name", "emblem_code": "1EM"}]}
-  ]
+  "wearer_count": 6
 }
 ```
+
+The endpoint returns, for that `request_id`, the list Donna enters:
+`{"wearers": [{"name": "…", "garments": [{"sku": "…", "size": "L", "changes": 11, "embroidery": "Name",
+"emblem_code": "1EM"}]}]}`. **To be agreed before Donna can fetch it:** the URL, how Donna authenticates (a key in
+Donna's settings, entered by Scott), and that it answers only for a `request_id` that's ready. Until then Donna replies
+`waiting` ("N wearers ready, but I can't fetch them yet") and a person enters them.
 
 Optional per wearer: `wearer_number`, `locker`, `department`; per garment, a two-part size as `size_a` + `size_b`
 (pants 32 / 30) in place of `size`. Left out: Alliant's defaults (next wearer number). Donna replies with an

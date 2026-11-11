@@ -240,3 +240,30 @@ def test_a_given_frequency_code_is_used_and_must_fit():
 def test_the_sales_handoff_bot_is_known_without_a_setting(monkeypatch):
     monkeypatch.delenv("SALES_HANDOFF_BOT_ID", raising=False)
     assert na.bot_id() == "U0CF01ML0AK"
+
+
+def test_only_mats_go_less_than_weekly_and_logo_mats_need_stock_ok():
+    r = copy.deepcopy(REQ)
+    r["lines"][0]["frequency"] = "EOW"  # a towel, not a mat
+    assert any("isn't a mat" in g for g in na.missing(r))
+    r = copy.deepcopy(REQ)
+    r["lines"].append({"sku": "3-LOGO-01", "description": "LOGO MAT 3X5", "billing_basis": "Usage", "quantity": 1,
+                       "unit_price": 9.0, "frequency": "E4W"})
+    gaps = na.missing(r)
+    assert any(g.startswith("needs_stock_ok") for g in gaps) and not any("isn't a mat" in g for g in gaps)
+    r["needs_stock_ok"] = True
+    assert na.missing(r) == []
+
+
+def test_wearer_names_stay_out_of_slack(d):
+    slack, desk = d
+    w = {"type": "alliant_wearer_request", "request_id": "w-9", "customer_number": "5045-1-00000", "wearer_count": 4}
+    assert desk.new_accounts().on_message(msg(w)) == "waiting: endpoint"
+    assert "4 wearers ready" in slack.msgs[na.CHANNEL][-1]["text"]
+    w = {"type": "alliant_wearer_request", "request_id": "w-10", "customer_number": "5045-1-00000",
+         "wearers": [{"name": "Pat Example", "garments": [{"sku": "2-0413WH", "size": "L", "changes": 11}]}]}
+    desk.new_accounts().on_message(msg(w))
+    job = desk.jobs().next()
+    desk.jobs().result(job["id"], "entered", "Added Pat Example #12 with 11 coats")
+    posts = "\n".join(m["text"] for m in slack.msgs[na.CHANNEL])
+    assert "1 wearer entered" in posts and "Pat Example" not in posts
