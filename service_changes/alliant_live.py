@@ -214,6 +214,30 @@ WHERE (c.DATA_TYPE IN ('datetime', 'datetime2', 'smalldatetime', 'time', 'dateti
        OR c.TABLE_NAME LIKE '%mobile%' OR c.TABLE_NAME LIKE '%hand%' OR c.TABLE_NAME LIKE '%sign%'
        OR c.TABLE_NAME LIKE '%driver%' OR c.TABLE_NAME LIKE '%gps%' OR c.TABLE_NAME LIKE '%visit%')
 ORDER BY c.TABLE_NAME, c.ORDINAL_POSITION"""
+# Delivery-time sample (Scott, 11/11): how often the handheld times are filled, and a few real rows. No prices.
+SQL_TIMES_COVERAGE = """
+SELECT COUNT(*) AS tickets,
+       SUM(CASE WHEN h.hh_starttime > '1900-01-02' THEN 1 ELSE 0 END) AS with_start,
+       SUM(CASE WHEN h.hh_stoptime > '1900-01-02' THEN 1 ELSE 0 END) AS with_stop,
+       SUM(CASE WHEN h.hh_FinishedTime > '1900-01-02' THEN 1 ELSE 0 END) AS with_finished,
+       SUM(CASE WHEN h.hh_EstDelTime > 0 THEN 1 ELSE 0 END) AS with_estimate
+FROM dbo.rainvhhd h WITH (NOLOCK)
+WHERE h.hh_date >= DATEADD(day, -30, GETDATE()) AND h.hh_date < CAST(GETDATE() AS date)"""
+SQL_TIMES_TICKETS = f"""
+SELECT TOP 15 RTRIM(h.hh_invoice) AS ticket, h.hh_date AS ticket_date, {ACCT} AS account, c.cu_route AS route,
+       h.hh_starttime AS start_time, h.hh_stoptime AS stop_time, h.hh_FinishedTime AS finished_time,
+       h.hh_timestamp AS stamped, h.hh_EstDelTime AS est_del_time
+FROM dbo.rainvhhd h WITH (NOLOCK)
+JOIN dbo.ricustmr c WITH (NOLOCK) ON c.cu_ID = h.hh_cuid
+WHERE h.hh_date >= DATEADD(day, -7, GETDATE()) AND h.hh_starttime > '1900-01-02'
+ORDER BY h.hh_date DESC, h.hh_starttime"""
+SQL_TIMES_ROUTES = "SELECT TOP 8 * FROM dbo.PULL_route r WITH (NOLOCK) ORDER BY r.Date DESC"
+SQL_TIMES_ROUTETIMES = "SELECT TOP 8 * FROM dbo.RouteTimes t WITH (NOLOCK) ORDER BY t.ri_RouteDate DESC"
+SQL_TIMES_EST = "SELECT TOP 40 * FROM dbo.raroute r WITH (NOLOCK)"
+TIMES_SAMPLE = [("Handheld times on delivery tickets, last 30 days", SQL_TIMES_COVERAGE),
+                ("Tickets with a start time, last 7 days", SQL_TIMES_TICKETS),
+                ("Route start / end (PULL_route)", SQL_TIMES_ROUTES), ("RouteTimes", SQL_TIMES_ROUTETIMES),
+                ("Estimated route times by weekday (raroute)", SQL_TIMES_EST)]
 LOOKUPS = ("items", "wearers", "garment", "holds", "next_delivery", "work_orders", "sku", "billing", "garment_billing")
 PRICED = {"sku", "billing"}  # lookups whose rows carry price / cost fields
 FORBIDDEN = re.compile(r"\b(insert|update|delete|merge|exec|execute|drop|alter|create|truncate|grant|revoke|into|"
@@ -511,8 +535,38 @@ def describe(what: str = "") -> str:
     return "\n".join(out)
 
 
+def sample_times() -> str:
+    """Scott's one-time look at where delivery and route times live (read only, NOLOCK, names and times only)."""
+    out = []
+    conn = _connect()
+    try:
+        for title, sql in TIMES_SAMPLE:
+            assert safe_sql(sql), title
+            out.append(f"\n== {title} ==")
+            try:
+                cur = conn.cursor()
+                cur.execute(sql)
+                rows = cur.fetchall()
+            except Exception as e:
+                out.append(f"  (couldn't read: {type(e).__name__}: {_scrub(str(e))[:200]})")
+                continue
+            if title.startswith("Estimated"):  # raroute is wide: just the route id and its time columns
+                rows = [{k: v for k, v in r.items() if k.lower().startswith(("rt_route", "rt_branch", "rt_name", "rt_desc",
+                                                                             "rt_esttime", "rt_overrideroutetimes",
+                                                                             "rt_requireroutestartend", "rt_startend"))}
+                        for r in rows]
+            out += ["  " + "; ".join(f"{k}={_clean(v)}" for k, v in without_prices([r])[0].items()) for r in rows] or ["  (no rows)"]
+    finally:
+        conn.rollback()
+        conn.close()
+    return "\n".join(out)
+
+
 def main(argv: list[str]) -> None:
     data_dir = os.environ.get("SERVICE_DESK_DATA", DATA)
+    if argv[:2] == ["sample", "times"]:
+        print(sample_times())
+        return
     if argv[:1] == ["describe"]:
         print(describe(argv[1] if len(argv) > 1 else ""))
         return
