@@ -55,10 +55,20 @@ with Alliant's own projected invoice after entry, and again on the first real de
   - Inventory lines: `quantity` = total inventory (what is billed) = starting inventory; autocount = half of it unless
     the line gives `autocount`.
   - For inventory billing, the bill stays the same week to week unless the inventory or autocount is adjusted.
+  - On an account with more than one delivery a week, usage and inventory lines alike are billed **per delivery**
+    (Scott, 11/11): 100 bar towels on a twice-a-week item is 100 each delivery, 200 a week.
+- **Deliveries per week** (Scott, 11/11): `deliveries_per_week` is the account's deliveries a week (Snow White 1, 2
+  or 4; TLG 1–6; Saturday is a normal TLG day), and `delivery_days` lists that many days. Each weekly line goes on
+  every delivery unless it says fewer: optional `times_per_week` (1 to the account's) and/or `days` (a subset of
+  `delivery_days`). Donna sets the item's code herself: **7** for one day a week, **8** for more than one, with the
+  item's days ticked (the request's `days`, or chosen at entry to fit the route), and reports every line's days in
+  `days_chosen`. A mat that is EOW / E4W / E12W may name its one `days` day; otherwise Donna chooses it.
 - **Frequency:** each line says `"weekly"`, `"EOW"` (every other week), `"E4W"` (every 4 weeks) or `"E12W"` (every 12
   weeks). Donna sets the Alliant code: weekly = 7; EOW / E4W / E12W = the week code that fits the route's cycle
-  (5/6, 1–4, B1–B12), reported in `codes_chosen`. A line may carry an optional `frequency_code`, the exact Alliant
-  code (EOW: 5 or 6; E4W: 1–4; E12W: B1–B12); when present Donna uses it instead of choosing from the route. A code
+  (5/6, 1–4, B1–B4), reported in `codes_chosen`. A line may carry an optional `frequency_code`, the exact Alliant
+  code (EOW: 5 or 6; E4W: 1–4; E12W: B1–B4, the only 12-week codes Alliant has); when present Donna uses it instead
+  of choosing from the route. Normal item codes are 7, 8, 5 and 6; 12-, 8-, 3-, 6- and 16-week cycles are rarely or
+  never sold (Scott, 11/11). A code
   that doesn't fit the line's frequency, or one on a weekly line, gets `waiting`.
 - **Mats only go less than weekly** (Scott, 11/11): mats are SKUs starting 10- (logo mats 3-). Only a mat line may be
   EOW, E4W or E12W; every other item is picked up every delivery unless the request says fewer times a week. A non-mat
@@ -72,8 +82,9 @@ with Alliant's own projected invoice after entry, and again on the first real de
 ## The math check (both sides)
 
 - **Sales Handoff** computes the contract's `expected_invoice` for one 4-week period:
-  - each line: `quantity` × `unit_price` × deliveries in 4 weeks (weekly 4, EOW 2, E4W 1, E12W 1/3; more than once a
-    week: × delivery days per week);
+  - each line: `quantity` × `unit_price` × the line's deliveries in 4 weeks (weekly: 4 × its times a week, which is
+    its `times_per_week`, or the number of its `days`, or else the account's `deliveries_per_week`; EOW 2, E4W 1,
+    E12W 1/3);
   - `service_charge` = `service_charge_pct` × the lines total; `inventory_charge` = `inventory_charge_pct` × the
     lines total too (Scott, 11/10: the inventory maintenance, service/energy and fuel charges are invoice billings on
     all the item totals, when present, whatever the billing basis); `fuel` = `fuel_charge` × deliveries in 4 weeks;
@@ -110,6 +121,7 @@ passes: **every required field present**. The person clicking confirms the route
   "contract": {"number": "00002301", "start_date": "2026-11-17", "term_months": 36},
   "install_date": "2026-11-17",
   "route": 6,
+  "deliveries_per_week": 1,
   "delivery_days": ["Tue"],
   "rates": {"service_charge_pct": 18, "inventory_charge_pct": 13, "fuel_charge": 6.00},
   "lines": [
@@ -216,11 +228,14 @@ Donna fetches the list from the Sales Handoff REST endpoint, and her results in 
 }
 ```
 
-The endpoint returns, for that `request_id`, the list Donna enters:
-`{"wearers": [{"name": "…", "garments": [{"sku": "…", "size": "L", "changes": 11, "embroidery": "Name",
-"emblem_code": "1EM"}]}]}`. **To be agreed before Donna can fetch it:** the URL, how Donna authenticates (a key in
-Donna's settings, entered by Scott), and that it answers only for a `request_id` that's ready. Until then Donna replies
-`waiting` ("N wearers ready, but I can't fetch them yet") and a person enters them.
+**The wearer endpoint (proposed by Donna's side, 11/11; the Sales agent confirms or changes the URL):**
+- `GET <SALES_HANDOFF_URL>/wearers/<request_id>` with the header `Authorization: Bearer <SALES_HANDOFF_KEY>`. Scott
+  creates the key and enters it, and the URL, in Donna's settings; it is never in Slack, code or chat.
+- `200` with `{"request_id": "…", "customer_number": "2058-1-00001", "wearers": [{"name": "…", "garments": [{"sku":
+  "…", "size": "L", "changes": 11, "embroidery": "Name", "emblem_code": "1EM"}]}]}`, the same wearer shape as before.
+- `404` until that `request_id`'s list is complete; `401` for a wrong key. Answers only for wearer request IDs.
+- Donna checks the `request_id` and `customer_number` match and that the count equals `wearer_count`. Anything else:
+  `waiting` with the reason, and the same request may be posted again once it's fixed.
 
 Optional per wearer: `wearer_number`, `locker`, `department`; per garment, a two-part size as `size_a` + `size_b`
 (pants 32 / 30) in place of `size`. Left out: Alliant's defaults (next wearer number). Donna replies with an

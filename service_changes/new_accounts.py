@@ -38,7 +38,8 @@ REQUIRED = ("request_id", "company", "account_name", "location_name", "service_a
             "invoice_email", "salesperson", "contract", "install_date", "route", "delivery_days", "rates", "lines",
             "expected_invoice")
 LINE_REQUIRED = ("sku", "description", "billing_basis", "quantity", "unit_price", "frequency")
-WEEK_CODES = {"eow": r"[56]", "e4w": r"[1-4]", "e12w": r"B(?:[1-9]|1[0-2])"}  # the exact codes each one may use
+WEEK_CODES = {"eow": r"[56]", "e4w": r"[1-4]", "e12w": r"B[1-4]"}  # Alliant's 12-week codes are B1-B4 (Scott, 11/11)
+DAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")  # Saturday is a normal TLG day (Scott, 11/11)  # the exact codes each one may use
 FREQ_DELIVERIES = {"weekly": 4, "eow": 2, "e4w": 1, "e12w": 1 / 3}  # deliveries in a 4-week period, per the protocol
 GARMENT_SKU = re.compile(r"^2-")  # Snow White's garment SKUs start 2- (chef coats 2-0413WH, pants 2-2020WH...)
 
@@ -68,18 +69,19 @@ def missing(req: dict) -> list[str]:
     for i, ln in enumerate(req.get("lines") or []):
         out += [f"lines[{i}].{k}" for k in LINE_REQUIRED if ln.get(k) in (None, "")]
         if str(ln.get("frequency", "")).lower() not in FREQ_DELIVERIES and not re.fullmatch(
-                r"[0-9FYX]|B(?:[1-9]|1[0-2])", str(ln.get("frequency", ""))):
+                r"[0-9FYX]|B[1-4]", str(ln.get("frequency", "")).upper()):
             out.append(f"lines[{i}].frequency ({ln.get('frequency')!r} isn't weekly, EOW, E4W, E12W or an Alliant code)")
         fc = str(ln.get("frequency_code") or "").strip().upper()
         if fc:  # optional: the exact Alliant week code (Scott, 11/10); it has to fit the line's frequency
             f = str(ln.get("frequency", "")).lower()
             if f not in WEEK_CODES or not re.fullmatch(WEEK_CODES[f], fc):
                 out.append(f"lines[{i}].frequency_code ({fc!r} doesn't fit {ln.get('frequency')!r}: EOW takes 5 or 6, "
-                           "E4W 1-4, E12W B1-B12, weekly none)")
+                           "E4W 1-4, E12W B1-B4, weekly none)")
         if str(ln.get("billing_basis", "")).title() not in ("Usage", "Inventory"):
             out.append(f"lines[{i}].billing_basis ({ln.get('billing_basis')!r}: Usage or Inventory)")
     if req.get("company") not in ("SW", "TLG"):
         out.append("company (SW or TLG)")
+    out += day_gaps(req)
     garments = [i for i, ln in enumerate(req.get("lines") or []) if is_garment(str(ln.get("sku", "")))]
     logo_mats = [i for i, ln in enumerate(req.get("lines") or []) if str(ln.get("sku", "")).strip().startswith("3-")]
     if (garments or logo_mats) and not req.get("needs_stock_ok"):
@@ -95,6 +97,71 @@ def missing(req: dict) -> list[str]:
 
 
 _SKUS: dict = {}
+
+
+def account_days(req: dict) -> list[str]:
+    return [str(d).strip().title()[:3] for d in req.get("delivery_days") or []]
+
+
+def per_week(req: dict) -> int:
+    """The account's deliveries a week: deliveries_per_week, or the number of delivery days."""
+    try:
+        return int(req.get("deliveries_per_week") or 0) or len(account_days(req))
+    except (TypeError, ValueError):
+        return len(account_days(req))
+
+
+def line_days(ln: dict) -> list[str]:
+    return [str(d).strip().title()[:3] for d in ln.get("days") or []]
+
+
+def plan(req: dict, ln: dict) -> tuple[str, list[str], int]:
+    """(Alliant frequency code, the item's days if known, its deliveries a week). Weekly items: 7 on one day, 8 on
+    more (Scott, 11/11); other frequencies keep their week code, on one day."""
+    days, acct = line_days(ln), per_week(req)
+    if str(ln.get("frequency", "")).lower() != "weekly":
+        return str(ln.get("frequency_code") or ln.get("frequency")).upper(), days, 1
+    n = len(days) or int(ln.get("times_per_week") or acct or 1)
+    if not days and n == acct:
+        days = account_days(req)  # every delivery
+    return ("7" if n == 1 else "8"), days, n
+
+
+def day_gaps(req: dict) -> list[str]:
+    out, acct, dd = [], per_week(req), account_days(req)
+    bad = [d for d in dd if d not in DAYS]
+    if bad:
+        out.append(f"delivery_days ({', '.join(bad)}: use Mon, Tue, Wed, Thu, Fri, Sat or Sun)")
+    if req.get("deliveries_per_week") not in (None, ""):
+        try:
+            n = int(req["deliveries_per_week"])
+        except (TypeError, ValueError):
+            n = -1
+        if not 1 <= n <= 6:
+            out.append(f"deliveries_per_week ({req['deliveries_per_week']!r}: 1 to 6)")
+        elif dd and n != len(dd):
+            out.append(f"deliveries_per_week ({n}, but delivery_days lists {len(dd)} days)")
+    for i, ln in enumerate(req.get("lines") or []):
+        weekly = str(ln.get("frequency", "")).lower() == "weekly"
+        days, tpw = line_days(ln), ln.get("times_per_week")
+        if tpw not in (None, ""):
+            try:
+                t = int(tpw)
+            except (TypeError, ValueError):
+                t = 0
+            if not 1 <= t <= max(acct, 1):
+                out.append(f"lines[{i}].times_per_week ({tpw!r}: 1 to the account's {acct} a week)")
+            elif t > 1 and not weekly:
+                out.append(f"lines[{i}].times_per_week ({t} a week only fits a weekly line)")
+            elif days and len(days) != t:
+                out.append(f"lines[{i}].days ({len(days)} days but times_per_week {t})")
+        if days:
+            off = [d for d in days if d not in dd]
+            if off:
+                out.append(f"lines[{i}].days ({', '.join(off)} isn't one of the account's delivery days)")
+            if not weekly and len(days) != 1:
+                out.append(f"lines[{i}].days (an {ln.get('frequency')} line goes on one day)")
+    return out
 
 
 def is_mat(sku: str) -> bool:
@@ -142,7 +209,7 @@ def deliveries(code: str, days: int = 1) -> float:
         return 2.0
     if c in ("1", "2", "3", "4"):
         return 1.0
-    if re.fullmatch(r"B(?:[1-9]|1[0-2])", c):
+    if re.fullmatch(r"B[1-4]", c):
         return 1 / 3
     return 0.0  # 0 no delivery, 9 first only, X stopped, F, Y
 
@@ -158,7 +225,7 @@ def instructions(req: dict) -> str:
     for ln in req["lines"]:
         f = str(ln["frequency"])
         code = {"weekly": "7"}.get(f.lower(), f if not f.lower() in FREQ_DELIVERIES else f"{f.upper()} (pick the week "
-                                   "code that fits the route's cycle: EOW 5 or 6, E4W 1-4, E12W B1-B12)")
+                                   "code that fits the route's cycle: EOW 5 or 6, E4W 1-4, E12W B1-B4)")
         if str(ln.get("frequency_code") or "").strip():
             code = f"{str(ln['frequency_code']).strip().upper()} (given in the request: use exactly this code)"
         if is_garment(ln["sku"]):  # billed on the wearers (phase 2), by the auto count of garments issued
@@ -167,6 +234,13 @@ def instructions(req: dict) -> str:
             continue
         inv = ln["quantity"]
         auto = ln.get("autocount") or (ln["quantity"] if str(ln["billing_basis"]).title() == "Usage" else max(1, round(ln["quantity"] / 2)))
+        pc, pdays, n = plan(req, ln)
+        if per_week(req) > 1:  # which of the customer's days this item goes out (frequency 8: tick them)
+            if str(ln.get("frequency", "")).lower() == "weekly":
+                code = (f"{pc} on {', '.join(pdays)}" if pdays else
+                        f"{pc} on {n} of the customer's days (choose to fit the route, spread through the week)")
+            else:
+                code += f", on {pdays[0]}" if pdays else ", on one of the customer's days (choose to fit the route)"
         lines.append(f"- {ln['sku']} {ln['description']}: price {ln['unit_price']}, price type {price_type(ln)}, "
                      f"starting inventory {inv}, autocount {auto}, frequency {code}")
     out = [
@@ -197,7 +271,8 @@ def instructions(req: dict) -> str:
     else:
         out.append("Everything not listed here stays at Alliant's default.")
     out.append("Report entered with a note that starts: customer_number=<acct-branch-cust>; stop_sequence=<n>; "
-               "codes=<sku>:<frequency code>,... (the codes you used for every line). Anything you couldn't enter: "
+               "codes=<sku>:<frequency code>,... (the codes you used for every line); days=<sku>:<Mon+Thu>,... (the "
+               "days ticked for every line, when the customer has more than one delivery day). Anything you couldn't enter: "
                "needs_person with what and why. Never type a price, price type or charge that isn't above.")
     return "\n".join(out)
 
@@ -370,7 +445,8 @@ class NewAccounts:
                     stop_sequence=int(seq.group(1)) if seq else None,
                     codes_chosen=[x for x in codes if str(next((l.get("frequency") for l in req.get("lines", [])
                                                                  if l.get("sku") == x["sku"]), "")).upper() in ("EOW", "E4W", "E12W")],
-                    invoice_check={k: v for k, v in check.items() if k not in ("ok", "why")},
+                    days_chosen=check.get("days", []),
+                    invoice_check={k: v for k, v in check.items() if k not in ("ok", "why", "days")},
                     verified_live=check.get("live", False))
         return "entered" if ok else "waiting: invoice check"
 
@@ -384,7 +460,7 @@ class NewAccounts:
             return {"ok": False, "live": False, "why": f"couldn't read Alliant live ({r['note']}); a person please check"}
         rows = {x.get("sku"): x for x in r["rows"]}
         exp = req.get("expected_invoice") or {}
-        diffs, total = [], 0.0
+        diffs, total, day_list = [], 0.0, []
         garments = [ln for ln in exp.get("lines") or [] if is_garment(str(ln.get("sku", "")))]
         for ln in exp.get("lines") or []:
             if ln in garments:
@@ -393,7 +469,13 @@ class NewAccounts:
             if not row:
                 diffs.append({"what": f"line {ln.get('sku')}", "expected": ln.get("amount"), "alliant": "not on the location"})
                 continue
-            days = sum(1 for d in ("d_mon", "d_tue", "d_wed", "d_thu", "d_fri", "d_sat", "d_sun") if row.get(d))
+            on = [d for d in DAYS if row.get("d_" + d.lower()) not in (None, "", 0, "0", False, "False")]
+            days = len(on)
+            want_days = line_days(basis) if (basis := next((l for l in req.get("lines", []) if l.get("sku") == ln.get("sku")), {})) else []
+            if per_week(req) > 1:
+                day_list.append({"sku": ln.get("sku"), "frequency_code": str(row.get("frequency", "")).strip(), "days": on})
+                if want_days and sorted(want_days, key=DAYS.index) != on:
+                    diffs.append({"what": f"days {ln.get('sku')}", "expected": want_days, "alliant": on})
             basis = next((l for l in req.get("lines", []) if l.get("sku") == ln.get("sku")), {})
             qty = float(row.get("inventory") or 0) if str(basis.get("billing_basis", "")).title() == "Inventory" \
                 else float(row.get("autocount") or 0)
@@ -409,6 +491,7 @@ class NewAccounts:
                "expected_total": exp.get("total"), "differences": diffs,
                "not_checked": ["service_charge", "inventory_charge", "fuel"]
                + [f"line {g.get('sku')} (garment: billed on the wearers; the garment watch follows it)" for g in garments]}
+        out["days"] = day_list
         out["ok"] = not diffs and abs(lines_expected - total) <= 1.00
         if not out["ok"]:
             out["why"] = f"{len(diffs)} difference(s) between the contract and Alliant; fix before install day"
@@ -573,16 +656,19 @@ class NewAccounts:
     def wearers(self, msg: dict, thread: str) -> str:
         rid = msg.get("request_id", "")
         known = self.load().get(rid)
-        if known and known.get("result"):
+        if known and known.get("result") and known.get("status") != "waiting":  # a waiting one may be posted again
             self.post(thread, "Already handled; here is the result again.", known["result"])
             return "repeat"
         cust = msg.get("customer_number", "")
         if re.fullmatch(r"\d{1,6}-[12]-\w{1,8}", cust or "") and not msg.get("wearers") and msg.get("wearer_count"):
-            # protocol v3.1 (11/11): names come from the Sales Handoff REST endpoint, never Slack; not built yet
-            self.result({"request_id": rid, "customer_number": cust}, thread, "waiting",
-                        f"{msg.get('wearer_count')} wearers ready, but I can't fetch them from the Sales Handoff endpoint "
-                        "yet; a person please enter them", customer_number=cust)
-            return "waiting: endpoint"
+            # protocol v3.1 (11/11): the names come from the Sales Handoff REST endpoint, never Slack
+            got, why = fetch_wearers(rid, cust, msg.get("wearer_count"))
+            if not got:
+                self.result({"request_id": rid, "customer_number": cust}, thread, "waiting",
+                            f"{msg.get('wearer_count')} wearers ready, but I couldn't fetch them ({why}); I'll try "
+                            "again if the request is posted again, or a person can enter them", customer_number=cust)
+                return "waiting: endpoint"
+            msg = dict(msg, wearers=got)
         if not re.fullmatch(r"\d{1,6}-[12]-\w{1,8}", cust or "") or not msg.get("wearers"):
             self.result({"request_id": rid}, thread, "waiting", "missing customer_number or wearers")
             return "waiting"
@@ -641,6 +727,38 @@ class NewAccounts:
                 data[rid] = {"result": res, "thread": thread, "status": "sent"}
                 self.save(data)
         return res["status"]
+
+
+def fetch_wearers(request_id: str, customer_number: str, count) -> tuple[list, str]:
+    """The wearer list from the Sales Handoff endpoint: GET <SALES_HANDOFF_URL>/wearers/<request_id> with the key
+    SALES_HANDOFF_KEY (Scott enters it on Donna's server). Returns (wearers, "") or ([], why). Never logs names."""
+    import urllib.error
+    import urllib.parse
+    import urllib.request
+    base, key = os.environ.get("SALES_HANDOFF_URL", "").rstrip("/"), os.environ.get("SALES_HANDOFF_KEY", "").strip()
+    if not base or not key:
+        return [], "the Sales Handoff endpoint isn't set up on Donna's server yet"
+    url = f"{base}/wearers/{urllib.parse.quote(request_id, safe='')}"
+    try:
+        req = urllib.request.Request(url, headers={"Authorization": f"Bearer {key}", "Accept": "application/json"})
+        with urllib.request.urlopen(req, timeout=15) as r:
+            body = json.loads(r.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        return [], f"the endpoint answered {e.code}"
+    except Exception as e:
+        return [], f"the endpoint didn't answer ({type(e).__name__})"
+    wearers = body.get("wearers") if isinstance(body, dict) else None
+    if body.get("request_id") not in (None, request_id) or body.get("customer_number") not in (None, customer_number):
+        return [], "the endpoint's answer is for a different request or customer"
+    if not isinstance(wearers, list) or not wearers or not all(isinstance(w, dict) and w.get("name") and
+                                                                isinstance(w.get("garments"), list) for w in wearers):
+        return [], "the endpoint's list is empty or not in the agreed shape"
+    try:
+        if count not in (None, "") and int(count) != len(wearers):
+            return [], f"Slack said {count} wearers but the endpoint has {len(wearers)}"
+    except (TypeError, ValueError):
+        pass
+    return wearers, ""
 
 
 def welcome_text(msg: dict) -> tuple[str, str, str]:

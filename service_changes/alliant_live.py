@@ -200,6 +200,20 @@ WHERE TABLE_NAME IN ('ricustmr', 'riempitm', 'riskugrp', 'inskusiz', 'popending_
        OR COLUMN_NAME LIKE '%pr_type%' OR COLUMN_NAME LIKE '%ptype%' OR COLUMN_NAME LIKE '%price%' OR COLUMN_NAME LIKE '%exp%'
        OR COLUMN_NAME LIKE '%wash%' OR COLUMN_NAME LIKE '%merch%')
 ORDER BY TABLE_NAME, ORDINAL_POSITION"""
+# Delivery times (Scott, 11/11: a delivery window for the welcome page): every column in Alliant that could hold a
+# time of day, in the tables about tickets, routes, stops, handhelds and signatures. Column names only, never data.
+SQL_DESCRIBE_TIMES = """
+SELECT c.TABLE_NAME, c.COLUMN_NAME, c.DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS c
+WHERE (c.DATA_TYPE IN ('datetime', 'datetime2', 'smalldatetime', 'time', 'datetimeoffset')
+       OR c.COLUMN_NAME LIKE '%time%' OR c.COLUMN_NAME LIKE '%[_]tm' OR c.COLUMN_NAME LIKE '%[_]tm[_]%'
+       OR c.COLUMN_NAME LIKE '%hour%' OR c.COLUMN_NAME LIKE '%start%' OR c.COLUMN_NAME LIKE '%[_]end%'
+       OR c.COLUMN_NAME LIKE '%arriv%' OR c.COLUMN_NAME LIKE '%depart%' OR c.COLUMN_NAME LIKE '%sign%'
+       OR c.COLUMN_NAME LIKE '%scan%' OR c.COLUMN_NAME LIKE '%gps%')
+  AND (c.TABLE_NAME LIKE 'ra%' OR c.TABLE_NAME LIKE '%route%' OR c.TABLE_NAME LIKE '%rte%' OR c.TABLE_NAME LIKE '%stop%'
+       OR c.TABLE_NAME LIKE '%deliv%' OR c.TABLE_NAME LIKE '%ticket%' OR c.TABLE_NAME LIKE '%invoice%'
+       OR c.TABLE_NAME LIKE '%mobile%' OR c.TABLE_NAME LIKE '%hand%' OR c.TABLE_NAME LIKE '%sign%'
+       OR c.TABLE_NAME LIKE '%driver%' OR c.TABLE_NAME LIKE '%gps%' OR c.TABLE_NAME LIKE '%visit%')
+ORDER BY c.TABLE_NAME, c.ORDINAL_POSITION"""
 LOOKUPS = ("items", "wearers", "garment", "holds", "next_delivery", "work_orders", "sku", "billing", "garment_billing")
 PRICED = {"sku", "billing"}  # lookups whose rows carry price / cost fields
 FORBIDDEN = re.compile(r"\b(insert|update|delete|merge|exec|execute|drop|alter|create|truncate|grant|revoke|into|"
@@ -476,11 +490,14 @@ def summary(result: dict, audience: str = "staff", limit: int = 5) -> str:
 
 # ---- the command line: sample output and the schema check ---------------------------------------------------------
 
-def describe() -> str:
+def describe(what: str = "") -> str:
+    """Alliant's own column list (INFORMATION_SCHEMA): the fields we map, or with "times" every possible time column."""
+    sql = SQL_DESCRIBE_TIMES if what == "times" else SQL_DESCRIBE
+    assert safe_sql(sql)
     conn = _connect()
     try:
         cur = conn.cursor()
-        cur.execute(SQL_DESCRIBE)
+        cur.execute(sql)
         rows = cur.fetchall()
     finally:
         conn.rollback()
@@ -497,7 +514,7 @@ def describe() -> str:
 def main(argv: list[str]) -> None:
     data_dir = os.environ.get("SERVICE_DESK_DATA", DATA)
     if argv[:1] == ["describe"]:
-        print(describe())
+        print(describe(argv[1] if len(argv) > 1 else ""))
         return
     if argv[:1] == ["sample"] and len(argv) >= 2:
         for a in argv[1:]:

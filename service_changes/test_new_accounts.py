@@ -233,8 +233,10 @@ def test_a_given_frequency_code_is_used_and_must_fit():
         r["lines"][line]["frequency_code"] = bad
         assert any("frequency_code" in g for g in na.missing(r)), bad
     r = copy.deepcopy(REQ)
-    r["lines"][1].update(frequency="E12W", frequency_code="b11")
-    assert na.missing(r) == [] and "frequency B11 (given" in na.instructions(r)
+    r["lines"][1].update(frequency="E12W", frequency_code="b4")
+    assert na.missing(r) == [] and "frequency B4 (given" in na.instructions(r)
+    r["lines"][1]["frequency_code"] = "B11"  # Alliant's 12-week codes are B1-B4 only
+    assert any("frequency_code" in g for g in na.missing(r))
 
 
 def test_the_sales_handoff_bot_is_known_without_a_setting(monkeypatch):
@@ -259,7 +261,7 @@ def test_wearer_names_stay_out_of_slack(d):
     slack, desk = d
     w = {"type": "alliant_wearer_request", "request_id": "w-9", "customer_number": "5045-1-00000", "wearer_count": 4}
     assert desk.new_accounts().on_message(msg(w)) == "waiting: endpoint"
-    assert "4 wearers ready" in slack.msgs[na.CHANNEL][-1]["text"]
+    assert "4 wearers ready" in slack.msgs[na.CHANNEL][-1]["text"] and "isn't set up" in slack.msgs[na.CHANNEL][-1]["text"]
     w = {"type": "alliant_wearer_request", "request_id": "w-10", "customer_number": "5045-1-00000",
          "wearers": [{"name": "Pat Example", "garments": [{"sku": "2-0413WH", "size": "L", "changes": 11}]}]}
     desk.new_accounts().on_message(msg(w))
@@ -267,3 +269,62 @@ def test_wearer_names_stay_out_of_slack(d):
     desk.jobs().result(job["id"], "entered", "Added Pat Example #12 with 11 coats")
     posts = "\n".join(m["text"] for m in slack.msgs[na.CHANNEL])
     assert "1 wearer entered" in posts and "Pat Example" not in posts
+
+
+def test_deliveries_per_week_and_each_items_days():
+    r = copy.deepcopy(REQ)
+    r.update(deliveries_per_week=5, delivery_days=["Mon", "Tue", "Wed", "Thu", "Fri"])
+    r["lines"][0]["times_per_week"] = 2                      # towels twice a week, days chosen at entry
+    r["lines"][1]["days"] = ["Wed"]                          # the EOW mat on Wednesdays
+    r["lines"].append({"sku": "10-01-01", "description": "MAT 3X5", "billing_basis": "Usage", "quantity": 2,
+                       "unit_price": 5.0, "frequency": "weekly", "days": ["Mon", "Thu"]})
+    r["lines"].append({"sku": "5-01-01", "description": "BAR TOWEL", "billing_basis": "Usage", "quantity": 100,
+                       "unit_price": 0.2, "frequency": "weekly"})  # every delivery
+    assert na.missing(r) == []
+    text = na.instructions(r)
+    assert "frequency 8 on 2 of the customer's days" in text
+    assert "on Wed" in text and "frequency 8 on Mon, Thu" in text and "frequency 8 on Mon, Tue, Wed, Thu, Fri" in text
+    one = copy.deepcopy(r)
+    one["lines"][2]["days"] = ["Thu"]
+    assert "frequency 7 on Thu" in na.instructions(one)
+    for change, what in ((dict(deliveries_per_week=3), "deliveries_per_week"),):
+        b = copy.deepcopy(r); b.update(change)
+        assert any(g.startswith(what) for g in na.missing(b))
+    b = copy.deepcopy(r); b["lines"][2]["days"] = ["Mon", "Sat"]
+    assert any("isn't one of the account's delivery days" in g for g in na.missing(b))
+    b = copy.deepcopy(r); b["lines"][1]["times_per_week"] = 2
+    assert any("only fits a weekly line" in g for g in na.missing(b))
+    b = copy.deepcopy(r); b["lines"][2]["times_per_week"] = 3
+    assert any("2 days but times_per_week 3" in g for g in na.missing(b))
+    tlg = copy.deepcopy(REQ)
+    tlg.update(company="TLG", deliveries_per_week=6, delivery_days=["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"])
+    assert na.missing(tlg) == []
+
+
+def test_wearers_are_fetched_from_the_endpoint(d, monkeypatch):
+    slack, desk = d
+    import io
+    import urllib.request
+    seen = {}
+    def fake(req, timeout=0):
+        seen.update(url=req.full_url, auth=req.headers.get("Authorization"))
+        return io.BytesIO(json.dumps({"request_id": "w-11", "customer_number": "5045-1-00000", "wearers": [
+            {"name": "Pat Example", "garments": [{"sku": "2-0413WH", "size": "L", "changes": 11}]},
+            {"name": "Sam Example", "garments": [{"sku": "2-0413WH", "size": "M", "changes": 11}]}]}).encode())
+    monkeypatch.setattr(urllib.request, "urlopen", fake)
+    monkeypatch.setenv("SALES_HANDOFF_URL", "http://127.0.0.1:8099/api/handoff")
+    monkeypatch.setenv("SALES_HANDOFF_KEY", "test-key")
+    w = {"type": "alliant_wearer_request", "request_id": "w-11", "customer_number": "5045-1-00000", "wearer_count": 2}
+    assert desk.new_accounts().on_message(msg(w)) == "queued wearers"
+    assert seen == {"url": "http://127.0.0.1:8099/api/handoff/wearers/w-11", "auth": "Bearer test-key"}
+    job = desk.jobs().next()
+    assert "Pat Example" in job["ticket"]  # names go to her workstation only
+    assert not any("Pat Example" in m["text"] for m in slack.msgs[na.CHANNEL])
+    w2 = dict(w, request_id="w-12", wearer_count=3)
+    monkeypatch.setattr(urllib.request, "urlopen", lambda req, timeout=0: io.BytesIO(json.dumps(
+        {"request_id": "w-12", "wearers": [{"name": "A", "garments": []}]}).encode()))
+    assert desk.new_accounts().on_message(msg(w2)) == "waiting: endpoint"
+    assert "Slack said 3 wearers but the endpoint has 1" in slack.msgs[na.CHANNEL][-1]["text"]
+    monkeypatch.setattr(urllib.request, "urlopen", lambda req, timeout=0: io.BytesIO(json.dumps(
+        {"request_id": "w-12", "wearers": [{"name": c, "garments": []} for c in "ABC"]}).encode()))
+    assert desk.new_accounts().on_message(msg(w2)) == "queued wearers"  # posted again once it's fixed
