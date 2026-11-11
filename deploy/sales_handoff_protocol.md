@@ -192,6 +192,7 @@ and saves only after the `stock_ok` message (section 5).
   "delivery_days": ["Tue"],
   "install_date": "2026-11-17",
   "codes_chosen": [{"sku": "10-07-05", "frequency_code": "6"}],
+  "days_chosen": [],
   "invoice_check": {"expected_total": 119.50, "alliant_total": 119.50, "differences": []},
   "verified_live": true,
   "notes": ""
@@ -206,7 +207,9 @@ and saves only after the `stock_ok` message (section 5).
 - `failed`: say why in `notes`. Sales Handoff then puts the buttons back so a person can enter it.
 
 `invoice_check.differences`: `[{"what": "line 5-03-01" | "service_charge" | "inventory_charge" | "fuel" | "total",
-"expected", "alliant"}]`. `codes_chosen` is written back to Salesforce by the sync.
+"expected", "alliant"}]`; a line whose ticked days differ from the request's `days` shows as `"days <sku>"`.
+`codes_chosen` is written back to Salesforce by the sync. `days_chosen` (accounts with more than one delivery day):
+`[{"sku", "frequency_code", "days": ["Mon", "Thu"]}]` for every line, as read back from Alliant.
 
 On `entered`, Sales Handoff runs the same steps as a manual entry: the route notice, the #production notice and the reminders.
 
