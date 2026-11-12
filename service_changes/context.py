@@ -76,33 +76,34 @@ def service_day(ts: str | float) -> str:
     return DAYS[datetime.fromtimestamp(float(ts), ALASKA).weekday()]
 
 
-def holidays(year: int) -> list[tuple[str, "date"]]:
-    from datetime import date, timedelta
-    nov1 = date(year, 11, 1)
-    thanksgiving = nov1 + timedelta(days=(3 - nov1.weekday()) % 7 + 21)  # the fourth Thursday
-    return [("Thanksgiving", thanksgiving), ("Christmas Day", date(year, 12, 25)), ("New Year's Day", date(year + 1, 1, 1))]
+# Holiday deliveries, as Scott sets them each year (11/12): (the day, why, the day its stops are delivered instead).
+# Every other day, holidays included, is a normal delivery day. A holiday not listed: the office confirms.
+HOLIDAY_MOVES = [
+    ("2026-11-26", "Thanksgiving", "2026-11-25"),
+    ("2026-12-24", "Christmas Eve", "2026-12-23"),
+    ("2026-12-31", "New Year's Eve", "2026-12-30"),
+]
+HOLIDAYS_TO_CONFIRM = [("2026-12-25", "Christmas Day"), ("2027-01-01", "New Year's Day")]
 
 
 def holiday_schedule(today: "date | None" = None, days: int = 60) -> str:
-    """Holiday deliveries (Scott, 11/12): we work and deliver every holiday except Thanksgiving, Christmas Day and New
-    Year's Day, whose deliveries slide one day earlier (Thanksgiving Thursday -> Wednesday); every other day stays the
-    same. A holiday on a Monday or a weekend: the office confirms. Lines for the ones in the next `days` days."""
-    from datetime import timedelta
+    """What customers may be told about holiday deliveries in the next `days` days (HOLIDAY_MOVES)."""
+    from datetime import date, timedelta
     today = today or datetime.now(ALASKA).date()
+    soon = lambda d: today <= d <= today + timedelta(days=days)
     out = []
-    for name, d in holidays(today.year - 1) + holidays(today.year):
-        if not today <= d <= today + timedelta(days=days):
-            continue
-        if d.weekday() in (1, 2, 3, 4):  # Tuesday to Friday
-            e = d - timedelta(days=1)
-            out.append(f"- {name}, {d:%A %B} {d.day}: {d:%A}'s deliveries move one day earlier to {e:%A %B} {e.day}; "
-                       "every other day's deliveries stay the same.")
-        else:
-            out.append(f"- {name}, {d:%A %B} {d.day}: the office will confirm that week's schedule.")
+    for day, why, to in HOLIDAY_MOVES:
+        d, t = date.fromisoformat(day), date.fromisoformat(to)
+        if soon(d):
+            out.append(f"- {why}: {d:%A %B} {d.day} stops are delivered on {t:%A %B} {t.day} instead.")
+    for day, why in HOLIDAYS_TO_CONFIRM:
+        d = date.fromisoformat(day)
+        if soon(d):
+            out.append(f"- {why}, {d:%A %B} {d.day}: the office will confirm that day's deliveries.")
     if not out:
         return ""
-    return ("Holiday deliveries (we work every holiday except these; say only what is listed, and for anything else "
-            "say the office will confirm):\n" + "\n".join(out))
+    return ("Holiday deliveries (every other day, holidays included, is a normal delivery day; say only what is "
+            "listed, and for anything else say the office will confirm):\n" + "\n".join(out))
 
 
 OFFICE_PHONES = {"Snow White Linen": "(907) 222-7738", "The Laundry Group": "(907) 519-0761"}

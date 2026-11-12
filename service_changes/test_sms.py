@@ -448,8 +448,8 @@ def test_holiday_schedule_is_in_what_customers_can_be_told():
     from datetime import date
     from .context import holiday_schedule
     s = holiday_schedule(date(2026, 11, 12))
-    assert "Thanksgiving, Thursday November 26: Thursday's deliveries move one day earlier to Wednesday November 25" in s
-    assert "Christmas Day, Friday December 25" in s and "Thursday December 24" in s
-    assert "New Year's Day, Friday January 1" in s and "Thursday December 31" in s
-    assert "office will confirm" in holiday_schedule(date(2027, 12, 1))  # Christmas 2027 is a Saturday
+    assert "Thanksgiving: Thursday November 26 stops are delivered on Wednesday November 25 instead." in s
+    assert "Christmas Eve: Thursday December 24 stops are delivered on Wednesday December 23 instead." in s
+    assert "New Year's Eve: Thursday December 31 stops are delivered on Wednesday December 30 instead." in s
+    assert "Christmas Day, Friday December 25: the office will confirm" in s
     assert holiday_schedule(date(2027, 3, 1)) == ""
