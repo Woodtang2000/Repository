@@ -227,7 +227,8 @@ def main(data_dir, out_dir, today):
         # A bank receipt with no suggested account: hold any customer whose name shows up in the payer text.
         words = [w for w in re.findall(r"[A-Z]{5,}", name.upper()) if w not in GENERIC]
         for payer, what in unmatched_payers:
-            if any(w in payer for w in words):
+            # Whole words only: "HEALTH" (Active Health) must not match "HEALTHCARE" (an HCA receipt).
+            if any(re.search(rf"\b{re.escape(w)}\b", payer) for w in words):
                 pending[(co, acct)].append(what + " (matched by name)")
 
         billing_emails = " ".join(cust[c]["email"] for c in codes if c in cust)
