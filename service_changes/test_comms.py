@@ -55,3 +55,32 @@ def test_tests_never_reach_the_real_slack(monkeypatch):
     monkeypatch.setenv("SLACK_BOT_TOKEN", "xoxb-real-looking")
     monkeypatch.setattr(comms, "_post", lambda *a: (_ for _ in ()).throw(AssertionError("posted")))
     comms.log("in", "email", "jane@acme.com", "add 200 shop towels")  # pytest is running: nothing posted
+
+
+def test_an_unlinked_email_gets_a_suggestion_and_buttons(slack, tmp_path, monkeypatch):
+    (tmp_path / "customers.csv").write_text("account,name,route,service_days\n5040-1-00000,CHILIS,4,Tue\n"
+                                            "1950-1-00000,ACME TIRE,2,Mon\n1950-1-00001,ACME TIRE WASILLA,2,Mon\n")
+    (tmp_path / "customer_cards.csv").write_text("account,name,route,email,location_email,phone\n"
+                                                 "1950-1-00000,ACME TIRE,2,ap@acmetire.com,,\n")
+    comms._ALLIANT.clear()
+    monkeypatch.setattr(comms, "_client", slack)
+    import service_changes.sms as sms
+    monkeypatch.setattr(sms, "open_card", lambda *a, **k: None)
+    monkeypatch.setattr(sms, "cards_channel", lambda s, f: "CC")
+    seen = []
+    slack.chat_postMessage = (lambda orig: lambda channel, text, thread_ts=None, **kw: (seen.append(kw), orig(channel, text, thread_ts))[1])(slack.chat_postMessage)
+    comms.log("in", "email", "jane@acmetire.com", "Can we add 20 bar towels?")
+    head = seen[0]
+    blocks = head["blocks"]
+    assert "Best match: *1950-1-00000* ACME TIRE" in blocks[1]["elements"][0]["text"]
+    ids = [e["action_id"] for e in blocks[2]["elements"]]
+    assert ids[0] == "msglink_add1" and "msglink_all" in ids and "msglink_pick" in ids and "msglink_block" not in ids
+    import json
+    assert json.loads(blocks[2]["elements"][0]["value"]) == {"a": "1950-1-00000", "m": 0, "k": "jane@acmetire.com"}
+
+
+def test_a_linked_customer_gets_no_buttons(slack, monkeypatch):
+    seen = []
+    slack.chat_postMessage = (lambda orig: lambda channel, text, thread_ts=None, **kw: (seen.append(kw), orig(channel, text, thread_ts))[1])(slack.chat_postMessage)
+    comms.log("in", "text", "+19074069656", "Thanks!")
+    assert "blocks" not in seen[0]

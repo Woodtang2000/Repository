@@ -1134,3 +1134,34 @@ def test_bill_can_pause_and_resume_donna_but_office_staff_cannot(setup, tmp_path
     ev = slack.say("DBILL", "U9SGPJP0C", "Donna resume")
     assert d.dm(dict(ev, channel="DBILL")) == "alliant resume" and not d.jobs().load()["paused"]
     assert not d.is_owner("U9SGPJP0C")  # pause/resume/retry only, not Scott's owner mode
+
+
+def test_customer_messages_buttons_approve_the_persons_new_contacts_card(setup, monkeypatch, tmp_path):
+    import json as _json
+    from types import SimpleNamespace
+    from . import sms, comms
+    slack, d = setup
+    d.data_dir = str(tmp_path)
+    monkeypatch.setenv("SERVICE_DESK_DATA", str(tmp_path))
+    monkeypatch.setattr(d, "is_office", lambda u: u == "U2")
+    monkeypatch.setattr(d.alliant, "customers", [SimpleNamespace(account="1950-1-00000", name="ACME TIRE", route="2")])
+    monkeypatch.setattr(sms, "cards_channel", lambda s, f: "NC")
+    slack.msgs["NC"], slack.msgs["CM"] = [], []
+    slack.chat_postEphemeral = lambda **kw: None
+    card = slack.chat_postMessage("NC", "", metadata={"event_type": desk.KIND, "event_payload": {
+        "kind": "email_signup", "phone": "jane@acmetire.com", "accounts": ["1950-1-00000"]}}, attachments=[{"blocks": []}])
+    line = slack.chat_postMessage("CM", "📧 *jane@acmetire.com* · not linked to an account yet")
+    monkeypatch.setattr(sms, "open_card", lambda s, ch, key: slack.find("NC", card["ts"]) if key == "jane@acmetire.com" else None)
+    slack.conversations_history = lambda channel, **kw: {"messages": [slack.find(channel, line["ts"])]}
+    tap = lambda uid, act: {"user": {"id": uid}, "container": {"channel_id": "CM", "message_ts": line["ts"]}, "actions": [act]}
+    act = {"action_id": "msglink_add1", "value": _json.dumps({"a": "1950-1-00000", "m": 0, "k": "jane@acmetire.com"})}
+    assert d.msg_link(tap("U9", act)) == "ignored: not office"
+    assert d.msg_link(tap("U2", act)) == "msg link jane@acmetire.com -> 1950-1-00000"
+    p = desk.meta(slack.find("NC", card["ts"]))
+    assert p["accounts"] == ["1950-1-00000"] and p["approved_by"] == "U2"  # the email desk finishes it from here
+    # nobody waiting: an approved card is posted for the desk to finish
+    monkeypatch.setattr(sms, "open_card", lambda *a: None)
+    act2 = {"action_id": "msglink_add1", "value": _json.dumps({"a": "1950-1-00000", "m": 0, "k": "+19075550100"})}
+    d.msg_link(tap("U2", act2))
+    new = [m for m in slack.msgs["NC"] if (m.get("metadata") or {}).get("event_payload", {}).get("phone") == "+19075550100"]
+    assert new and new[0]["metadata"]["event_payload"]["kind"] == "sms_signup" and new[0]["metadata"]["event_payload"]["approved_by"] == "U2"

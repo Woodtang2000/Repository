@@ -1015,6 +1015,70 @@ class Desk:
                                                   "move": bool(choice.get("m"))}})
         return f"{'move' if choice.get('m') else 'add'} {p.get('phone')} -> {', '.join(targets[:5])}"
 
+    def msg_link(self, payload: dict) -> str:
+        """The Add to … buttons on a #customer-messages line (Scott, 11/12): the office links that person through their
+        #new-contacts card, approved as if tapped there; with no card waiting, an approved one is posted. The texting or
+        email desk then finishes it (sms.office_pass): links them, sets up Salesforce and tells them they're set up."""
+        from . import comms
+        from .sms import cards_channel, open_card
+        user = payload.get("user", {}).get("id")
+        act = next((x for x in payload.get("actions", []) if x.get("action_id", "").startswith("msglink_")), {})
+        ch = (payload.get("container") or {}).get("channel_id")
+        ts = (payload.get("container") or {}).get("message_ts")
+        if not (self.is_office(user) or self.is_owner(user)):
+            self.slack.chat_postEphemeral(channel=ch, user=user, text="Only the office can link someone to an account.")
+            return "ignored: not office"
+        if act.get("action_id") == "msglink_pick":
+            return "locations picked (waiting for Add to picked)"
+        choice = json.loads(act.get("value") or "{}")
+        key = str(choice.get("k") or "")
+        picked = [o["value"] for blk in ((payload.get("state") or {}).get("values") or {}).values()
+                  for aid, v in blk.items() if aid == "msglink_pick" for o in (v.get("selected_options") or [])]
+        if choice.get("sel"):
+            if not picked:
+                self.slack.chat_postEphemeral(channel=ch, user=user, text="Pick one or more locations first, then tap Add to picked.")
+                return "nothing picked"
+            targets = picked
+        elif choice.get("all"):
+            targets = sorted(c.account for c in self.alliant.customers if c.account.split("-")[0] == str(choice["all"]))
+        else:
+            targets = [choice.get("a")]
+        targets = [t for t in targets if t]
+        if not key or not targets:
+            return "nothing to link"
+        who = self.name(user).split()[0] if self.name(user) else "office"
+        cards = cards_channel(self.slack, self.desk_id)
+        kind = "email_signup" if "@" in key else "sms_signup"
+        card = open_card(self.slack, cards, key)
+        where = (f"{targets[0]} " + next((c.name for c in self.alliant.customers if c.account == targets[0]), "")).strip() \
+            if len(targets) == 1 else f"{len(targets)} locations"
+        if card:  # their waiting card, approved as if the button were tapped there
+            p = meta(card) or {}
+            a = restyle(card, GOLD, status=f"⏳ Adding to {where} · {who} (from #customer-messages)")
+            for att in a:
+                att["blocks"] = [b for b in att.get("blocks") or [] if b.get("block_id") != "link"]
+            self.slack.chat_update(channel=cards, ts=card["ts"], text="", attachments=a, metadata={
+                "event_type": KIND, "event_payload": {**p, "accounts": targets, "approved_by": user, "move": False}})
+        else:  # nobody waiting: a card already approved, so the desk links them the same way
+            self.slack.chat_postMessage(channel=cards, text="", unfurl_links=False, attachments=attachment(
+                f"{'📧' if '@' in key else '📱'} *{key}*: linked from #customer-messages by {who}\n"
+                f"⏳ Adding to {where}", button=False), metadata={
+                "event_type": KIND, "event_payload": {"kind": kind, "phone": key, "accounts": targets, "name": "",
+                                                      "approved_by": user, "move": False}})
+        comms.mark_linked(key)
+        if ch and ts:
+            try:
+                r = self.slack.conversations_history(channel=ch, latest=ts, inclusive=True, limit=1)
+                m = next((x for x in r.get("messages", []) if x["ts"] == ts), {})
+                head = m.get("text", "")
+                self.slack.chat_update(channel=ch, ts=ts, text=head, blocks=[
+                    {"type": "section", "text": {"type": "mrkdwn", "text": head}},
+                    {"type": "context", "elements": [{"type": "mrkdwn", "text": f"⏳ Linking to {where} · {who}. Donna "
+                                                      "finishes it in #new-contacts and tells them they're set up."}]}])
+            except Exception as e:
+                print(time.strftime("%H:%M"), "customer-messages line not updated:", str(e)[:150], flush=True)
+        return f"msg link {key} -> {', '.join(targets[:5])}"
+
     def announcer(self):
         """Messages to many customers at once, sent only when the office taps Send (announce.py)."""
         if "_announcer" not in self.__dict__:
@@ -2198,6 +2262,15 @@ class Desk:
                     except Exception as e:
                         print(time.strftime("%H:%M"), "redate approve error:", e, flush=True)
                 threading.Thread(target=approve, daemon=True).start()
+                return
+            if req.type == "interactive" and req.payload.get("type") == "block_actions" and any(
+                    x.get("action_id", "").startswith("msglink_") for x in req.payload.get("actions", [])):
+                def msglink(p=req.payload):  # "Add to Chili's" on a #customer-messages line
+                    try:
+                        print(time.strftime("%H:%M"), "msg link:", self.msg_link(p), flush=True)
+                    except Exception as e:
+                        print(time.strftime("%H:%M"), "msg link error:", e, flush=True)
+                threading.Thread(target=msglink, daemon=True).start()
                 return
             if req.type == "interactive" and req.payload.get("type") == "block_actions" and any(
                     x.get("action_id", "").startswith("link_") for x in req.payload.get("actions", [])):
