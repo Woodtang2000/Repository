@@ -553,6 +553,10 @@ def customer_facts(alliant: Alliant, account: str) -> str:
         for w in wearers:
             g = alliant.garments.get((account, w.employee), {})
             out.append(f"- {w.name}: " + (", ".join(f"{k} x{v}" for k, v in g.items()) or "no garments"))
+    from .context import holiday_schedule
+    hol = holiday_schedule()
+    if hol:  # "what's your Thanksgiving schedule?" (Scott, 11/12)
+        out.append(hol)
     return "\n".join(out)
 
 

@@ -76,6 +76,35 @@ def service_day(ts: str | float) -> str:
     return DAYS[datetime.fromtimestamp(float(ts), ALASKA).weekday()]
 
 
+def holidays(year: int) -> list[tuple[str, "date"]]:
+    from datetime import date, timedelta
+    nov1 = date(year, 11, 1)
+    thanksgiving = nov1 + timedelta(days=(3 - nov1.weekday()) % 7 + 21)  # the fourth Thursday
+    return [("Thanksgiving", thanksgiving), ("Christmas Day", date(year, 12, 25)), ("New Year's Day", date(year + 1, 1, 1))]
+
+
+def holiday_schedule(today: "date | None" = None, days: int = 60) -> str:
+    """Holiday deliveries (Scott, 11/12): we work and deliver every holiday except Thanksgiving, Christmas Day and New
+    Year's Day, whose deliveries slide one day earlier (Thanksgiving Thursday -> Wednesday); every other day stays the
+    same. A holiday on a Monday or a weekend: the office confirms. Lines for the ones in the next `days` days."""
+    from datetime import timedelta
+    today = today or datetime.now(ALASKA).date()
+    out = []
+    for name, d in holidays(today.year - 1) + holidays(today.year):
+        if not today <= d <= today + timedelta(days=days):
+            continue
+        if d.weekday() in (1, 2, 3, 4):  # Tuesday to Friday
+            e = d - timedelta(days=1)
+            out.append(f"- {name}, {d:%A %B} {d.day}: {d:%A}'s deliveries move one day earlier to {e:%A %B} {e.day}; "
+                       "every other day's deliveries stay the same.")
+        else:
+            out.append(f"- {name}, {d:%A %B} {d.day}: the office will confirm that week's schedule.")
+    if not out:
+        return ""
+    return ("Holiday deliveries (we work every holiday except these; say only what is listed, and for anything else "
+            "say the office will confirm):\n" + "\n".join(out))
+
+
 OFFICE_PHONES = {"Snow White Linen": "(907) 222-7738", "The Laundry Group": "(907) 519-0761"}
 
 

@@ -442,3 +442,14 @@ def test_one_person_one_card_in_new_contacts_and_its_thread_says_what_happened(d
         assert any(p["channel"] == "D1" and p["meta"].get("kind") == "ticket" for p in slack.posts)  # the request
     finally:
         sms._CARDS.clear()
+
+
+def test_holiday_schedule_is_in_what_customers_can_be_told():
+    from datetime import date
+    from .context import holiday_schedule
+    s = holiday_schedule(date(2026, 11, 12))
+    assert "Thanksgiving, Thursday November 26: Thursday's deliveries move one day earlier to Wednesday November 25" in s
+    assert "Christmas Day, Friday December 25" in s and "Thursday December 24" in s
+    assert "New Year's Day, Friday January 1" in s and "Thursday December 31" in s
+    assert "office will confirm" in holiday_schedule(date(2027, 12, 1))  # Christmas 2027 is a Saturday
+    assert holiday_schedule(date(2027, 3, 1)) == ""
