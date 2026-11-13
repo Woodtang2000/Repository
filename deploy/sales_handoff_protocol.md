@@ -113,6 +113,7 @@ passes: **every required field present**. The person clicking confirms the route
   "version": "3.1",
   "request_id": "opp-006XXXXXXXXXXXXXXX-1",
   "requested_by": "Sonja Burke",
+  "wrapup_done_by": "Sonja Burke",
   "company": "SW",
   "opportunity_id": "006XXXXXXXXXXXXXXX",
   "account_name": "Team CC",
@@ -158,6 +159,8 @@ passes: **every required field present**. The person clicking confirms the route
 ```
 
 **Required** (all from the signed contract, or the office person's confirmation): everything above `optional`.
+`wrapup_done_by` is the person who completed the wrap-up form (route, days, deliveries per week). A request without it
+is never entered: Donna replies `waiting` (Scott, 11/13). The "Donna enter it" button should not appear before then.
 `lines` includes every SKU the location will use, including garment SKUs with their prices and contract count
 (billed per delivery), so the catalog has them before phase 2. `billing_basis` is "Usage" or "Inventory"; an Inventory line may add `autocount`;
 an EOW, E4W or E12W line may add `frequency_code` (the exact Alliant code).

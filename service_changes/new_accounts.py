@@ -66,6 +66,8 @@ def parse(text: str) -> dict | None:
 
 def missing(req: dict) -> list[str]:
     out = [k for k in REQUIRED if req.get(k) in (None, "", [], {})]
+    if not str(req.get("wrapup_done_by") or "").strip():  # Scott, 11/13: never from a click before the wrap-up form
+        out.append("wrapup_done_by (the wrap-up form isn't done: whoever completes it, then Donna enter it)")
     for i, ln in enumerate(req.get("lines") or []):
         out += [f"lines[{i}].{k}" for k in LINE_REQUIRED if ln.get(k) in (None, "")]
         if str(ln.get("frequency", "")).lower() not in FREQ_DELIVERIES and not re.fullmatch(

@@ -21,6 +21,7 @@ REQ = {
     "expected_invoice": {"period_weeks": 4, "lines": [{"sku": "5-03-01", "amount": 46.40}, {"sku": "10-07-05", "amount": 26.50}],
                          "service_charge": 13.12, "inventory_charge": 9.48, "fuel": 24.0, "total": 119.50},
     "phase": 1, "needs_stock_ok": False, "optional": {"customer_number": None, "delivery_instructions": "Back door"},
+    "wrapup_done_by": "Sonja Burke",
 }
 
 
@@ -385,3 +386,9 @@ def test_a_route_that_doesnt_run_that_day_is_never_entered(d, monkeypatch):
     assert desk.new_accounts().on_message(msg(REQ)) == "waiting: route"
     assert "route 6 has no Tue stops" in slack.msgs[na.CHANNEL][-1]["text"]
     assert not desk.jobs().load()["jobs"]
+
+
+def test_no_entry_before_the_wrapup_form_is_done():
+    r = copy.deepcopy(REQ)
+    del r["wrapup_done_by"]
+    assert any(g.startswith("wrapup_done_by") for g in na.missing(r))
