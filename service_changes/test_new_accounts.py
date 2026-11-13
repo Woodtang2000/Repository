@@ -344,3 +344,20 @@ def test_test_mode_shows_what_donna_would_enter_and_checks_the_math(d, monkeypat
     desk.new_accounts().on_message(msg(bad))
     res = json.loads(slack.msgs[na.CHANNEL][-1]["text"].split("```json")[1].split("```")[0])
     assert res["invoice_check"]["differences"] == [{"what": "total", "expected": 110.02, "donna": 119.5}]
+
+
+def test_catch_up_finds_a_new_request_in_an_older_thread(d, monkeypatch):
+    slack, desk = d
+    import time as _t
+    now = _t.time()
+    old_ts, new_ts = f"{now - 4 * 86400:.6f}", f"{now - 3600:.6f}"   # thread started 4 days ago, reply an hour ago
+    req = dict(copy.deepcopy(REQ), request_id="opp-old-4")
+    reply = {**msg(req, thread=old_ts), "ts": new_ts}
+    monkeypatch.setattr(slack, "conversations_history", lambda channel, oldest, **kw: {"messages": [
+        {"ts": old_ts, "user": "UHANDOFF", "text": "Delta handoff", "reply_count": 14, "latest_reply": new_ts}]
+        if float(oldest) <= float(old_ts) else []}, raising=False)
+    monkeypatch.setattr(slack, "conversations_replies", lambda channel, ts, **kw: {"messages": [
+        {"ts": old_ts, "user": "UHANDOFF", "text": "Delta handoff"}, reply]}, raising=False)
+    desk._na_pass = 0
+    desk.new_accounts_pass(now)
+    assert "opp-old-4" in desk.new_accounts().load()

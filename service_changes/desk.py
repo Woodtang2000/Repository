@@ -1101,8 +1101,13 @@ class Desk:
         self._na_pass = now
         try:
             seen = self.new_accounts().load()
-            r = self.slack.conversations_history(channel=new_accounts.CHANNEL, oldest=f"{now - 3 * 86400:.6f}", limit=100)
+            # threads started up to 30 days ago, opened when they had a reply in the last 3 days: a corrected request
+            # (-2, -3, -4) is a reply in the location's first thread, which can be older (Delta Western, 11/13)
+            r = self.slack.conversations_history(channel=new_accounts.CHANNEL, oldest=f"{now - 30 * 86400:.6f}", limit=200)
             for top in r.get("messages", []):
+                recent = float(top.get("latest_reply") or top.get("ts") or 0) >= now - 3 * 86400
+                if not recent:
+                    continue
                 msgs = [top]
                 if top.get("reply_count"):
                     msgs += self.slack.conversations_replies(channel=new_accounts.CHANNEL, ts=top["ts"], limit=200)["messages"][1:]
