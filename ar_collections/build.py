@@ -273,6 +273,7 @@ def main(data_dir, out_dir, today):
         contact_weeks = sorted({week_start(d(r.get("contacted_on") or r.get("date"))) for r in mine
                                 if r["action"] in ("reminder", "follow-up", "call")})
         contacted_this_week = week_start(today) in contact_weeks
+        last_contact_week = max((w for w in contact_weeks if w < week_start(today)), default=None)
         step = len([w for w in contact_weeks if w < week_start(today)]) + 1
 
         reason = ""
@@ -305,7 +306,8 @@ def main(data_dir, out_dir, today):
                "over_45": round(over45, 2), "over_90": round(over90, 2), "oldest_item": oldest,
                "last_payment": lp or f"none since {pay_months[0] if pay_months else '?'}",
                "group": group, "unapplied_credit": round(sum(c["amount"] for c in credit), 2), "escalation_step": step,
-               "suggested_action": action, "hold_reason": reason}
+               "suggested_action": action, "hold_reason": reason,
+               "last_contact_week": last_contact_week}
         work.append(row)
         if not delivery and active:
             sonja_fix.append({"company": co, "account": acct, "name": name, "issue": "no delivery day in Alliant"})
@@ -422,7 +424,10 @@ def draft(row, chase, credit, today):
     subject_name = nice(row["name"])
     if row["suggested_action"] == "follow-up":
         subject = f"Following up: open invoices for {subject_name}"
-        opener = ("I'm following up on my note from last week about the open invoices on your account. "
+        lcw = row.get("last_contact_week")
+        when = ("my note from last week" if lcw is None or (week_start(today) - lcw).days <= 7
+                else "my earlier note")
+        opener = (f"I'm following up on {when} about the open invoices on your account. "
                   "I know these can get buried, so here they are again.")
     elif row["group"] == "paying, has old items":
         subject = f"A few invoices that may have slipped through - {subject_name}"
