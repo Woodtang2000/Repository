@@ -353,13 +353,21 @@ class NewAccounts:
         if gaps:
             self.result(req, thread, "waiting", "missing or unclear: " + "; ".join(gaps))
             return "waiting: missing"
+        block, warn = route_fit(getattr(self.desk, "alliant", None), req)
+        if block:  # the route doesn't run that day: never entered until a person sends a corrected request
+            self.result(req, thread, "waiting", "route check: " + "; ".join(block), route_check={"problems": block,
+                                                                                                    "warnings": warn})
+            return "waiting: route"
+        note = (" ⚠️ Route check: " + "; ".join(warn) + ". Entering it as confirmed; tell me if it's wrong.") if warn else ""
+        req = dict(req, _route_warning=note) if note else req
         with self.lock:
             data = self.load()
             data[rid] = {"req": req, "thread": thread, "status": "prepared", "at": time.time()}
             self.save(data)
         if req.get("needs_stock_ok"):
             self.result(req, thread, "waiting", "prepared; waiting for Ana's stock OK before saving"
-                        + (" (TEST MODE: nothing will be sent to Alliant)" if test_mode() else ""),
+                        + (" (TEST MODE: nothing will be sent to Alliant)" if test_mode() else "")
+                        + req.get("_route_warning", ""),
                         **(dict(preview(req), test=True) if test_mode() else {}))
             return "waiting: stock"
         return self.queue(rid)
@@ -387,9 +395,12 @@ class NewAccounts:
         if test_mode():
             self.result(req, rec["thread"], "waiting", "TEST MODE: every check passed and the Alliant entry is ready, "
                         "but nothing was sent to Alliant (this is #sales-handoff-test). codes_chosen, lines and "
-                        "invoice_check show what I would enter; the invoice check is worked from the request, not Alliant.",
-                        test=True, **preview(req))
+                        "invoice_check show what I would enter; the invoice check is worked from the request, not Alliant."
+                        + req.get("_route_warning", ""), test=True, **preview(req))
             return "test: not queued"
+        if req.get("_route_warning"):  # entered as confirmed, but the people in the thread hear it first
+            self.desk.slack.chat_postMessage(channel=CHANNEL, thread_ts=rec["thread"], unfurl_links=False,
+                                             text=req["_route_warning"].strip())
         with self.lock:
             data = self.load()
             rec = data[rid]
@@ -731,6 +742,32 @@ class NewAccounts:
                 data[rid] = {"result": res, "thread": thread, "status": "sent"}
                 self.save(data)
         return res["status"]
+
+
+def route_fit(alliant, req: dict) -> tuple[list[str], list[str]]:
+    """Does the confirmed route fit? (Scott, 11/13.) From the route's stop list (route_stops.csv): blocking problems
+    (the route has no stops on a requested day) and warnings (no other stop on that route and day in the same city).
+    Nothing to check against (no stop list yet, or a brand-new route): nothing flagged."""
+    stops = getattr(alliant, "stops", None) or []
+    route = str(req.get("route") or "").lstrip("0")
+    branch = "2" if req.get("company") == "TLG" else "1"
+    mine = [r for r in stops if str(r.get("route", "")).lstrip("0") == route and str(r.get("branch", "1")).lstrip("0") == branch]
+    if not stops or not mine:
+        return [], []
+    city = str((req.get("service_address") or {}).get("city") or "").strip().lower()
+    block, warn = [], []
+    for day in account_days(req):
+        on_day = [r for r in mine if str(r.get("day", ""))[:3].title() == day]
+        if not on_day:
+            runs = sorted({str(r.get("day", ""))[:3].title() for r in mine} - {""}, key=lambda d: DAYS.index(d) if d in DAYS else 9)
+            block.append(f"route {route} has no {day} stops (it runs {', '.join(runs) or 'no days on file'}); "
+                         "a person please confirm the route and day")
+            continue
+        cities = sorted({str(r.get("city") or "").strip().title() for r in on_day} - {""})
+        if city and cities and city not in {c.lower() for c in cities}:
+            warn.append(f"no other route {route} {day} stop is in {city.title()} (its {day} stops are in "
+                        f"{', '.join(cities[:6])}{' and more' if len(cities) > 6 else ''})")
+    return block, warn
 
 
 def preview(req: dict) -> dict:

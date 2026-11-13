@@ -361,3 +361,27 @@ def test_catch_up_finds_a_new_request_in_an_older_thread(d, monkeypatch):
     desk._na_pass = 0
     desk.new_accounts_pass(now)
     assert "opp-old-4" in desk.new_accounts().load()
+
+
+def test_route_check_flags_a_route_that_doesnt_fit():
+    from types import SimpleNamespace
+    stops = [{"branch": "1", "route": "6", "day": "Tue", "sequence": "1", "city": "Wasilla"},
+             {"branch": "1", "route": "6", "day": "Tue", "sequence": "2", "city": "Palmer"},
+             {"branch": "1", "route": "6", "day": "Fri", "sequence": "1", "city": "Wasilla"}]
+    al = SimpleNamespace(stops=stops)
+    assert na.route_fit(al, REQ) == ([], [])                       # Team CC: route 6, Tuesday, Wasilla
+    r = dict(copy.deepcopy(REQ), delivery_days=["Wed"])
+    block, _ = na.route_fit(al, r)
+    assert block and "route 6 has no Wed stops (it runs Tue, Fri)" in block[0]
+    r = copy.deepcopy(REQ); r["service_address"]["city"] = "Fairbanks"
+    assert na.route_fit(al, r) == ([], ["no other route 6 Tue stop is in Fairbanks (its Tue stops are in Palmer, Wasilla)"])
+    assert na.route_fit(SimpleNamespace(stops=[]), r) == ([], [])  # no stop list: nothing to check against
+
+
+def test_a_route_that_doesnt_run_that_day_is_never_entered(d, monkeypatch):
+    slack, desk = d
+    from types import SimpleNamespace
+    monkeypatch.setattr(desk, "alliant", SimpleNamespace(stops=[{"branch": "1", "route": "6", "day": "Fri", "city": "Wasilla"}]), raising=False)
+    assert desk.new_accounts().on_message(msg(REQ)) == "waiting: route"
+    assert "route 6 has no Tue stops" in slack.msgs[na.CHANNEL][-1]["text"]
+    assert not desk.jobs().load()["jobs"]

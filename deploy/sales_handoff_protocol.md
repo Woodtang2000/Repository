@@ -74,6 +74,10 @@ with Alliant's own projected invoice after entry, and again on the first real de
   EOW, E4W or E12W; every other item is picked up every delivery unless the request says fewer times a week. A non-mat
   line that isn't weekly gets `waiting`. Logo mats need a stock OK like garments.
 - **Stop sequence:** Donna places the stop within the route by address and reports `stop_sequence`.
+- **Route check** (Scott, 11/13): before entering, Donna checks the confirmed route against its stop list. If the route
+  has no stops on a requested day, she replies `waiting` ("route 6 has no Wed stops (it runs Tue, Fri)") and enters
+  nothing until a corrected request comes. If no other stop on that route and day is in the same city, she warns in the
+  thread and enters it as confirmed.
 - **Lost/abuse replacement, stop minimum, seasonal, AC codes:** Alliant defaults unless the request includes them.
 - **Charges:** `rates` (service %, inventory %, fuel per delivery) are set in the account and customer charge settings.
 - **Never** save a price, price type or charge amount that isn't in the request. Enter everything else, then ask in the
