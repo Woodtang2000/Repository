@@ -80,10 +80,12 @@ def service_day(ts: str | float) -> str:
 # Every other day, holidays included, is a normal delivery day. A holiday not listed: the office confirms.
 HOLIDAY_MOVES = [
     ("2026-11-26", "Thanksgiving", "2026-11-25"),
-    ("2026-12-24", "Christmas Eve", "2026-12-23"),
-    ("2026-12-31", "New Year's Eve", "2026-12-30"),
+    ("2026-12-24", "Christmas week", "2026-12-23"),   # Scott, 11/13: Thursday's stops slide to Wednesday,
+    ("2026-12-25", "Christmas Day", "2026-12-24"),    # and Friday's to Thursday; Monday-Wednesday as usual
+    ("2026-12-31", "New Year's week", "2026-12-30"),  # New Year's the same way (Scott, 11/12: "same with New Year's")
+    ("2027-01-01", "New Year's Day", "2026-12-31"),
 ]
-HOLIDAYS_TO_CONFIRM = [("2026-12-25", "Christmas Day"), ("2027-01-01", "New Year's Day")]
+HOLIDAYS_TO_CONFIRM: list = []
 
 
 def holiday_schedule(today: "date | None" = None, days: int = 60) -> str:
@@ -102,8 +104,9 @@ def holiday_schedule(today: "date | None" = None, days: int = 60) -> str:
             out.append(f"- {why}, {d:%A %B} {d.day}: the office will confirm that day's deliveries.")
     if not out:
         return ""
-    return ("Holiday deliveries (every other day, holidays included, is a normal delivery day; say only what is "
-            "listed, and for anything else say the office will confirm):\n" + "\n".join(out))
+    return ("Holiday deliveries (every other day, holidays included, is a normal delivery day; a day whose own stops "
+            "move still gets the stops moved onto it; say only what is listed, and for anything else say the office "
+            "will confirm):\n" + "\n".join(out))
 
 
 OFFICE_PHONES = {"Snow White Linen": "(907) 222-7738", "The Laundry Group": "(907) 519-0761"}
