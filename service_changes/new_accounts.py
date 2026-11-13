@@ -358,7 +358,9 @@ class NewAccounts:
             data[rid] = {"req": req, "thread": thread, "status": "prepared", "at": time.time()}
             self.save(data)
         if req.get("needs_stock_ok"):
-            self.result(req, thread, "waiting", "prepared; waiting for Ana's stock OK before saving")
+            self.result(req, thread, "waiting", "prepared; waiting for Ana's stock OK before saving"
+                        + (" (TEST MODE: nothing will be sent to Alliant)" if test_mode() else ""),
+                        **(dict(preview(req), test=True) if test_mode() else {}))
             return "waiting: stock"
         return self.queue(rid)
 
@@ -384,7 +386,9 @@ class NewAccounts:
                 self.save(data)
         if test_mode():
             self.result(req, rec["thread"], "waiting", "TEST MODE: every check passed and the Alliant entry is ready, "
-                        "but nothing was sent to Alliant (this is #sales-handoff-test)", test=True)
+                        "but nothing was sent to Alliant (this is #sales-handoff-test). codes_chosen, lines and "
+                        "invoice_check show what I would enter; the invoice check is worked from the request, not Alliant.",
+                        test=True, **preview(req))
             return "test: not queued"
         with self.lock:
             data = self.load()
@@ -727,6 +731,51 @@ class NewAccounts:
                 data[rid] = {"result": res, "thread": thread, "status": "sent"}
                 self.save(data)
         return res["status"]
+
+
+def preview(req: dict) -> dict:
+    """Test mode (Scott, 11/12): what Donna would enter, and the invoice math worked from the request by the protocol's
+    rules (Alliant isn't touched, so this checks Sales' expected_invoice, not Alliant's projection)."""
+    acct, lines, codes, days_chosen, total_lines = per_week(req), [], [], [], 0.0
+    for ln in req.get("lines") or []:
+        code, days, n = plan(req, ln)
+        garment = is_garment(str(ln.get("sku", "")))
+        f = str(ln.get("frequency", "")).lower()
+        if f in ("eow", "e4w", "e12w") and not str(ln.get("frequency_code") or "").strip():
+            code = {"eow": "5 or 6", "e4w": "1-4", "e12w": "B1-B4"}[f] + " (chosen at entry to fit the route)"
+        per4 = 4.0 * n if f == "weekly" else {"eow": 2.0, "e4w": 1.0, "e12w": 1 / 3}.get(f, deliveries(code))
+        amount = round(float(ln.get("quantity") or 0) * float(ln.get("unit_price") or 0) * per4, 2)
+        total_lines += amount
+        basis = str(ln.get("billing_basis", "")).title()
+        lines.append({"sku": ln.get("sku"), "price_type": price_type(ln), "frequency_code": code,
+                      "days": days or ([d for d in account_days(req)] if f == "weekly" and n == acct else []),
+                      **({"enter": "catalog only (price, price type 9); billed on the wearers in phase 2"} if garment else
+                         {"starting_inventory": ln.get("quantity"),
+                          "autocount": ln.get("autocount") or (ln.get("quantity") if basis == "Usage"
+                                                               else max(1, round(float(ln.get("quantity") or 0) / 2)))}),
+                      "deliveries_in_4_weeks": per4, "amount": amount})
+        if f in ("eow", "e4w", "e12w"):
+            codes.append({"sku": ln.get("sku"), "frequency_code": code})
+        if acct > 1:
+            days_chosen.append({"sku": ln.get("sku"), "frequency_code": code, "days": lines[-1]["days"] or "chosen at entry"})
+    rates, exp = req.get("rates") or {}, req.get("expected_invoice") or {}
+    total_lines = round(total_lines, 2)
+    service = round(total_lines * float(rates.get("service_charge_pct") or 0) / 100, 2)
+    inventory = round(total_lines * float(rates.get("inventory_charge_pct") or 0) / 100, 2)
+    fuel = round(float(rates.get("fuel_charge") or 0) * 4 * max(acct, 1), 2)
+    mine = {"lines": total_lines, "service_charge": service, "inventory_charge": inventory, "fuel": fuel,
+            "total": round(total_lines + service + inventory + fuel, 2)}
+    diffs = []
+    for ln, x in zip(req.get("lines") or [], lines):
+        want = next((e.get("amount") for e in exp.get("lines") or [] if e.get("sku") == ln.get("sku")), None)
+        if want is not None and abs(float(want) - x["amount"]) > 0.01:
+            diffs.append({"what": f"line {ln.get('sku')}", "expected": want, "donna": x["amount"]})
+    for k in ("service_charge", "inventory_charge", "fuel", "total"):
+        if exp.get(k) is not None and abs(float(exp[k]) - mine[k]) > 0.01:
+            diffs.append({"what": k, "expected": exp[k], "donna": mine[k]})
+    return {"codes_chosen": codes, "days_chosen": days_chosen, "lines": lines,
+            "invoice_check": {"from": "the request (test mode; Alliant not read)", "expected_total": exp.get("total"),
+                              "donna_total": mine["total"], "donna": mine, "differences": diffs}}
 
 
 def fetch_wearers(request_id: str, customer_number: str, count) -> tuple[list, str]:

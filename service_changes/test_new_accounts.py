@@ -328,3 +328,19 @@ def test_wearers_are_fetched_from_the_endpoint(d, monkeypatch):
     monkeypatch.setattr(urllib.request, "urlopen", lambda req, timeout=0: io.BytesIO(json.dumps(
         {"request_id": "w-12", "wearers": [{"name": c, "garments": []} for c in "ABC"]}).encode()))
     assert desk.new_accounts().on_message(msg(w2)) == "queued wearers"  # posted again once it's fixed
+
+
+def test_test_mode_shows_what_donna_would_enter_and_checks_the_math(d, monkeypatch):
+    slack, desk = d
+    monkeypatch.setenv("NEW_ACCOUNTS_TEST", "on")
+    assert desk.new_accounts().on_message(msg(REQ)) == "test: not queued"
+    res = json.loads(slack.msgs[na.CHANNEL][-1]["text"].split("```json")[1].split("```")[0])
+    assert [x["price_type"] for x in res["lines"]] == [8, 8]
+    assert res["codes_chosen"][0]["sku"] == "10-07-05" and "chosen at entry" in res["codes_chosen"][0]["frequency_code"]
+    ic = res["invoice_check"]
+    assert ic["donna"]["lines"] == 72.9 and ic["donna_total"] == 119.5 and ic["differences"] == []
+    bad = dict(copy.deepcopy(REQ), request_id="opp-1-2")
+    bad["expected_invoice"]["total"] = 110.02
+    desk.new_accounts().on_message(msg(bad))
+    res = json.loads(slack.msgs[na.CHANNEL][-1]["text"].split("```json")[1].split("```")[0])
+    assert res["invoice_check"]["differences"] == [{"what": "total", "expected": 110.02, "donna": 119.5}]
