@@ -36,6 +36,7 @@ HOW = {"garment": 'Inquiry > "Garment" tab > scan or type the barcode > "Add Ser
        "wearer": 'Stockroom > "Add/Remove Service Code" > scope "Specific Wearers" > "Append" > "Begin"',
        "customer": 'Stockroom > "Add/Remove Service Code" > scope "Specific Customer" > "Append" > "Begin"'}
 REPEAT_DAYS, WEARER_DAYS = 60, 30
+STUCK_DAYS, NUDGE_DAYS = 14, 7  # a code still on 14 days after entry: ask the stockroom, again weekly (Scott, 11/14)
 BARCODE = re.compile(r"\d{4,12}")  # the garment number under the barcode; leading zeros optional (Scott, 11/14)
 
 
@@ -369,6 +370,8 @@ class Uniform:
             try:
                 if self.cleared(rec):
                     self.close(ref)
+                elif now - rec.get("entered_at", now) > STUCK_DAYS * 86400 and now - rec.get("nudged_at", 0) > NUDGE_DAYS * 86400:
+                    self.nudge(ref, now)
             except Exception as e:
                 print(time.strftime("%H:%M"), "uniform done check", ref, str(e)[:150], flush=True)
 
@@ -387,6 +390,29 @@ class Uniform:
         rows = [x for (a, w), xs in self.desk.alliant.in_service.items() if a == rec["account"]
                 and (rec["scope"] == "customer" or w in rec["wearers"]) for x in xs]
         return bool(rows) and not any(code in str(x.get("service_code") or x.get("srv_cod") or "") for x in rows)
+
+    def nudge(self, ref: str, now: float) -> None:
+        """Count Station doesn't remove codes by itself at Snow White, so a repair can be done with its code still on:
+        after 14 days, ask the stockroom (Ana, Sonja) in #stockroom; weekly after that. No wearer names."""
+        rec = self.update(ref, nudged_at=now)
+        days = int((now - rec.get("entered_at", now)) // 86400)
+        what = "; ".join(" ".join(x for x in (g["item"] or "garment", g["size"], f"#{g['barcode']}" if g["barcode"] else "") if x)
+                         for g in rec["garments"][:5])
+        text = (f"⏳ *{ref}* · {self.acct_name(rec['account'])}: *{rec['code']} {CODES[rec['code']]}* went on in Alliant "
+                f"{days} days ago and is still on ({what or rec['scope']}). Was it fixed? If yes, clear the code "
+                "(Inquiry > Garment > Clear Srvc. Cd.) and I'll close the request and tell the customer. If it can't be "
+                "fixed, tell the office in the card's thread.")
+        from .new_accounts import STOCKROOM_ID, STOCKROOM_PEOPLE
+        if test_mode():  # never pings the stockroom from a test: the note goes in the test card's thread
+            if rec.get("ts") and self.channel():
+                self.desk.slack.chat_postMessage(channel=self.channel(), thread_ts=rec["ts"], text="🧪 TEST, would post in "
+                                                 "#stockroom: " + text, unfurl_links=False)
+            return
+        tags = " ".join(f"<@{u.strip()}>" for u in STOCKROOM_PEOPLE.split(",") if u.strip())
+        self.desk.slack.chat_postMessage(channel=STOCKROOM_ID, text=f"{tags} {text}", unfurl_links=False)
+        if rec.get("ts") and self.channel():
+            self.desk.slack.chat_postMessage(channel=self.channel(), thread_ts=rec["ts"], unfurl_links=False,
+                                             text=f"⏳ Still open after {days} days: asked the stockroom in #stockroom.")
 
     def close(self, ref: str) -> None:
         rec = self.update(ref, status="done", done_at=time.time())

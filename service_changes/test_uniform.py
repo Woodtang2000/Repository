@@ -119,3 +119,28 @@ def test_names_read_well_on_a_phone():
     assert uniform.nice("THREE BEARS BIG LAKE C STORE #27") == "Three Bears Big Lake C Store #27"
     assert uniform.nice("FISHER'S FUEL INC") == "Fisher's Fuel Inc"
     assert uniform.nice("PANT FR IQ SERIES") == "Pant FR IQ Series"
+
+
+def test_a_code_still_on_after_14_days_asks_the_stockroom_weekly(u, monkeypatch):
+    slack, d = u
+    monkeypatch.setenv("UNIFORM_TEST", "off")
+    d.uniform()._channel = None
+    from . import new_accounts
+    slack.msgs.setdefault(new_accounts.STOCKROOM_ID, [])
+    out = d.uniform().new({"garments": [{"barcode": "000004729628", "problem": "torn"}]})
+    d.uniform().update(out["ref"], status="entered", entered_at=1_000_000.0)
+    from . import alliant_live
+    monkeypatch.setattr(alliant_live, "lookup", lambda *a, **k: {"source": "live", "rows": [dict(ROW, service_code="SS")]})
+    d.uniform()._last = 0
+    d.uniform().done_pass(1_000_000.0 + 13 * 86400)
+    assert not slack.msgs[new_accounts.STOCKROOM_ID]  # not yet
+    d.uniform()._last = 0
+    d.uniform().done_pass(1_000_000.0 + 15 * 86400)
+    posts = [m["text"] for m in slack.msgs[new_accounts.STOCKROOM_ID]]
+    assert len(posts) == 1 and "SS Seam Repair* went on in Alliant 15 days ago" in posts[0] and "Mike" not in posts[0]
+    d.uniform()._last = 0
+    d.uniform().done_pass(1_000_000.0 + 18 * 86400)
+    assert len(slack.msgs[new_accounts.STOCKROOM_ID]) == 1  # weekly, not daily
+    d.uniform()._last = 0
+    d.uniform().done_pass(1_000_000.0 + 23 * 86400)
+    assert len(slack.msgs[new_accounts.STOCKROOM_ID]) == 2
