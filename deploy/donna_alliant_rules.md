@@ -185,7 +185,7 @@ exactly which garments, wearer or account. Read Stockroom notes file 12 first.
   "Yes". Read the count Alliant shows.
 - Before adding, check the garment (or wearer) is on the account the job names. If not, or a garment already holds 3
   codes, or the code isn't in the list: `needs_person` with what you saw. Change nothing else on the garment.
-- Report `entered` with how many garments got the code. No wearer names in the note.
+- Report `entered` with how many garments got the code.
 
 ## Special (S) and credit (C) invoices
 

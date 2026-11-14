@@ -54,7 +54,7 @@ def test_a_request_gets_a_card_without_names_and_test_approval_enters_nothing(u)
     assert out["suggested"] == {"code": "SS", "scope": "garment"} and out["card"] == "posted"
     assert slack.msgs["CUT"]  # posted in the test channel
     card = "\n".join(d.uniform().lines(d.uniform().load()["requests"][out["ref"]]))
-    assert "BOB'S SERVICE'S" in card and "Coverall Navy 52 L" in card and "Ripped or torn" in card and "Mike" not in card
+    assert "BOB'S SERVICE'S" in card and "Coverall Navy 52 L" in card and "Ripped or torn" in card and "Mike Example (#37)" in card
     assert d.uniform().act(tap("uniform_approve", out["ref"], user="U9")) == "ignored: not office"
     assert d.uniform().act(tap("uniform_code", out["ref"], code="GP")) == f"{out['ref']} code GP"
     assert d.uniform().act(tap("uniform_approve", out["ref"])) == f"{out['ref']} approved (test)"
@@ -137,7 +137,7 @@ def test_a_code_still_on_after_14_days_asks_the_stockroom_weekly(u, monkeypatch)
     d.uniform()._last = 0
     d.uniform().done_pass(1_000_000.0 + 15 * 86400)
     posts = [m["text"] for m in slack.msgs[new_accounts.STOCKROOM_ID]]
-    assert len(posts) == 1 and "SS Seam Repair* went on in Alliant 15 days ago" in posts[0] and "Mike" not in posts[0]
+    assert len(posts) == 1 and "SS Seam Repair* went on in Alliant 15 days ago" in posts[0] and "Mike Example (#37)" in posts[0]
     d.uniform()._last = 0
     d.uniform().done_pass(1_000_000.0 + 18 * 86400)
     assert len(slack.msgs[new_accounts.STOCKROOM_ID]) == 1  # weekly, not daily
@@ -172,7 +172,7 @@ def test_a_driver_post_becomes_a_uniform_request(u):
     out = uniform.driver_request(d, w, {"user": "UDRV", "ts": "2.0"}, "route-12")
     rec = d.uniform().load()["requests"][out["ref"]]
     assert out["suggested"] == {"code": "WR", "scope": "wearer"} and rec["wearers"] == ["37"]
-    assert "Mike" not in "\n".join(d.uniform().lines(rec))
+    assert "Wearer: Mike Example (#37)" in "\n".join(d.uniform().lines(rec))
     inv = SimpleNamespace(account_number="1003-1-00002", summary="count",
                           service=ServiceFlag(scope="customer", kind="inventory", reason="inventory count"))
     assert uniform.driver_request(d, inv, {"user": "UDRV", "ts": "3.0"}, "route-12") is None

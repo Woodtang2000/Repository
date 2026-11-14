@@ -4,7 +4,7 @@ an approved Alliant service code, and the loop is closed with the customer. Spec
 - The Salesforce page (built by the Sales agent) calls Donna server to server through webchat.py, with UNIFORM_API_KEY:
   /api/uniform/garment (barcode -> garment type and size, never a name), /api/uniform/match (no tag: company and first
   name -> account suggestion), /api/uniform/request (a saved request).
-- Donna suggests the code and scope, posts a card in #uniform-requests (no wearer names in Slack), the office approves
+- Donna suggests the code and scope, posts a card in #uniform-requests (wearer names on the card, Scott 11/14; never on the public page), the office approves
   with one tap, and her Alliant workstation enters the code (kind "service_code"). Then she watches Alliant until the
   plant clears the code and tells the requester, the driver and the customer.
 - UNIFORM_TEST (on until Scott switches it off): cards go to #uniform-requests-test, nothing is entered in Alliant and
@@ -259,16 +259,26 @@ class Uniform:
         c = next((c for c in self.desk.alliant.customers if c.account == account), None)
         return f"{account} {c.name}" if c else (account or "account not matched")
 
+    def wearer_name(self, account: str, number: str) -> str:
+        """"Mike Example (#37)" for the office, stockroom and drivers (Scott, 11/14: wearer names aren't private
+        inside the company). The public page still never gets one."""
+        w = next((w for w in self.desk.alliant.wearers.get(account, []) if w.employee == number), None)
+        return f"{w.name} (#{number})" if w else (f"wearer #{number}" if number else "")
+
     def lines(self, rec: dict) -> list[str]:
         src = {"qr": "from the QR page", "driver": "scanned by the driver", "text": "by text", "email": "by email",
                "phone": "by phone"}.get(rec["source"], rec["source"])
         out = [f"🧵 *{rec['ref']}{' · TEST' if test_mode() else ''} · {self.acct_name(rec['account'])}*"]
         for g in rec["garments"]:
             what = " ".join(x for x in (g["item"] or "Garment", g["size"]) if x)
-            out.append(f"{what} · *{PROBLEMS[g['problem']][2].capitalize()}*" + (f" · _{g['note']}_" if g["note"] else ""))
+            who = self.wearer_name(rec["account"], g.get("_wearer", ""))
+            out.append(f"{what}" + (f" · {who}" if who else "") + f" · *{PROBLEMS[g['problem']][2].capitalize()}*"
+                       + (f" · _{g['note']}_" if g["note"] else ""))
+        if rec["scope"] == "wearer" and rec.get("wearers") and not any(g.get("_wearer") for g in rec["garments"]):
+            out.append("Wearer: " + ", ".join(self.wearer_name(rec["account"], w) for w in rec["wearers"]))
         if rec.get("fallback"):
-            out.append(f"No tag: said \"{(rec['fallback'] or {}).get('company', '')}\", item {(rec['fallback'] or {}).get('item', '?')}"
-                       " (the first name is on the Salesforce record)")
+            fb = rec["fallback"] or {}
+            out.append(f"No tag: \"{fb.get('first_name', '')}\" at \"{fb.get('company', '')}\", item {fb.get('item', '?')}")
         out.append(f"{src}" + (f" · 📎 {rec['photos']} photo{'s' if rec['photos'] != 1 else ''}" if rec["photos"] else ""))
         target = {"garment": "this garment" if len(rec["garments"]) == 1 else "these garments", "wearer": "all of this wearer's garments",
                   "customer": "the whole account"}[rec["scope"]]
@@ -368,7 +378,8 @@ class Uniform:
             lines.append("One garment at a time: " + HOW["garment"] + ". Barcodes:")
             lines += [f"- {g['barcode']}" for g in rec["garments"] if g["barcode"]]
         elif rec["scope"] == "wearer":
-            lines.append(HOW["wearer"] + f". Wearer number(s): {', '.join(rec['wearers']) or 'see the request'}.")
+            lines.append(HOW["wearer"] + ". Wearer(s): " + (", ".join(self.wearer_name(rec["account"], w) for w in rec["wearers"])
+                                                             or "see the request") + ".")
         else:
             lines.append(HOW["customer"] + ".")
         lines.append(f"Special Request: {rec['ref']}" + (f" {notes}"[:120] if notes else ""))
@@ -429,10 +440,12 @@ class Uniform:
 
     def nudge(self, ref: str, now: float) -> None:
         """Count Station doesn't remove codes by itself at Snow White, so a repair can be done with its code still on:
-        after 14 days, ask the stockroom (Ana, Sonja) in #stockroom; weekly after that. No wearer names."""
+        after 14 days, ask the stockroom (Ana, Sonja) in #stockroom; weekly after that."""
         rec = self.update(ref, nudged_at=now)
         days = int((now - rec.get("entered_at", now)) // 86400)
-        what = "; ".join(" ".join(x for x in (g["item"] or "garment", g["size"], f"#{g['barcode']}" if g["barcode"] else "") if x)
+        what = "; ".join(" ".join(x for x in (g["item"] or "garment", g["size"], f"#{g['barcode']}" if g["barcode"] else "",
+                                              f"({self.wearer_name(rec['account'], g.get('_wearer', ''))})"
+                                              if g.get("_wearer") else "") if x)
                          for g in rec["garments"][:5])
         text = (f"⏳ *{ref}* · {self.acct_name(rec['account'])}: *{rec['code']} {CODES[rec['code']]}* went on in Alliant "
                 f"{days} days ago and is still on ({what or rec['scope']}). Was it fixed? If yes, clear the code "
