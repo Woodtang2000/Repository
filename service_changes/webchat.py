@@ -18,6 +18,8 @@ import re
 import secrets
 import threading
 import time
+
+UNIFORM_HITS: dict = {}  # (call, client) -> recent times: the uniform page's rate limit
 from collections import defaultdict, deque
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -559,6 +561,9 @@ def make_handler(chat: Chat, public_url: str):
             m = re.fullmatch(r"/api/phone/(tool|[\w-]{24,})/(\w+)", path.split("?")[0])
             if m:  # the phone lines' ElevenLabs agents (phone_agent.py): the key in the path, a ?key= or X-Donna-Key
                 return self._phone_tool(m.group(2), m.group(1) if m.group(1) != "tool" else "")
+            m = re.fullmatch(r"/api/uniform/(garment|match|request)", path)
+            if m:  # the uniform request page (Salesforce, server to server): key and rate limit, then the desk
+                return self._uniform(m.group(1))
             if path == "/api/donna/tool":
                 return self._agent_tool()
             if path == "/api/donna/agent":
@@ -651,6 +656,38 @@ def make_handler(chat: Chat, public_url: str):
             self.send_header("Content-Length", str(len(out)))
             self.end_headers()
             self.wfile.write(out)
+
+        def _uniform(self, what: str):
+            """UNIFORM_API_KEY from Salesforce's Named Credential (never a browser). Lookups are limited per client
+            (the page sends a hashed device id): 10 an hour, and 3 requests an hour."""
+            import hmac
+            key = os.environ.get("UNIFORM_API_KEY", "")
+            given = (self.headers.get("Authorization") or "").removeprefix("Bearer ").strip()
+            if len(key) < 24 or not hmac.compare_digest(given.encode(), key.encode()):
+                time.sleep(1)
+                return self._send(401, b'{"error":"bad key"}', "application/json")
+            n = min(int(self.headers.get("Content-Length") or 0), 20000)
+            raw = self.rfile.read(n) or b"{}"
+            try:
+                body = json.loads(raw)
+            except ValueError:
+                return self._send(400, b'{"error":"bad json"}', "application/json")
+            client = str(body.get("client") or "")[:80]
+            if client and body.get("mode") != "driver":
+                limit = {"garment": 10, "match": 10, "request": 3}[what]
+                hits = UNIFORM_HITS.setdefault((what, client), [])
+                hits[:] = [t for t in hits if time.time() - t < 3600]
+                if len(hits) >= limit:
+                    return self._send(429, b'{"error":"too many"}', "application/json")
+                hits.append(time.time())
+            req = urllib.request.Request(f"http://127.0.0.1:{os.environ.get('DESK_VOICE_PORT', '8091')}/uniform/{what}",
+                                         data=raw, method="POST", headers={"Content-Type": "application/json"})
+            try:
+                with urllib.request.urlopen(req, timeout=20) as r:
+                    return self._send(r.status, r.read(), "application/json")
+            except Exception as e:
+                print(time.strftime("%H:%M"), "uniform: desk didn't answer:", str(e)[:120], flush=True)
+                return self._send(503, b'{"error":"try again"}', "application/json")
 
         def _worker(self, method: str, local: str):
             """Donna's Alliant workstation (alliant_jobs.py), with its own key (DONNA_WORKER_TOKEN), passed to the desk."""

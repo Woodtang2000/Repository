@@ -1086,6 +1086,13 @@ class Desk:
             self._announcer = Announcer(self)
         return self._announcer
 
+    def uniform(self):
+        """Garment repair and replacement requests (uniform.py)."""
+        if "_uniform" not in self.__dict__:
+            from .uniform import Uniform
+            self._uniform = Uniform(self)
+        return self._uniform
+
     def new_accounts(self):
         """New accounts and locations from the Sales Handoff app in #new-accounts (new_accounts.py)."""
         if "_new_accounts" not in self.__dict__:
@@ -1119,6 +1126,10 @@ class Desk:
                               self.new_accounts().on_message({**m, "channel": new_accounts.CHANNEL, "type": "message"}), flush=True)
         except Exception as e:
             print(time.strftime("%H:%M"), "new-accounts pass:", str(e)[:200], flush=True)
+        try:  # uniform requests: done once the plant clears the code in Alliant (uniform.py)
+            self.uniform().done_pass(now)
+        except Exception as e:
+            print(time.strftime("%H:%M"), "uniform pass:", str(e)[:200], flush=True)
         try:  # new garment accounts: issued vs billed, once a morning (#stockroom)
             self.new_accounts().garment_pass(now)
         except Exception as e:
@@ -1604,6 +1615,22 @@ class Desk:
                         return self.reply(500, b"{}")
                     print(time.strftime("%H:%M"), "alliant jobs file:", f.group(1), out, flush=True)
                     return self.reply(200, json.dumps({"ok": out}).encode())
+                u = re.fullmatch(r"/uniform/(garment|match|request)", self.path)
+                if u:  # the uniform request page, through webchat.py (key and rate limit checked there)
+                    from . import uniform
+                    try:
+                        body = json.loads(self.rfile.read(min(int(self.headers.get("Content-Length") or 0), 20000)) or b"{}")
+                        if u.group(1) == "garment":
+                            out = uniform.lookup(desk.alliant, str(body.get("barcode") or ""))
+                        elif u.group(1) == "match":
+                            out = uniform.match(desk.alliant, str(body.get("company") or ""), str(body.get("first_name") or ""))
+                        else:
+                            out = desk.uniform().new(body)
+                            print(time.strftime("%H:%M"), "uniform request:", out.get("ref"), out.get("suggested"), flush=True)
+                    except Exception as e:
+                        print(time.strftime("%H:%M"), "uniform error:", e, flush=True)
+                        return self.reply(500, b'{"error":"server"}')
+                    return self.reply(200, json.dumps(out).encode())
                 if self.path == "/jobs/alert":  # Donna, between jobs: Alliant signed her out
                     body = json.loads(self.rfile.read(min(int(self.headers.get("Content-Length") or 0), 4000)) or b"{}")
                     return self.reply(200, json.dumps({"ok": desk.jobs().alert(str(body.get("note") or ""))}).encode())
@@ -2267,6 +2294,15 @@ class Desk:
                     except Exception as e:
                         print(time.strftime("%H:%M"), "redate approve error:", e, flush=True)
                 threading.Thread(target=approve, daemon=True).start()
+                return
+            if req.type == "interactive" and req.payload.get("type") == "block_actions" and any(
+                    x.get("action_id", "").startswith("uniform_") for x in req.payload.get("actions", [])):
+                def uni(p=req.payload):  # Approve / another code / scope / Reject on a #uniform-requests card
+                    try:
+                        print(time.strftime("%H:%M"), "uniform:", self.uniform().act(p), flush=True)
+                    except Exception as e:
+                        print(time.strftime("%H:%M"), "uniform error:", e, flush=True)
+                threading.Thread(target=uni, daemon=True).start()
                 return
             if req.type == "interactive" and req.payload.get("type") == "block_actions" and any(
                     x.get("action_id", "").startswith("msglink_") for x in req.payload.get("actions", [])):

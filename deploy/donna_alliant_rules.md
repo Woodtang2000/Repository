@@ -173,6 +173,20 @@ it should show now and the one to set (the garments issued to that wearer back i
 - Report `entered` with one line per wearer line: updated, or left alone and what it showed. Counts only, no prices
   (the report goes to #stockroom).
 
+## Service codes (kind service_code)
+
+A `service_code` job comes from #uniform-requests after the office approved it (Scott, 11/14). It names one code and
+exactly which garments, wearer or account. Read Stockroom notes file 12 first.
+
+- One garment: Inquiry > "Garment" tab > scan or type the barcode > "Add Service Code". Enter the code, "Special Request"
+  as the job gives it (the request number), then "OK". Do each barcode in the job.
+- A wearer or the whole account: Stockroom > "Add/Remove Service Code": the code, Special Request, Removal "Until
+  Removed", **Append** (never Replace), scope "Specific Wearers" or "Specific Customer" as the job says > "Begin" >
+  "Yes". Read the count Alliant shows.
+- Before adding, check the garment (or wearer) is on the account the job names. If not, or a garment already holds 3
+  codes, or the code isn't in the list: `needs_person` with what you saw. Change nothing else on the garment.
+- Report `entered` with how many garments got the code. No wearer names in the note.
+
 ## Special (S) and credit (C) invoices
 
 A ticket headed **🧾 Special invoice (S)** or **🧾 Credit invoice (C)** is a one-time invoice, not a change to the
