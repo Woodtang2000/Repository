@@ -90,7 +90,7 @@ pre{background:var(--soft);border:1px solid var(--rule);border-radius:8px;paddin
 <body>
 <div class="wrap">
 <h1>Uniform Requests</h1>
-<p class="sub">Garment repair and replacement requests: one page for wearers and customers (brand QR), driver mode, plus text, email and phone. Every request ends as an approved Alliant service code, and the loop is closed with the customer. Mock-ups at phone width, then the spec the Sales agent builds the page to. Draft 1, 11/14, sandbox first.</p>
+<p class="sub">Garment repair and replacement requests: one page for wearers and customers (brand QR), driver mode, plus text, email and phone. Every request ends as an approved Alliant service code, and the loop is closed with the customer. Mock-ups at phone width, then the spec the Sales agent builds the page to. Draft 2, 11/14, sandbox first.</p>
 <nav class="tabs"><a href="#mockups" id="t-m">Phone mock-ups</a><a href="#spec" id="t-s">Spec for the page and Donna</a></nav>
 
 <section id="mockups">
@@ -339,15 +339,12 @@ Authorization: Bearer &lt;UNIFORM_API_KEY&gt;
  <li><b>Account audits</b> (<code>AA</code>): Donna summarises what the audit found (garments worn, missing, wrong size) for the rep, as an upsell note on the Salesforce account.</li>
 </ul>
 
-<h2>9. Decisions for Scott</h2>
-<div class="ask"><ol>
- <li>OK the code mapping in section 3, and create the three new codes (or tell me which existing codes to use).</li>
- <li>Who approves: the office (Sonja, Ana), Scott and Bill? And may Donna enter approved codes in Alliant (the CLAUDE permission above)?</li>
- <li>Which Count Station removal setting Snow White uses.</li>
- <li>A photo of a garment tag.</li>
- <li>Create <code>#uniform-requests</code> and <code>#uniform-requests-test</code> and invite Donna.</li>
- <li>Create <code>UNIFORM_API_KEY</code> when the Sales agent is ready to connect the sandbox.</li>
-</ol></div>
+<h2>9. Decided (Scott, 11/14) and still open</h2>
+<div class="ask"><ul>
+ <li><b>Decided:</b> the codes in section 3, with the new <code>SZ</code>, <code>ST</code> and <code>WR</code>; the office approves; Donna enters approved codes in Alliant.</li>
+ <li><b>Decided:</b> labels are 1D (likely Code 128), garment number printed beneath, leading zeros optional; JavaScript reader on every phone; fallback by company and first name; never show the wearer's name.</li>
+ <li><b>Open:</b> create the three codes in Alliant and give Donna's user the Add Service Code permission; which Count Station removal setting is used; create <code>#uniform-requests</code> and <code>#uniform-requests-test</code>; create <code>UNIFORM_API_KEY</code> when the sandbox page is ready.</li>
+</ul></div>
 </div>
 </section>
 </div>
