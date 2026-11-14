@@ -36,7 +36,7 @@ HOW = {"garment": 'Inquiry > "Garment" tab > scan or type the barcode > "Add Ser
        "wearer": 'Stockroom > "Add/Remove Service Code" > scope "Specific Wearers" > "Append" > "Begin"',
        "customer": 'Stockroom > "Add/Remove Service Code" > scope "Specific Customer" > "Append" > "Begin"'}
 REPEAT_DAYS, WEARER_DAYS = 60, 30
-BARCODE = re.compile(r"\d{6,14}")
+BARCODE = re.compile(r"\d{4,12}")  # the garment number under the barcode; leading zeros optional (Scott, 11/14)
 
 
 def test_mode() -> bool:

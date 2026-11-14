@@ -43,6 +43,7 @@ def test_a_barcode_shows_only_the_garment_and_size(u):
     assert uniform.unsign(out["garment_ref"])["w"] == "37"
     assert uniform.unsign(out["garment_ref"][:-2] + "00") is None  # a forged ref is refused
     assert uniform.lookup(d.alliant, "abc") == {"found": False}
+    assert uniform.lookup(d.alliant, "12") == {"found": False}
 
 
 def test_a_request_gets_a_card_without_names_and_test_approval_enters_nothing(u):

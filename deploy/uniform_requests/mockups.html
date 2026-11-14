@@ -112,10 +112,10 @@ pre{background:var(--soft);border:1px solid var(--rule);border-radius:8px;paddin
  <div class="scr">
   <div class="cam"><div class="box"><div class="bars"></div></div><div class="lbl">Hold the barcode inside the box</div></div>
   <p class="small">Can't scan it? Type the number printed under the bars:</p>
-  <div class="field ph">000004729628</div>
+  <div class="field ph">e.g. 5251819 (zeros optional)</div>
   <button class="big">Look it up</button>
  </div></div>
- <figcaption><b>2. Scan.</b> Phone camera reads the tag (Interleaved 2 of 5). Typing the printed number always works too.</figcaption></figure>
+ <figcaption><b>2. Scan.</b> Phone camera reads the label (Code 128) with a JavaScript reader, iPhone included. Typing the number under the barcode always works, leading zeros optional.</figcaption></figure>
 
 <figure><div class="phone"><div class="top"></div>
  <div class="brand"><div class="logo">SW</div><b>Snow White Linen</b></div>
@@ -247,11 +247,13 @@ pre{background:var(--soft);border:1px solid var(--rule);border-radius:8px;paddin
 
 <h2>2. Barcodes</h2>
 <ul>
- <li>Snow White's tags are <b>Interleaved 2 of 5</b> (Alliant's label font is BC I25; the scanners are I2of5 keyboard wedges). The sample tag <code>000004729628</code> is 12 digits.</li>
- <li><b>Phone camera:</b> Android Chrome reads ITF with the built-in BarcodeDetector. iPhone Safari has no BarcodeDetector, so the page needs a JavaScript reader with ITF (ZXing's browser build). ITF on a heat-sealed fabric label is the hardest case for a phone camera, so the "type the number" box is always on screen.</li>
+ <li>The garment label has a <b>1D barcode, likely Code 128</b>, with the <b>garment number printed beneath it</b> (for example <code>000005251819</code>) and a line with the account code (Scott, 11/14). Alliant's notes mention Interleaved 2 of 5 for older labels, so the reader should accept <b>Code 128 and ITF</b>.</li>
+ <li><b>Phone camera:</b> iOS Safari has no built-in barcode reader, so the page uses a JavaScript library on every phone (ZXing's browser build, Code 128 and ITF enabled), not the BarcodeDetector API.</li>
+ <li><b>Always offer "type the number under the barcode".</b> Leading zeros are optional: <code>5251819</code> and <code>000005251819</code> are the same garment (Donna pads to Alliant's 12 digits).</li>
+ <li><b>No tag:</b> company name and first name (section 4b).</li>
  <li><b>Driver handhelds</b> type the barcode like a keyboard: a plain text field that submits on Enter, ready for the next scan.</li>
- <li><b>RFID</b> chips can't be read by phones; only the printed barcode counts.</li>
- <li>Accept only digits of Alliant's barcode length (12 in the sample; confirm in Stockroom › System Options › barcode length). Anything else is rejected without a lookup.</li>
+ <li>Accept 4 to 12 digits; anything else is rejected without a lookup. RFID chips can't be read by phones.</li>
+ <li>Donna looks up garment number → wearer → account from Alliant, and <b>never shows the wearer's name back</b> to the person scanning: only garment type and size.</li>
 </ul>
 
 <h2>3. Problems, scope and Alliant service codes</h2>
