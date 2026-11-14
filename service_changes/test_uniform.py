@@ -176,3 +176,17 @@ def test_a_driver_post_becomes_a_uniform_request(u):
     inv = SimpleNamespace(account_number="1003-1-00002", summary="count",
                           service=ServiceFlag(scope="customer", kind="inventory", reason="inventory count"))
     assert uniform.driver_request(d, inv, {"user": "UDRV", "ts": "3.0"}, "route-12") is None
+
+
+def test_the_photos_go_in_the_cards_thread(u, monkeypatch):
+    slack, d = u
+    uploads = []
+    slack.files_upload_v2 = lambda **kw: uploads.append(kw)
+    monkeypatch.setattr(uniform, "sf_photos", lambda sid, limit=3: [("tear.jpg", b"jpegbytes")] if sid == "a0X000000000001AAA" else [])
+    monkeypatch.setattr(uniform.threading, "Thread", lambda target, args, daemon: SimpleNamespace(start=lambda: target(*args)))
+    out = d.uniform().new({"sf_request_id": "a0X000000000001AAA", "photos": 1,
+                           "garments": [{"barcode": "000004729628", "problem": "torn"}]})
+    assert uploads and uploads[0]["thread_ts"] == d.uniform().load()["requests"][out["ref"]]["ts"]
+    assert uploads[0]["file"] == b"jpegbytes" and uploads[0]["channel"] == "CUT"
+    d.uniform().new({"sf_request_id": "a0X000000000002AAA", "photos": 1, "garments": [{"barcode": "000004729628", "problem": "torn"}]})
+    assert "couldn't fetch the photo" in slack.msgs["CUT"][-1]["text"]

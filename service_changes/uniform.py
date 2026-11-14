@@ -169,6 +169,38 @@ def stops(alliant, route: str, branch: str = "1", day: str = "") -> dict:
                        "city": nice(x.get("city", ""))} for x in rows]}
 
 
+SF_ID = re.compile(r"[a-zA-Z0-9]{15}(?:[a-zA-Z0-9]{3})?")
+PHOTO_EXT = {"jpg", "jpeg", "png", "heic", "heif", "webp", "gif"}
+
+
+def sf_photos(sf_request_id: str, limit: int = 3) -> list[tuple[str, bytes]]:
+    """The request's photos from Salesforce Files (the page saves them before it calls Donna), through Donna's existing
+    Salesforce connection: [(file name, bytes)], images only, up to 8 MB each."""
+    from . import salesforce as sf
+    if not SF_ID.fullmatch(sf_request_id or "") or not sf.configured():
+        return []
+    token, instance = sf._token()
+    base = f"{instance}/services/data/{sf.API}"
+    import urllib.parse
+    import urllib.request
+    soql = ("SELECT ContentDocument.LatestPublishedVersionId, ContentDocument.Title, ContentDocument.FileExtension, "
+            f"ContentDocument.ContentSize FROM ContentDocumentLink WHERE LinkedEntityId = {sf._q(sf_request_id)} LIMIT 10")
+    rows = sf._call("GET", f"{base}/query?" + urllib.parse.urlencode({"q": soql}), token).get("records") or []
+    out = []
+    for r in rows:
+        doc = r.get("ContentDocument") or {}
+        ext = str(doc.get("FileExtension") or "").lower()
+        if ext not in PHOTO_EXT or int(doc.get("ContentSize") or 0) > 8_000_000 or not doc.get("LatestPublishedVersionId"):
+            continue
+        req = urllib.request.Request(f"{base}/sobjects/ContentVersion/{doc['LatestPublishedVersionId']}/VersionData",
+                                     headers={"Authorization": f"Bearer {token}"})
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            out.append((f"{doc.get('Title') or 'photo'}.{ext}", resp.read(8_000_001)))
+        if len(out) >= limit:
+            break
+    return out
+
+
 class Uniform:
     def __init__(self, desk):
         self.desk = desk
@@ -250,6 +282,8 @@ class Uniform:
             data["requests"][ref] = rec
             self.save(data)
         posted = self.card(rec)
+        if posted and rec["photos"] and rec["sf_request_id"]:  # the photos in the card's thread (Scott, 11/14)
+            threading.Thread(target=self.post_photos, args=(ref,), daemon=True).start()
         if repeat:
             self.tell_scott(f"🔁 Repeat garment complaint on *{self.acct_name(account)}*: {ref} after {repeat} (within "
                             f"{REPEAT_DAYS} days). The card is in #{os.environ.get('UNIFORM_CHANNEL', 'uniform-requests')}.")
@@ -285,6 +319,9 @@ class Uniform:
         target = {"garment": "this garment" if len(rec["garments"]) == 1 else "these garments", "wearer": "all of this wearer's garments",
                   "customer": "the whole account"}[rec["scope"]]
         out.append(f"Suggested: *{rec['code']} {CODES[rec['code']]}* on {target}" + (f" ({rec['why']})" if rec["why"] else ""))
+        dom = os.environ.get("SF_DOMAIN", "")
+        if rec.get("sf_request_id") and dom and SF_ID.fullmatch(rec["sf_request_id"]):
+            out.append(f"<https://{dom}/{rec['sf_request_id']}|Open in Salesforce>")
         if rec.get("repeat_of"):
             out.append(f"🔁 Repeat: {rec['repeat_of']} on this account in the last {REPEAT_DAYS} days (Scott told)")
         return out
@@ -323,6 +360,24 @@ class Uniform:
                     data["requests"][rec["ref"]]["ts"] = rec["ts"]
                     self.save(data)
         return True
+
+    def post_photos(self, ref: str) -> str:
+        rec = self.load()["requests"].get(ref) or {}
+        if not rec.get("ts"):
+            return "no card"
+        try:
+            photos = sf_photos(rec.get("sf_request_id", ""))
+        except Exception as e:
+            print(time.strftime("%H:%M"), "uniform photos", ref, str(e)[:200], flush=True)
+            photos = []
+        if not photos:
+            self.desk.slack.chat_postMessage(channel=self.channel(), thread_ts=rec["ts"], unfurl_links=False,
+                                             text="📎 I couldn't fetch the photo from Salesforce; it's on the request there.")
+            return "no photos"
+        for i, (name, data) in enumerate(photos, 1):
+            self.desk.slack.files_upload_v2(channel=self.channel(), thread_ts=rec["ts"], file=data, filename=name,
+                                            title=f"{ref} photo {i}" if len(photos) > 1 else f"{ref} photo")
+        return f"{len(photos)} photo(s)"
 
     def update(self, ref: str, **kw) -> dict:
         with self.lock:
