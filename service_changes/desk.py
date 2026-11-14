@@ -82,7 +82,8 @@ REDATE = re.compile(r"redat|closed|not open|locked|no access|couldn'?t (?:get in
                     r"nobody (?:there|home)|no one (?:there|answered)|move[sd]? (?:the )?deliver|deliver(?:y|ing)? (?:on |to )?"
                     r"(?:tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)|skip(?:ped|ping)? (?:this|today|the)|"
                     r"come back|try again (?:tomorrow|later)", re.I)
-SCREEN_TASK = re.compile(r"\bSKU cent(?:er|re)\b|\bAlliant (?:screen|setup|SKU)|^\s*donna,?\s+in alliant\b", re.I)
+SCREEN_TASK = re.compile(r"\bSKU cent(?:er|re)\b|\bAlliant (?:screen|setup|SKU)|^\s*donna,?\s+in (?:alliant|(?:the )?stockroom)\b"
+                         r"|\bService Code Maintenance\b|\bAdd/Remove Service Code\b", re.I)
 REDATE_FYI = re.compile(r"FYI: (?:route or schedule|hold or closure|today only)", re.I)
 REDATE_FOOTER = re.compile(r"^<[^>]+\|[^>]+> · ")
 YES = re.compile(r"^\W*(yes|yeah|yep|yup|sure|correct|right|do it|go ahead|go for it|please do|put it in|enter it|"

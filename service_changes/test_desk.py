@@ -1165,3 +1165,11 @@ def test_customer_messages_buttons_approve_the_persons_new_contacts_card(setup, 
     d.msg_link(tap("U2", act2))
     new = [m for m in slack.msgs["NC"] if (m.get("metadata") or {}).get("event_payload", {}).get("phone") == "+19075550100"]
     assert new and new[0]["metadata"]["event_payload"]["kind"] == "sms_signup" and new[0]["metadata"]["event_payload"]["approved_by"] == "U2"
+
+
+def test_stockroom_screen_checks_go_to_her_alliant_queue():
+    for text in ("Donna, in Stockroom, open Add/Remove Service Code and Service Code Maintenance, and tell me whether you "
+                 "can open both and whether SZ, ST and WR are in the code list. Don't change anything.",
+                 "Donna, in Alliant open the Garment inquiry for 5251819 and read me its service codes"):
+        assert desk.SCREEN_TASK.search(text), text
+    assert not desk.SCREEN_TASK.search("Donna, what's the stockroom saying about Chili's?")
