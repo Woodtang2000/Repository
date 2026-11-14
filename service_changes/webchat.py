@@ -664,6 +664,8 @@ def make_handler(chat: Chat, public_url: str):
             key = os.environ.get("UNIFORM_API_KEY", "")
             given = (self.headers.get("Authorization") or "").removeprefix("Bearer ").strip()
             if len(key) < 24 or not hmac.compare_digest(given.encode(), key.encode()):
+                print(time.strftime("%H:%M"), f"uniform {what}: 401 bad key"
+                      + (" (UNIFORM_API_KEY isn't set on this server)" if len(key) < 24 else ""), flush=True)
                 time.sleep(1)
                 return self._send(401, b'{"error":"bad key"}', "application/json")
             n = min(int(self.headers.get("Content-Length") or 0), 20000)
@@ -680,13 +682,17 @@ def make_handler(chat: Chat, public_url: str):
                 hits = UNIFORM_HITS.setdefault((what, client), [])
                 hits[:] = [t for t in hits if time.time() - t < 3600]
                 if len(hits) >= limit:
+                    print(time.strftime("%H:%M"), f"uniform {what}: 429 rate limit", flush=True)
                     return self._send(429, b'{"error":"too many"}', "application/json")
                 hits.append(time.time())
             req = urllib.request.Request(f"http://127.0.0.1:{os.environ.get('DESK_VOICE_PORT', '8091')}/uniform/{what}",
                                          data=raw, method="POST", headers={"Content-Type": "application/json"})
             try:
                 with urllib.request.urlopen(req, timeout=20) as r:
-                    return self._send(r.status, r.read(), "application/json")
+                    out = r.read()
+                print(time.strftime("%H:%M"), f"uniform {what}: {r.status}"
+                      + (" found" if b'"found": true' in out else " not found" if b'"found": false' in out else ""), flush=True)
+                return self._send(r.status, out, "application/json")
             except Exception as e:
                 print(time.strftime("%H:%M"), "uniform: desk didn't answer:", str(e)[:120], flush=True)
                 return self._send(503, b'{"error":"try again"}', "application/json")
