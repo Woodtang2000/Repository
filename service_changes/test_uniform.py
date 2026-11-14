@@ -101,3 +101,14 @@ def test_no_tag_match_suggests_the_account_without_names(u):
     slack, d = u
     out = uniform.match(d.alliant, "Bob's Service", "Mike")
     assert out == {"accounts": ["1003-1-00002"], "confidence": "high"}
+
+
+def test_driver_mode_gets_todays_stops_in_order(u, monkeypatch):
+    slack, d = u
+    monkeypatch.setattr(d.alliant, "stops", [
+        {"branch": "1", "route": "12", "day": "Wed", "sequence": "2", "account": "1003-1-00002", "name": "BOB'S", "city": "Wasilla"},
+        {"branch": "1", "route": "12", "day": "Wed", "sequence": "1", "account": "1950-1-00000", "name": "ACME", "city": "Wasilla"},
+        {"branch": "1", "route": "12", "day": "Thu", "sequence": "1", "account": "1111-1-00000", "name": "THU", "city": ""},
+        {"branch": "2", "route": "12", "day": "Wed", "sequence": "1", "account": "6001-2-00000", "name": "TLG", "city": ""}], raising=False)
+    out = uniform.stops(d.alliant, "12", "1", "Wednesday")
+    assert [s["account"] for s in out["stops"]] == ["1950-1-00000", "1003-1-00002"] and out["day"] == "Wed"

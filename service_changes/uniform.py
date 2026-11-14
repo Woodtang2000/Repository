@@ -105,6 +105,20 @@ def match(alliant, company: str, first_name: str) -> dict:
     return {"accounts": accounts, "confidence": "high" if accounts and has and scored[0][0] == 1 else "low"}
 
 
+def stops(alliant, route: str, branch: str = "1", day: str = "") -> dict:
+    """Driver mode: today's stops on the driver's route, in stop order (route_stops.csv), so the driver picks the account
+    in one tap; the first garment scanned then confirms it. Accounts and names only: drivers serve these customers."""
+    day = (day or datetime.now(ALASKA).strftime("%a"))[:3].title()
+    r, b = str(route or "").lstrip("0"), str(branch or "1").lstrip("0") or "1"
+    rows = [x for x in getattr(alliant, "stops", None) or [] if str(x.get("route", "")).lstrip("0") == r
+            and str(x.get("branch", "1")).lstrip("0") == b and str(x.get("day", ""))[:3].title() == day]
+    num = lambda v: int(v) if str(v or "").isdigit() else 9999
+    rows.sort(key=lambda x: num(x.get("sequence")))
+    return {"route": r, "branch": b, "day": day,
+            "stops": [{"sequence": x.get("sequence", ""), "account": x.get("account", ""), "name": x.get("name", ""),
+                       "city": x.get("city", "")} for x in rows]}
+
+
 class Uniform:
     def __init__(self, desk):
         self.desk = desk

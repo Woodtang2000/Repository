@@ -1615,13 +1615,16 @@ class Desk:
                         return self.reply(500, b"{}")
                     print(time.strftime("%H:%M"), "alliant jobs file:", f.group(1), out, flush=True)
                     return self.reply(200, json.dumps({"ok": out}).encode())
-                u = re.fullmatch(r"/uniform/(garment|match|request)", self.path)
+                u = re.fullmatch(r"/uniform/(garment|match|request|stops)", self.path)
                 if u:  # the uniform request page, through webchat.py (key and rate limit checked there)
                     from . import uniform
                     try:
                         body = json.loads(self.rfile.read(min(int(self.headers.get("Content-Length") or 0), 20000)) or b"{}")
                         if u.group(1) == "garment":
                             out = uniform.lookup(desk.alliant, str(body.get("barcode") or ""))
+                        elif u.group(1) == "stops":
+                            out = uniform.stops(desk.alliant, str(body.get("route") or ""), str(body.get("branch") or "1"),
+                                                str(body.get("day") or ""))
                         elif u.group(1) == "match":
                             out = uniform.match(desk.alliant, str(body.get("company") or ""), str(body.get("first_name") or ""))
                         else:

@@ -561,7 +561,7 @@ def make_handler(chat: Chat, public_url: str):
             m = re.fullmatch(r"/api/phone/(tool|[\w-]{24,})/(\w+)", path.split("?")[0])
             if m:  # the phone lines' ElevenLabs agents (phone_agent.py): the key in the path, a ?key= or X-Donna-Key
                 return self._phone_tool(m.group(2), m.group(1) if m.group(1) != "tool" else "")
-            m = re.fullmatch(r"/api/uniform/(garment|match|request)", path)
+            m = re.fullmatch(r"/api/uniform/(garment|match|request|stops)", path)
             if m:  # the uniform request page (Salesforce, server to server): key and rate limit, then the desk
                 return self._uniform(m.group(1))
             if path == "/api/donna/tool":
@@ -673,8 +673,10 @@ def make_handler(chat: Chat, public_url: str):
             except ValueError:
                 return self._send(400, b'{"error":"bad json"}', "application/json")
             client = str(body.get("client") or "")[:80]
+            if what == "stops" and body.get("mode") != "driver":  # the route's customers: driver mode (logged in) only
+                return self._send(403, b'{"error":"driver mode only"}', "application/json")
             if client and body.get("mode") != "driver":
-                limit = {"garment": 10, "match": 10, "request": 3}[what]
+                limit = {"garment": 10, "match": 10, "request": 3, "stops": 10}[what]
                 hits = UNIFORM_HITS.setdefault((what, client), [])
                 hits[:] = [t for t in hits if time.time() - t < 3600]
                 if len(hits) >= limit:
