@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Uniform Requests Mock-ups</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&family=Source+Serif+4:opsz,wght@8..60,700&display=swap">
+<style>
+/* Layout: a tab bar (phone mock-ups | spec); mock-ups are 360px phone frames in a wrapping row, grouped by who uses them. */
+:root{
+  --bg:#eef1f4; --paper:#fff; --ink:#1b2430; --muted:#5d6977; --rule:#d8dee5;
+  --navy:#1f3a5f; --gold:#b8862b; --soft:#f4f6f8; --ok:#2f7d4f; --warn:#a8641a; --hi:#e8eef6;
+  --f-head:"Source Serif 4", Georgia, serif; --f-body:"Source Sans 3", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#11161c; --paper:#1a2129; --ink:#e6eaef; --muted:#9aa6b4; --rule:#2c3640; --navy:#9ec0ea; --gold:#e0b25a;
+  --soft:#222b35; --ok:#6cc08f; --warn:#e2a35a; --hi:#1d2a3c; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#11161c; --paper:#1a2129; --ink:#e6eaef; --muted:#9aa6b4; --rule:#2c3640; --navy:#9ec0ea; --gold:#e0b25a;
+  --soft:#222b35; --ok:#6cc08f; --warn:#e2a35a; --hi:#1d2a3c; color-scheme:dark}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 var(--f-body)}
+.wrap{max-width:1240px;margin:0 auto;padding:20px 16px 60px}
+h1{font:700 1.8rem/1.2 var(--f-head);color:var(--navy);margin:0 0 4px}
+.sub{color:var(--muted);margin:0 0 14px;max-width:80ch}
+.tabs{display:flex;gap:6px;margin:0 0 18px;flex-wrap:wrap}
+.tabs a{padding:7px 14px;border:1px solid var(--rule);border-radius:99px;text-decoration:none;color:var(--ink);background:var(--paper);font-weight:600}
+.tabs a.on{background:var(--navy);color:var(--paper);border-color:var(--navy)}
+h2{font:700 1.3rem/1.25 var(--f-head);color:var(--navy);margin:26px 0 10px}
+.row{display:flex;flex-wrap:wrap;gap:20px;align-items:flex-start}
+figure{margin:0;width:300px;max-width:100%}
+figcaption{font-size:.85rem;color:var(--muted);margin-top:8px}
+figcaption b{color:var(--ink)}
+/* phone */
+.phone{width:300px;max-width:100%;height:600px;border:10px solid #1c232c;border-radius:34px;background:#fff;color:#1b2430;overflow:hidden;position:relative;box-shadow:0 8px 24px rgb(0 0 0 / .18);display:flex;flex-direction:column}
+.phone .top{height:22px;flex:none}
+.brand{display:flex;align-items:center;gap:8px;padding:8px 16px 10px;border-bottom:3px solid #b8862b}
+.brand .logo{width:28px;height:28px;border-radius:50%;background:#1f3a5f;color:#fff;display:grid;place-items:center;font:700 13px var(--f-head)}
+.brand b{font:700 15px var(--f-head);color:#1f3a5f}
+.scr{padding:16px;display:flex;flex-direction:column;gap:12px;flex:1;overflow:hidden}
+.scr h3{margin:0;font:700 22px/1.2 var(--f-head);color:#1f3a5f}
+.scr p{margin:0;color:#4b5663;font-size:14px}
+.big{display:block;width:100%;padding:16px;border-radius:14px;border:0;background:#1f3a5f;color:#fff;font:700 18px var(--f-body);text-align:center}
+.big.alt{background:#fff;color:#1f3a5f;border:2px solid #1f3a5f}
+.small{font-size:12.5px;color:#6b7684}
+.cam{background:#111;border-radius:14px;height:260px;position:relative;display:grid;place-items:center}
+.cam .box{width:80%;height:70px;border:3px solid #e0b25a;border-radius:8px;display:grid;place-items:center}
+.bars{width:85%;height:40px;background:repeating-linear-gradient(90deg,#fff 0 2px,transparent 2px 4px,#fff 4px 7px,transparent 7px 10px)}
+.cam .lbl{position:absolute;bottom:10px;color:#ddd;font-size:12px}
+.field{border:1.5px solid #c9d1da;border-radius:10px;padding:11px 12px;font-size:15px;color:#1b2430;background:#fff}
+.field.ph{color:#8a95a3}
+.card{border:1.5px solid #d8dee5;border-radius:12px;padding:12px;background:#f7f9fb}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.pb{border:2px solid #d0d7df;border-radius:12px;padding:12px 8px;text-align:center;font-weight:700;font-size:14px;background:#fff;min-height:64px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.pb i{font-style:normal;font-size:22px}
+.pb.on{border-color:#1f3a5f;background:#e8eef6}
+.check{width:64px;height:64px;border-radius:50%;background:#2f7d4f;color:#fff;display:grid;place-items:center;font-size:34px;margin:10px auto 0}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1.5px solid #c9d1da;border-radius:99px;padding:4px 10px;font-size:12.5px;font-weight:600}
+.chip.on{background:#1f3a5f;color:#fff;border-color:#1f3a5f}
+.li{border-bottom:1px solid #e3e8ee;padding:8px 0;font-size:13.5px}
+.li b{display:block}
+.note{background:#fdf3e1;border:1px solid #e9cf9a;border-radius:10px;padding:8px 10px;font-size:12.5px;color:#6b4a10}
+.badge{display:inline-block;background:#e8eef6;color:#1f3a5f;border-radius:6px;padding:1px 6px;font-size:11px;font-weight:700}
+/* slack mock */
+.slack{box-sizing:border-box;width:520px;max-width:100%;background:#fff;color:#1d1c1d;border:1px solid #ddd;border-radius:10px;padding:14px;font:14px/1.45 -apple-system,Segoe UI,Arial,sans-serif;box-shadow:0 4px 14px rgb(0 0 0 / .1)}
+.slack .who{display:flex;gap:8px;align-items:center;margin-bottom:6px}
+.slack .av{width:32px;height:32px;border-radius:6px;background:#b8862b;color:#fff;display:grid;place-items:center;font-weight:700}
+.slack .bar{border-left:4px solid #b8862b;padding:4px 10px;margin:6px 0}
+.slack .btns{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.slack .btn{border:1px solid #bbb;border-radius:4px;padding:4px 10px;font-weight:700;font-size:13px;background:#fff}
+.slack .btn.p{background:#007a5a;color:#fff;border-color:#007a5a}
+.sms{box-sizing:border-box;width:300px;max-width:100%;background:#fff;border-radius:18px;border:1px solid #ddd;padding:14px;color:#1b2430}
+.bub{background:#e9e9eb;border-radius:16px;padding:9px 12px;font-size:14px;margin:6px 0;max-width:88%}
+.bub.me{background:#1f6feb;color:#fff;margin-left:auto}
+/* spec */
+.doc{background:var(--paper);border:1px solid var(--rule);border-radius:10px;padding:18px 22px;max-width:980px}
+.doc h2{margin-top:22px}.doc h2:first-child{margin-top:0}
+.doc p,.doc li{max-width:80ch}
+.tbl{overflow-x:auto;margin:8px 0}
+table{border-collapse:collapse;width:100%;min-width:640px;font-size:14px}
+th,td{text-align:left;vertical-align:top;padding:7px 9px;border-bottom:1px solid var(--rule)}
+th{font-size:.78rem;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+code,pre{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.86em}
+code{background:var(--soft);padding:1px 5px;border-radius:4px}
+pre{background:var(--soft);border:1px solid var(--rule);border-radius:8px;padding:10px 12px;overflow-x:auto;white-space:pre}
+.ask{border-left:4px solid var(--gold);background:var(--soft);padding:10px 14px;border-radius:0 8px 8px 0}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>Uniform Requests</h1>
+<p class="sub">Garment repair and replacement requests: one page for wearers and customers (brand QR), driver mode, plus text, email and phone. Every request ends as an approved Alliant service code, and the loop is closed with the customer. Mock-ups at phone width, then the spec the Sales agent builds the page to. Draft 1, 11/14, sandbox first.</p>
+<nav class="tabs"><a href="#mockups" id="t-m">Phone mock-ups</a><a href="#spec" id="t-s">Spec for the page and Donna</a></nav>
+
+<section id="mockups">
+<h2>Wearer or customer (public page from the QR, no login)</h2>
+<div class="row">
+<figure><div class="phone"><div class="top"></div>
+ <div class="brand"><div class="logo">SW</div><b>Snow White Linen</b></div>
+ <div class="scr">
+  <h3>Something wrong with a uniform?</h3>
+  <p>Tell us in a minute. We fix it and send it back with your next delivery.</p>
+  <button class="big">📷 Scan the tag</button>
+  <button class="big alt">No tag? Use your company name</button>
+  <p class="small">The tag is the white barcode label inside the collar or waistband.</p>
+ </div></div>
+ <figcaption><b>1. Start.</b> snowwhitelinen.com/uniform (and thelaundrygroup.com/uniform, in TLG colours). No login.</figcaption></figure>
+
+<figure><div class="phone"><div class="top"></div>
+ <div class="brand"><div class="logo">SW</div><b>Snow White Linen</b></div>
+ <div class="scr">
+  <div class="cam"><div class="box"><div class="bars"></div></div><div class="lbl">Hold the barcode inside the box</div></div>
+  <p class="small">Can't scan it? Type the number printed under the bars:</p>
+  <div class="field ph">000004729628</div>
+  <button class="big">Look it up</button>
+ </div></div>
+ <figcaption><b>2. Scan.</b> Phone camera reads the tag (Interleaved 2 of 5). Typing the printed number always works too.</figcaption></figure>
+
+<figure><div class="phone"><div class="top"></div>
+ <div class="brand"><div class="logo">SW</div><b>Snow White Linen</b></div>
+ <div class="scr">
+  <p>We found this garment:</p>
+  <div class="card"><b style="font-size:18px">Coverall, navy</b><br><span>Size 52 L</span></div>
+  <h3 style="font-size:19px">Is this the one?</h3>
+  <button class="big">Yes, that's it</button>
+  <button class="big alt">No, scan again</button>
+  <p class="small">For privacy we never show whose garment it is.</p>
+ </div></div>
+ <figcaption><b>3. Confirm.</b> Only the garment type and size. Never a name or the account.</figcaption></figure>
+
+<figure><div class="phone"><div class="top"></div>
+ <div class="brand"><div class="logo">SW</div><b>Snow White Linen</b></div>
+ <div class="scr">
+  <h3 style="font-size:19px">What's wrong with it?</h3>
+  <div class="grid">
+   <div class="pb on"><i>✂️</i>Ripped or torn</div><div class="pb"><i>🔘</i>Button or zipper</div>
+   <div class="pb"><i>📏</i>Doesn't fit</div><div class="pb"><i>💧</i>Stained</div>
+   <div class="pb"><i>🧵</i>Worn out</div><div class="pb"><i>✏️</i>Something else</div>
+  </div>
+  <button class="big">Next</button>
+ </div></div>
+ <figcaption><b>4. Problem.</b> Six big buttons. "Button or zipper" then asks which one; "Doesn't fit" asks too big or too small.</figcaption></figure>
+
+<figure><div class="phone"><div class="top"></div>
+ <div class="brand"><div class="logo">SW</div><b>Snow White Linen</b></div>
+ <div class="scr">
+  <div class="field ph">📎 Add a photo (optional)</div>
+  <div class="field ph" style="height:58px">Anything else? e.g. "left sleeve seam"</div>
+  <p style="font-weight:700;color:#1b2430">Want a text when it's fixed?</p>
+  <div class="field ph">Mobile number (optional)</div>
+  <div class="field ph" style="display:none"></div>
+  <button class="big">Send</button>
+  <p class="small">We only use your number for this request.</p>
+ </div></div>
+ <figcaption><b>5. Details.</b> Photo, note and contact are all optional. A hidden junk trap and a rate limit sit behind Send.</figcaption></figure>
+
+<figure><div class="phone"><div class="top"></div>
+ <div class="brand"><div class="logo">SW</div><b>Snow White Linen</b></div>
+ <div class="scr" style="text-align:center">
+  <div class="check">✓</div>
+  <h3>Got it</h3>
+  <p>Request <b>UR-1043</b>. Our team checks it today, and the fixed garment goes back with your next delivery.</p>
+  <p>We'll text you when it's done.</p>
+  <button class="big alt">Report another garment</button>
+ </div></div>
+ <figcaption><b>6. Done.</b> The requester gets a reference; nothing about the account is shown.</figcaption></figure>
+
+<figure><div class="phone"><div class="top"></div>
+ <div class="brand"><div class="logo">SW</div><b>Snow White Linen</b></div>
+ <div class="scr">
+  <h3 style="font-size:19px">No tag? That's fine.</h3>
+  <div class="field">Bob's Service</div>
+  <div class="field">Mike</div>
+  <p style="font-weight:700;color:#1b2430">Which item?</p>
+  <div class="chips"><span class="chip on">Shirt</span><span class="chip">Pants</span><span class="chip">Coverall</span><span class="chip">Jacket</span><span class="chip">Apron</span><span class="chip">Other</span></div>
+  <button class="big">Next</button>
+  <p class="small">The office matches it to your account; we never show names back.</p>
+ </div></div>
+ <figcaption><b>2b. Fallback.</b> Company and first name. Donna suggests the account and wearer; the office confirms.</figcaption></figure>
+</div>
+
+<h2>Driver mode (same page, Salesforce login)</h2>
+<div class="row">
+<figure><div class="phone"><div class="top"></div>
+ <div class="brand"><div class="logo">SW</div><b>Driver · Route 12</b></div>
+ <div class="scr">
+  <div class="card"><span class="badge">ACCOUNT</span><br><b>1003-1-00002 Bob's Service's</b></div>
+  <div class="field ph">▮ Scan with the handheld…</div>
+  <div class="li"><b>Coverall navy 52 L</b><div class="chips"><span class="chip on">Ripped</span><span class="chip">Button/zip</span><span class="chip">Fit</span><span class="chip">Stain</span><span class="chip">Worn</span></div></div>
+  <div class="li"><b>Pants navy 34×30</b><div class="chips"><span class="chip">Ripped</span><span class="chip on">Button/zip</span><span class="chip">Fit</span><span class="chip">Stain</span><span class="chip">Worn</span></div></div>
+  <div class="note">2nd request for this wearer in 30 days. Suggest checking all their garments?</div>
+  <button class="big">Send 2 garments</button>
+ </div></div>
+ <figcaption><b>7. Driver.</b> The laser scanner types each barcode; several garments per request. Drivers see the account (they serve it), still no wearer names.</figcaption></figure>
+
+<figure><div class="phone"><div class="top"></div>
+ <div class="brand"><div class="logo">SW</div><b>Driver · Route 12</b></div>
+ <div class="scr" style="text-align:center">
+  <div class="check">✓</div>
+  <h3>Sent: UR-1044</h3>
+  <p>2 garments for Bob's Service's. You'll get a note in #route-12 when they're done.</p>
+  <button class="big alt">Next account</button>
+ </div></div>
+ <figcaption><b>8. Sent.</b> The driver hears again in the route channel when Alliant shows it fixed.</figcaption></figure>
+</div>
+
+<h2>Office: the Slack card and the approval</h2>
+<div class="row">
+<figure style="width:520px"><div class="slack">
+ <div class="who"><div class="av">D</div><b>Donna</b> <span style="color:#777;font-size:12px">10:42 AM · #uniform-requests</span></div>
+ <div class="bar"><b>🧵 UR-1043 · 1003-1-00002 BOB'S SERVICE'S (WASILLA)</b><br>
+ Coverall navy 52 L · <b>Ripped or torn</b> · from the QR page · 📎 1 photo<br>
+ Suggested: <b>SS Seam Repair on this garment</b><br>
+ <span style="color:#777">No other requests on this account in 60 days.</span><br>
+ <a href="#mockups" style="color:#1264a3">Open in Salesforce</a></div>
+ <div class="btns"><span class="btn p">✅ Approve: SS on this garment</span><span class="btn">Use GM General Mend</span><span class="btn">Whole wearer</span><span class="btn">Reject</span></div>
+</div><figcaption><b>9. Card.</b> Account, garment type, problem, suggested code and scope, a link. No wearer names in Slack. One tap approves.</figcaption></figure>
+
+<figure style="width:520px"><div class="slack">
+ <div class="who"><div class="av">D</div><b>Donna</b> <span style="color:#777;font-size:12px">10:44 AM</span></div>
+ <div class="bar" style="border-color:#2f7d4f"><b>✅ UR-1043 approved by Sonja: SS Seam Repair on garment 000004729628</b><br>
+ 🤖 Entered in Alliant 10:51 (Inquiry › Garment › Add Service Code), read back live.<br>
+ ⏳ Waiting for the plant to pull it at the next scan.</div>
+ <div class="bar" style="border-color:#2f7d4f"><b>✔️ Done 11/18:</b> the code came off at the Out Clean scan. Texted the requester; told #route-12; emailed the customer contact and Jesse.</div>
+</div><figcaption><b>10. Loop closed.</b> Donna enters the code (or the office does), then watches Alliant until the plant clears it.</figcaption></figure>
+
+<figure style="width:300px"><div class="sms">
+ <div class="small" style="text-align:center">Text message</div>
+ <div class="bub">Snow White Linen: your navy coverall (size 52 L) has been repaired and goes back with your next delivery, Wed 11/18. Ref UR-1043. Reply here if anything else needs fixing.</div>
+ <div class="bub me">Thank you!</div>
+</div><figcaption><b>11. Requester.</b> Only if they left a number. Never a price, never another wearer.</figcaption></figure>
+</div>
+</section>
+
+<section id="spec" hidden>
+<div class="doc">
+<h2>1. How a request flows</h2>
+<ol>
+ <li><b>In:</b> the QR page (wearer or customer), driver mode, or a text, email or call to Donna. All become the same <b>Uniform Request</b> in Salesforce, on the account.</li>
+ <li><b>Lookup:</b> Donna turns a barcode into garment, size, wearer and account from Alliant's data. The page only ever gets garment type and size back.</li>
+ <li><b>Suggest:</b> Donna proposes the service code and the scope (garment, wearer or account) by the rules in section 3, and posts a card in <code>#uniform-requests</code>.</li>
+ <li><b>Approve:</b> the office taps Approve (or picks another code or scope). Donna enters the code on her Alliant workstation and reads it back; if she can't, the card goes back to the office with the exact screen path.</li>
+ <li><b>Done:</b> Donna checks the garment in Alliant daily. When the plant clears the code (or the replacement or size exchange shows), she texts or emails the requester, tells the driver in <code>#route-N</code>, and emails the customer contact and the rep.</li>
+ <li><b>Repeats:</b> a second complaint on the same account within 60 days goes to Scott as well.</li>
+</ol>
+
+<h2>2. Barcodes</h2>
+<ul>
+ <li>Snow White's tags are <b>Interleaved 2 of 5</b> (Alliant's label font is BC I25; the scanners are I2of5 keyboard wedges). The sample tag <code>000004729628</code> is 12 digits.</li>
+ <li><b>Phone camera:</b> Android Chrome reads ITF with the built-in BarcodeDetector. iPhone Safari has no BarcodeDetector, so the page needs a JavaScript reader with ITF (ZXing's browser build). ITF on a heat-sealed fabric label is the hardest case for a phone camera, so the "type the number" box is always on screen.</li>
+ <li><b>Driver handhelds</b> type the barcode like a keyboard: a plain text field that submits on Enter, ready for the next scan.</li>
+ <li><b>RFID</b> chips can't be read by phones; only the printed barcode counts.</li>
+ <li>Accept only digits of Alliant's barcode length (12 in the sample; confirm in Stockroom › System Options › barcode length). Anything else is rejected without a lookup.</li>
+</ul>
+
+<h2>3. Problems, scope and Alliant service codes</h2>
+<div class="tbl"><table>
+<thead><tr><th>Request</th><th>Suggested code</th><th>Suggested scope</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td>Ripped or torn</td><td><code>SS</code> Seam Repair</td><td>That garment</td><td>The office may switch to <code>GP</code> Garment Patched or <code>GM</code> General Mend</td></tr>
+<tr><td>Button</td><td><code>BR</code> Button Replacement</td><td>That garment</td><td></td></tr>
+<tr><td>Zipper</td><td><code>ZR</code> Zipper Replacement</td><td>That garment</td><td></td></tr>
+<tr><td>Doesn't fit</td><td><b>New code needed</b> (proposal <code>SZ</code> Check Fit / Size)</td><td>That wearer</td><td>The size exchange itself is a work order (transaction <code>Z</code> SIZE CHANGE); the service code pulls the garment</td></tr>
+<tr><td>Stained</td><td><b>New code needed</b> (proposal <code>ST</code> Stain Treatment)</td><td>That garment</td><td></td></tr>
+<tr><td>Worn out</td><td><b>New code needed</b> (proposal <code>WR</code> Worn, Replace)</td><td>That garment</td><td>The plant replaces it (Replacement work order)</td></tr>
+<tr><td>Something else</td><td><code>GM</code> General Mend</td><td>That garment</td><td>Note goes in Alliant's "Special Request"</td></tr>
+<tr><td>Name or company patch</td><td><code>NT</code> Replace Name/Company Patch</td><td>That garment</td><td>From a text or email, or "Something else"</td></tr>
+<tr><td>"Our garments look old" (text, email, call)</td><td><code>AA</code> Account Garment Audit</td><td>The whole account</td><td>Audit results summarised for the rep (upsell)</td></tr>
+<tr><td>One garment complaint, no barcode</td><td>By the problem</td><td>That wearer's garments of that type</td><td>The office confirms</td></tr>
+<tr><td>Driver-scanned damage</td><td>By the problem</td><td>That garment</td><td>Suggest the whole wearer when the same wearer had a request in the last 30 days</td></tr>
+</tbody></table></div>
+<p>Alliant limits: a garment holds at most <b>3 service codes</b>; codes are 2 characters. Entering: one garment in <b>Inquiry › Garment › Add Service Code</b>; a wearer or account in <b>Stockroom › Add/Remove Service Code</b> (scope Specific Wearers or Specific Customer, Append, Removal "Until Removed").</p>
+
+<h2>4. What the page sends Donna, and what she answers</h2>
+<p>All calls go <b>server to server</b> from Salesforce (Apex through a Named Credential) to Donna's existing web server. The browser never calls Donna and never holds the key. Key: <code>UNIFORM_API_KEY</code>, created by Scott, entered in Salesforce's Named Credential and in Donna's settings; never in code, Slack or chat.</p>
+<p><b>a. Barcode lookup</b> (after a scan or a typed number)</p>
+<pre>POST https://chat.snowwhitelinen.com/api/uniform/garment
+Authorization: Bearer &lt;UNIFORM_API_KEY&gt;
+{"barcode": "000004729628", "brand": "SW", "mode": "public" | "driver", "client": "&lt;hashed IP&gt;"}
+
+200 {"found": true, "garment": "Coverall, navy", "size": "52 L",
+     "account": "1003-1-00002", "garment_ref": "g1.&lt;signed token&gt;"}
+200 {"found": false}
+429 {"error": "too many lookups"}</pre>
+<ul>
+ <li>Show only <code>garment</code> and <code>size</code> on the page. <code>account</code> is for Apex to attach the request to the Salesforce Account (by the Alliant account number field); it never goes to a public browser. Driver mode may show the account name.</li>
+ <li>No wearer name or number is ever returned. <code>garment_ref</code> carries the wearer to Donna's side, signed so it can't be forged.</li>
+ <li>A barcode from the other company (SW tag on the TLG page) still works; the request goes to the company that owns the garment.</li>
+</ul>
+<p><b>b. Fallback match</b> (no tag): <code>POST /api/uniform/match {"company": "Bob's Service", "first_name": "Mike", "item": "Shirt", "brand": "SW"}</code> → <code>{"accounts": ["1003-1-00002"], "confidence": "high"|"low"}</code>. The page says only "Thanks, the office will confirm". Donna suggests the wearer in Salesforce for the office; never on the page.</p>
+<p><b>c. A saved request</b> (after Salesforce saves the record and its Files)</p>
+<pre>POST https://chat.snowwhitelinen.com/api/uniform/request
+{"sf_request_id": "a0X…", "ref": "UR-1043", "brand": "SW", "source": "qr" | "driver" | "text" | "email" | "phone",
+ "account": "1003-1-00002" | null,
+ "garments": [{"garment_ref": "g1.…" | null, "barcode": "000004729628" | null,
+               "problem": "torn" | "button" | "zipper" | "fit_big" | "fit_small" | "stain" | "worn" | "other",
+               "note": "left sleeve seam"}],
+ "fallback": {"company": "…", "first_name": "…", "item": "…"} | null,
+ "photos": 1,
+ "contact": {"phone": "+1907…" | null, "email": "…" | null},
+ "driver": {"sf_user_id": "005…", "route": 12} | null}
+
+200 {"ok": true, "suggested": {"code": "SS", "scope": "garment"}, "card": "posted"}</pre>
+<p><b>d. Donna writes back to the Salesforce record</b> (through her existing Salesforce connection; she changes data, never setup): <code>Status</code> (New → Approved → Entered in Alliant → Done, or Rejected), <code>Suggested_Code</code>, <code>Final_Code</code>, <code>Scope</code>, <code>Approved_By</code>, <code>Approved_At</code>, <code>Entered_At</code>, <code>Done_At</code>, <code>Repeat_Of</code>.</p>
+
+<h2>5. What the Salesforce side needs (the Sales agent builds)</h2>
+<ul>
+ <li>Object <b>Uniform Request</b> on the Account, with a child <b>Uniform Request Garment</b> (barcode, garment, size, problem, note, wearer number in a field hidden from the public site profile), photos as Files on the request, and the fields in 4d.</li>
+ <li>The public page on a Salesforce Site, reached by DreamHost redirects from snowwhitelinen.com/uniform and thelaundrygroup.com/uniform, branded by the brand in the URL.</li>
+ <li><b>Junk and rate limits:</b> a hidden honeypot field; 10 lookups and 3 requests per hour per device; photos up to 8 MB, images only; reject text with links. Donna also limits lookups per client.</li>
+ <li>Driver mode behind the Salesforce login, for drivers only.</li>
+ <li>A sandbox build first, pointed at Donna's test endpoint.</li>
+</ul>
+
+<h2>6. What Donna needs from Alliant</h2>
+<ul>
+ <li><b>Barcode → garment → wearer → account: she already has it.</b> The hourly garment file covers every garment in service, and her live read-only lookup covers anything newer. No wearer-endpoint key is needed for this: the Sales Handoff wearer endpoint is a different thing (phase 2 of new accounts). Public lookups use the hourly file, so they don't use up her 30-an-hour live lookups.</li>
+ <li><b>Three new service codes</b> (Scott, in Stockroom › Service Code Maintenance): one each for fit, stains and worn out. My proposals are <code>SZ</code>, <code>ST</code> and <code>WR</code>; pick your own if you prefer.</li>
+ <li><b>Permission for Donna's Alliant user (CLAUDE)</b> to Add Service Code in Inquiry › Garment, and the "Add/Remove Service Code" security option for the Stockroom screen. Without it, the office enters the codes from the card's instructions.</li>
+ <li><b>How codes come off:</b> which Count Station setting Snow White uses ("Allow for Removal", "Automatically Remove" and on which scans, or by hand). Donna marks a request done when the code is gone from the garment after it was approved.</li>
+ <li><b>A photo of a tag,</b> to confirm the printed number and its length.</li>
+</ul>
+
+<h2>7. Privacy and safety</h2>
+<ul>
+ <li>The public page never shows a wearer's name, the account, prices or anything else about a customer.</li>
+ <li>No wearer names in Slack. The office sees them in Salesforce or Alliant.</li>
+ <li>Donna enters a code only after a person approves it. She never changes sizes, inventory or prices; size exchanges and replacements stay with the stockroom.</li>
+ <li>Texts and emails go only to the requester's own number or email, and to the account's linked contacts and rep.</li>
+ <li>In the sandbox, Donna enters nothing in Alliant and sends nothing to customers: test cards go to <code>#uniform-requests-test</code>, and texts and emails go to Scott instead.</li>
+</ul>
+
+<h2>8. Reporting</h2>
+<ul>
+ <li><b>Monthly view</b> (Salesforce report, or Donna's monthly post to Scott and Bill): requests by problem and source, turnaround (request → approved → done), repeat accounts, open over 7 days.</li>
+ <li><b>Account audits</b> (<code>AA</code>): Donna summarises what the audit found (garments worn, missing, wrong size) for the rep, as an upsell note on the Salesforce account.</li>
+</ul>
+
+<h2>9. Decisions for Scott</h2>
+<div class="ask"><ol>
+ <li>OK the code mapping in section 3, and create the three new codes (or tell me which existing codes to use).</li>
+ <li>Who approves: the office (Sonja, Ana), Scott and Bill? And may Donna enter approved codes in Alliant (the CLAUDE permission above)?</li>
+ <li>Which Count Station removal setting Snow White uses.</li>
+ <li>A photo of a garment tag.</li>
+ <li>Create <code>#uniform-requests</code> and <code>#uniform-requests-test</code> and invite Donna.</li>
+ <li>Create <code>UNIFORM_API_KEY</code> when the Sales agent is ready to connect the sandbox.</li>
+</ol></div>
+</div>
+</section>
+</div>
+<script>
+function show(){var s=location.hash==="#spec";document.getElementById("mockups").hidden=s;document.getElementById("spec").hidden=!s;
+document.getElementById("t-m").className=s?"":"on";document.getElementById("t-s").className=s?"on":"";}
+window.addEventListener("hashchange",show);show();
+</script>
+</body>
+</html>
