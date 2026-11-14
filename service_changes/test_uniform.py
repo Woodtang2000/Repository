@@ -112,3 +112,10 @@ def test_driver_mode_gets_todays_stops_in_order(u, monkeypatch):
         {"branch": "2", "route": "12", "day": "Wed", "sequence": "1", "account": "6001-2-00000", "name": "TLG", "city": ""}], raising=False)
     out = uniform.stops(d.alliant, "12", "1", "Wednesday")
     assert [s["account"] for s in out["stops"]] == ["1950-1-00000", "1003-1-00002"] and out["day"] == "Wed"
+
+
+def test_names_read_well_on_a_phone():
+    assert uniform.nice("SHIRT MIMIX LS SHIRT NAVY") == "Shirt Mimix LS Shirt Navy"
+    assert uniform.nice("THREE BEARS BIG LAKE C STORE #27") == "Three Bears Big Lake C Store #27"
+    assert uniform.nice("FISHER'S FUEL INC") == "Fisher's Fuel Inc"
+    assert uniform.nice("PANT FR IQ SERIES") == "Pant FR IQ Series"

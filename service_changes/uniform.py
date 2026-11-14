@@ -64,9 +64,22 @@ def unsign(ref: str) -> dict | None:
         return None
 
 
+def nice(name: str) -> str:
+    """Alliant's capitals, readable on a phone: "SHIRT MIMIX LS SHIRT NAVY" -> "Shirt Mimix LS Shirt Navy",
+    "THREE BEARS BIG LAKE C STORE #27" -> "Three Bears Big Lake C Store #27". Short codes (LS, FR, XL, AK) stay capitals."""
+    out = []
+    for w in (name or "").split():
+        core = re.sub(r"[^A-Za-z]", "", w)
+        if (len(core) <= 2 and core.isupper() and core not in ("OF", "AT", "IN", "ON", "TO", "BY")) or re.search(r"\d", w):
+            out.append(w)
+        else:
+            out.append(w[:1].upper() + w[1:].lower() if w.isupper() else w)
+    return " ".join(out)
+
+
 def describe(row: dict) -> tuple[str, str]:
-    """("Coverall, navy", "52 L") from a garments_in_service row: what it is and its size, nothing about who."""
-    item = (row.get("item") or row.get("description") or row.get("sku") or "garment").strip().title()
+    """("Coverall Navy", "52 L") from a garments_in_service row: what it is and its size, nothing about who."""
+    item = nice((row.get("item") or row.get("description") or row.get("sku") or "garment").strip())
     size = " ".join(x for x in (row.get("size_a"), row.get("size_b")) if x)
     return item, size
 
@@ -115,8 +128,8 @@ def stops(alliant, route: str, branch: str = "1", day: str = "") -> dict:
     num = lambda v: int(v) if str(v or "").isdigit() else 9999
     rows.sort(key=lambda x: num(x.get("sequence")))
     return {"route": r, "branch": b, "day": day,
-            "stops": [{"sequence": x.get("sequence", ""), "account": x.get("account", ""), "name": x.get("name", ""),
-                       "city": x.get("city", "")} for x in rows]}
+            "stops": [{"sequence": x.get("sequence", ""), "account": x.get("account", ""), "name": nice(x.get("name", "")),
+                       "city": nice(x.get("city", ""))} for x in rows]}
 
 
 class Uniform:
