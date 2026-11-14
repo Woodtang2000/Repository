@@ -584,6 +584,22 @@ class Desk:
                       {"kind": "answer", "src_ts": src["ts"], "driver_id": src.get("user"), "msgs": replies},
                       thread_ts=src["ts"])
             return new["ts"]
+        if parsed.category == Category.service_code and not correction and channel in self.routes.values():
+            # a garment repair from a driver becomes a uniform request (uniform.py, Scott 11/14): the card, one-tap
+            # approval, Donna enters the code, the driver hears when it's done. In test mode the office ticket
+            # still goes out as before, and the test card is only for comparing.
+            from . import uniform
+            try:
+                out = uniform.driver_request(self, parsed, src, route_name)
+            except Exception as e:
+                print(time.strftime("%H:%M"), "uniform from a driver:", str(e)[:200], flush=True)
+                out = None
+            if out and out.get("card") == "posted" and not uniform.test_mode():
+                self.post(channel, f"<@{src.get('user')}> ✅ Got it: *{out['ref']}* is with the office for approval in "
+                                   "#uniform-requests. I'll say here when it's fixed.",
+                          {"kind": "answer", "src_ts": src["ts"], "driver_id": src.get("user"), "msgs": replies},
+                          thread_ts=src["ts"])
+                return src["ts"]
         expect = expectations(result) if parsed.category in ACTIONABLE and not result.questions else []
         new = self.post(self.desk_id, text, {"kind": "ticket", "src_channel": channel, "src_ts": src["ts"],
                                              "readback": rb, "driver": author, "driver_id": src.get("user"),

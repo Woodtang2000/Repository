@@ -144,3 +144,35 @@ def test_a_code_still_on_after_14_days_asks_the_stockroom_weekly(u, monkeypatch)
     d.uniform()._last = 0
     d.uniform().done_pass(1_000_000.0 + 23 * 86400)
     assert len(slack.msgs[new_accounts.STOCKROOM_ID]) == 2
+
+
+def test_driver_words_map_to_problems():
+    assert uniform.problem_of("torn left pocket") == "torn"
+    assert uniform.problem_of("zipper broken") == "zipper"
+    assert uniform.problem_of("missing buttons") == "button"
+    assert uniform.problem_of("too small, needs a bigger size") == "fit_small"
+    assert uniform.problem_of("grease stain on the front") == "stain"
+    assert uniform.problem_of("new name tag") == "patch"
+    assert uniform.problem_of("audit all garments", "inspection") == "audit"
+    assert uniform.problem_of("relabel", "relabel") == "label"
+
+
+def test_a_driver_post_becomes_a_uniform_request(u):
+    slack, d = u
+    from .schema import ServiceFlag
+    parsed = SimpleNamespace(account_number="1003-1-00002", summary="garment torn",
+                             service=ServiceFlag(scope="garment", kind="repair", reason="torn sleeve",
+                                                 barcodes=["000004729628"]))
+    out = uniform.driver_request(d, parsed, {"user": "UDRV", "ts": "1.0"}, "route-12")
+    rec = d.uniform().load()["requests"][out["ref"]]
+    assert out["suggested"] == {"code": "SS", "scope": "garment"} and rec["source"] == "driver"
+    assert rec["garments"][0]["barcode"] == "000004729628" and rec["driver"]["route"] == "route-12"
+    w = SimpleNamespace(account_number="1003-1-00002", summary="all of Mike's garments are worn",
+                        service=ServiceFlag(scope="wearer", kind="inspection", reason="all worn out", wearer="Mike"))
+    out = uniform.driver_request(d, w, {"user": "UDRV", "ts": "2.0"}, "route-12")
+    rec = d.uniform().load()["requests"][out["ref"]]
+    assert out["suggested"] == {"code": "WR", "scope": "wearer"} and rec["wearers"] == ["37"]
+    assert "Mike" not in "\n".join(d.uniform().lines(rec))
+    inv = SimpleNamespace(account_number="1003-1-00002", summary="count",
+                          service=ServiceFlag(scope="customer", kind="inventory", reason="inventory count"))
+    assert uniform.driver_request(d, inv, {"user": "UDRV", "ts": "3.0"}, "route-12") is None

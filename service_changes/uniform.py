@@ -31,7 +31,41 @@ PROBLEMS = {"torn": ("SS", "garment", "ripped or torn"), "button": ("BR", "garme
             "zipper": ("ZR", "garment", "the zipper"), "fit_big": ("SZ", "wearer", "too big"),
             "fit_small": ("SZ", "wearer", "too small"), "stain": ("ST", "garment", "stained"),
             "worn": ("WR", "garment", "worn out"), "patch": ("NT", "garment", "the name or company patch"),
-            "other": ("GM", "garment", "something else"), "audit": ("AA", "customer", "the garments look old")}
+            "other": ("GM", "garment", "something else"), "audit": ("AA", "customer", "the garments look old"),
+            "label": ("RL", "garment", "the label")}
+WORDS = [("zipper", r"zip"), ("button", r"button|snap"), ("fit_small", r"too (?:small|tight|short)|smaller"),
+         ("fit_big", r"too (?:big|large|long|loose)|bigger|doesn'?t fit|fit|size"), ("stain", r"stain|grease|oil|ink|dirty"),
+         ("worn", r"worn|old|thin|faded|threadbare|hole"), ("patch", r"patch|name ?tag|emblem|logo"),
+         ("label", r"label|barcode"), ("torn", r"tor[en]|rip|tear|seam|hem|split|pocket|sleeve")]
+
+
+def problem_of(text: str, kind: str = "") -> str:
+    """A driver's or customer's words -> one of PROBLEMS ("torn left pocket" -> torn)."""
+    if kind == "relabel":
+        return "label"
+    for p, rx in WORDS:
+        if re.search(rx, text or "", re.I):
+            return p
+    return "audit" if kind == "inspection" else "other"
+
+
+def driver_request(desk, parsed, src: dict, route_name: str) -> dict | None:
+    """A driver's damage post in #route-N (Scott, 11/14: drivers use Slack, scanners included) as a uniform request:
+    the card in #uniform-requests, approval, Donna enters the code, the driver hears back. None: not one."""
+    f = getattr(parsed, "service", None)
+    if not f or f.kind == "inventory" or not parsed.account_number:
+        return None
+    problem = problem_of(f"{f.reason} {getattr(parsed, 'summary', '')}", f.kind)
+    garments = [{"barcode": b, "problem": problem, "note": f.reason[:200]} for b in f.barcodes] or \
+               [{"problem": problem, "note": f.reason[:200]}]
+    body = {"source": "driver", "account": parsed.account_number, "garments": garments,
+            "driver": {"slack_user": src.get("user", ""), "route": route_name, "src_ts": src.get("ts", "")}}
+    if f.scope in ("wearer", "customer") and not f.barcodes:
+        body["scope"] = f.scope
+        w = desk.alliant.find_wearer(parsed.account_number, f.wearer or "") if f.wearer else None
+        if w:
+            body["wearers"] = [w.employee]
+    return desk.uniform().new(body)
 HOW = {"garment": 'Inquiry > "Garment" tab > scan or type the barcode > "Add Service Code"',
        "wearer": 'Stockroom > "Add/Remove Service Code" > scope "Specific Wearers" > "Append" > "Begin"',
        "customer": 'Stockroom > "Add/Remove Service Code" > scope "Specific Customer" > "Append" > "Begin"'}
@@ -200,11 +234,13 @@ class Uniform:
             data["seq"] = int(data.get("seq", 1000)) + 1
             ref = str(body.get("ref") or f"UR-{data['seq']}")
             code, scope, why = self.suggest(garments, account, data)
+            if body.get("scope") in ("wearer", "customer"):
+                scope, why = body["scope"], why or "as the driver asked"
             repeat = next((r["ref"] for r in sorted(data["requests"].values(), key=lambda r: -r.get("at", 0))
                            if account and r.get("account") == account and time.time() - r.get("at", 0) < REPEAT_DAYS * 86400), "")
             rec = {"ref": ref, "at": time.time(), "status": "new", "source": str(body.get("source") or "qr"),
                    "brand": str(body.get("brand") or "SW"), "account": account, "garments": garments,
-                   "wearers": sorted({g["_wearer"] for g in garments if g["_wearer"]}),
+                   "wearers": sorted({g["_wearer"] for g in garments if g["_wearer"]} | set(body.get("wearers") or [])),
                    "fallback": body.get("fallback") or None, "photos": int(body.get("photos") or 0),
                    "contact": {k: str((body.get("contact") or {}).get(k) or "") for k in ("phone", "email")},
                    "driver": body.get("driver") or None, "sf_request_id": str(body.get("sf_request_id") or ""),
