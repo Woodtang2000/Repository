@@ -129,7 +129,9 @@ def lookup(alliant, barcode: str) -> dict:
         return {"found": False}
     item, size = describe(row)
     acct = row.get("cust_code", "")
-    return {"found": True, "garment": item, "size": size, "account": acct,
+    w = next((w for w in getattr(alliant, "wearers", {}).get(acct, []) if w.employee == row.get("wearer")), None)
+    # the wearer's name is printed on the garment's own tag (Scott, 11/14), so the page may show it to confirm
+    return {"found": True, "garment": item, "size": size, "wearer": nice(w.name) if w else "", "account": acct,
             "garment_ref": sign({"b": row.get("barcode") or b, "a": acct, "w": row.get("wearer", ""),
                                  "s": row.get("sku", "")})}
 

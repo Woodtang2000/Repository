@@ -39,7 +39,7 @@ def test_a_barcode_shows_only_the_garment_and_size(u):
     slack, d = u
     out = uniform.lookup(d.alliant, "4729628")  # typed without Alliant's zero padding
     assert out["found"] and out["garment"] == "Coverall Navy" and out["size"] == "52 L" and out["account"] == "1003-1-00002"
-    assert "Mike" not in json.dumps(out) and "37" not in json.dumps({k: v for k, v in out.items() if k != "garment_ref"})
+    assert out["wearer"] == "Mike Example"  # printed on the tag itself (Scott, 11/14)
     assert uniform.unsign(out["garment_ref"])["w"] == "37"
     assert uniform.unsign(out["garment_ref"][:-2] + "00") is None  # a forged ref is refused
     assert uniform.lookup(d.alliant, "abc") == {"found": False}
