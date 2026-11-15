@@ -190,3 +190,31 @@ def test_the_photos_go_in_the_cards_thread(u, monkeypatch):
     assert uploads[0]["file"] == b"jpegbytes" and uploads[0]["channel"] == "CUT"
     d.uniform().new({"sf_request_id": "a0X000000000002AAA", "photos": 1, "garments": [{"barcode": "000004729628", "problem": "torn"}]})
     assert "couldn't fetch the photo" in slack.msgs["CUT"][-1]["text"]
+
+
+def test_a_driver_repair_texts_and_emails_the_customer_when_it_is_fixed(u, monkeypatch, tmp_path):
+    slack, d = u
+    monkeypatch.setenv("UNIFORM_TEST", "off")
+    d.uniform()._channel = None
+    (tmp_path / "customer_phones.csv").write_text("phone,accounts,name\n9075550100,1003-1-00002,Bob\n"
+                                                  "9075550199,9999-1-00001,Someone else\n")
+    (tmp_path / "customer_emails.csv").write_text("email,accounts,name\nbob@example.com,1003-1-00002;1003-1-00003,Bob\n"
+                                                  "other@example.com,9999-1-00001,Other\n")
+    texts, mails = [], []
+    monkeypatch.setattr(d.uniform(), "send_text", lambda phone, msg: texts.append((phone, msg)) or "text")
+    monkeypatch.setattr(d.uniform(), "send_email", lambda to, subj, msg: mails.append((to, subj, msg)) or "email")
+    cards = []
+    real_card = d.uniform().card
+    monkeypatch.setattr(d.uniform(), "card", lambda rec, status="": cards.append(status) or real_card(rec, status))
+    driver = d.uniform().new({"source": "driver", "account": "1003-1-00002",
+                              "garments": [{"barcode": "000004729628", "problem": "button"}]})["ref"]
+    d.uniform().close(driver)
+    assert [p for p, _ in texts] == ["+19075550100"] and [t for t, _, _ in mails] == ["bob@example.com"]  # this account only
+    assert "your driver picked up for repair" in texts[0][1] and "Coverall navy (size 52 L)".lower() in texts[0][1].lower()
+    assert d.uniform().load()["requests"][driver]["status"] == "done"
+    assert "Told: the customer (1 by text, 1 by email)" in cards[-1]
+    texts.clear(), mails.clear()
+    qr = d.uniform().new({"source": "qr", "garments": [{"barcode": "000004729628", "problem": "torn"}],
+                          "contact": {"phone": "+19075550123"}})["ref"]
+    d.uniform().close(qr)  # a page request tells only the person who asked
+    assert [p for p, _ in texts] == ["+19075550123"] and not mails

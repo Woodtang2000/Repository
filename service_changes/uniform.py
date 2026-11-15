@@ -526,13 +526,27 @@ class Uniform:
                             for g in rec["garments"][:3]) or "garments"
         fixed = {"WR": "replaced", "SZ": "checked for size", "AA": "checked", "ST": "treated"}.get(rec["code"], "repaired")
         brand = "The Laundry Group" if rec.get("brand") == "TLG" or "-2-" in rec["account"] else "Snow White Linen"
-        msg = f"{brand}: your {what} {'has' if len(rec['garments']) == 1 else 'have'} been {fixed} and go back with your " \
-              f"next delivery. Ref {ref}. Reply here if anything else needs fixing."
+        verb = 'has' if len(rec['garments']) == 1 else 'have'
+        msg = f"{brand}: your {what} {verb} been {fixed} and go back with your next delivery. Ref {ref}. " \
+              f"Reply here if anything else needs fixing."
         told = []
         if rec["contact"].get("phone"):
             told.append(self.send_text(rec["contact"]["phone"], msg))
         if rec["contact"].get("email"):
             told.append(self.send_email(rec["contact"]["email"], f"{brand}: request {ref} is done", msg))
+        if rec.get("source") == "driver" and not any(rec["contact"].values()):
+            # A driver's report: the customer never asked us, so tell the people linked to this account for texts and
+            # email that what they handed the driver is fixed (Scott, 11/15). Only contacts linked to this account.
+            phones, emails = self.customer_contacts(rec["account"])
+            msg = f"{brand}: the {what} your driver picked up for repair {verb} been {fixed} and go back with your " \
+                  f"next delivery. Ref {ref}. Reply here if anything else needs fixing."
+            for p in phones:
+                self.send_text(p, msg)
+            for e in emails:
+                self.send_email(e, f"{brand}: your repair {ref} is done", msg)
+            if phones or emails:
+                told.append("the customer (" + ", ".join(x for x in (f"{len(phones)} by text" if phones else "",
+                                                                     f"{len(emails)} by email" if emails else "") if x) + ")")
         route = next((c.route for c in self.desk.alliant.customers if c.account == rec["account"]), "")
         ch = self.desk.routes.get(f"route-{route}") if route else None
         if ch and not test_mode():
@@ -540,6 +554,16 @@ class Uniform:
                                              f"{rec['code']} cleared in Alliant; the {what} go back on this delivery.")
             told.append(f"#route-{route}")
         self.card(rec, f"✔️ Done {datetime.now(ALASKA):%-m/%-d}: the code came off in Alliant. Told: {', '.join(t for t in told if t) or 'nobody (no contact on the request)'}.")
+
+    def customer_contacts(self, account: str, most: int = 5) -> tuple[list[str], list[str]]:
+        """The phone numbers and email addresses linked to this account for texts and email (customer_phones.csv,
+        customer_emails.csv: each contact is linked to its own accounts only). At most `most` of each."""
+        from .sms import load_phones
+        from .email_desk import load_emails
+        d = self.desk.data_dir
+        phones = ["+1" + k for k, v in load_phones(os.path.join(d, "customer_phones.csv")).items() if account in v["accounts"]]
+        emails = [k for k, v in load_emails(os.path.join(d, "customer_emails.csv")).items() if account in v["accounts"]]
+        return phones[:most], emails[:most]
 
     def send_text(self, phone: str, msg: str) -> str:
         if test_mode():
