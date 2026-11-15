@@ -409,6 +409,9 @@ def slack_poster(slack, data_dir: str, sales_channel: str, desk_channel: str):
 WIDGET = os.path.join(REPO, "website_chat", "widget.js")
 QUOTE_PAGE = os.path.join(REPO, "website_chat", "quote.html")
 QUOTE_PHONES = {"sw": "(907) 222-7738", "tlg": "(907) 519-0761"}  # the header's call link, each company's own office
+# Only our own WordPress sites may show the quote page in a frame (no X-Frame-Options is sent; this replaces it).
+QUOTE_FRAME_ANCESTORS = os.environ.get("QUOTE_FRAME_ANCESTORS", "https://snowwhitelinen.com https://www.snowwhitelinen.com "
+                                       "https://thelaundrygroup.com https://www.thelaundrygroup.com").split()
 QUOTE_HOMES = {"sw": "https://snowwhitelinen.com/", "tlg": "https://thelaundrygroup.com/"}  # the logo goes back to the site
 DONNA_PAGE = os.path.join(REPO, "website_chat", "donna.html")  # Scott's talk-to-Donna page (no key in it)
 LOGOS = {"sw": os.path.join(REPO, "brand", "logo_sw.png"), "tlg": os.path.join(REPO, "brand", "logo_tlg.png")}
@@ -434,9 +437,11 @@ def make_handler(chat: Chat, public_url: str):
                 self.send_header("Access-Control-Allow-Headers", "Content-Type")
                 self.send_header("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
 
-        def _send(self, code: int, body: bytes, ctype: str, cache: int = 0):
+        def _send(self, code: int, body: bytes, ctype: str, cache: int = 0, headers: dict = None):
             self.send_response(code)
             self._cors()
+            for k, v in (headers or {}).items():
+                self.send_header(k, v)
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Cache-Control", f"public, max-age={cache}" if cache else "no-store")
@@ -531,13 +536,17 @@ def make_handler(chat: Chat, public_url: str):
                 default = "tlg" if base.endswith(TLG_HOST) else "sw"
                 site = (q.get("site") or [default])[0] if (q.get("site") or [default])[0] in COMPANIES else default
                 c = COMPANIES[site]
+                embed = (q.get("embed") or [""])[0] == "1"  # ?embed=1: shown in an iframe on our WordPress pages
                 cfg = {"api": base, "site": site, "name": c["name"], "logo": f"{base}/logo/{site}.png",
-                       "phone": QUOTE_PHONES[site], "home": QUOTE_HOMES[site],
+                       "phone": QUOTE_PHONES[site], "home": QUOTE_HOMES[site], "embed": embed,
                        "catalog": catalog.public(catalog.load()[site], lambda sku: catalog.pic_path(chat.data_dir, sku)),
                        "picv": catalog.picture_versions(chat.data_dir, catalog.load()[site])}
                 with open(QUOTE_PAGE) as f:
                     page = f.read().replace("__CONFIG__", json.dumps(cfg).replace("</", "<\\/")).replace("__TITLE__", c["name"])
-                return self._send(200, page.encode(), "text/html; charset=utf-8")
+                if embed:  # the class is on <html> from the first paint, so the header never flashes inside the frame
+                    page = page.replace('<html lang="en">', '<html lang="en" class="embed">', 1)
+                return self._send(200, page.encode(), "text/html; charset=utf-8",
+                                  headers={"Content-Security-Policy": "frame-ancestors " + " ".join(QUOTE_FRAME_ANCESTORS)})
             if u.path == "/try":  # a bare test page with the widget, before it's on the real sites
                 default = "tlg" if base.endswith(TLG_HOST) else "sw"
                 site = (q.get("site") or [default])[0] if (q.get("site") or [default])[0] in COMPANIES else default

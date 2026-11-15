@@ -83,6 +83,13 @@ h3{font-size:17px;margin:22px 0 8px;color:var(--navy)}
 .note2{color:var(--ink);margin:0 0 6px}
 @media (max-width:640px){.tiles{grid-template-columns:1fr 1fr;gap:8px}.tile{font-size:12.5px;height:70px;padding:6px 8px}}
 @media (max-width:640px){.hero h1{font-size:26px}.top img{height:44px}.fields{grid-template-columns:1fr}.grid{grid-template-columns:1fr 1fr;gap:8px}.pic{aspect-ratio:auto;height:92px}.qty label{display:none}.qty.opt label{display:block;font-size:12.5px}.qty{justify-content:space-between}.bar div{padding-right:92px}.bar span{font-size:14px}}
+/* embed mode (?embed=1): inside an iframe on our WordPress pages, which bring their own header, title and chat */
+.embed header,.embed .hero{display:none}
+.embed body{background:transparent}
+.embed main{max-width:none;padding:0}
+.embed .bar{position:static;background:none;-webkit-backdrop-filter:none;backdrop-filter:none;border-top:0}
+.embed .bar div{max-width:none;padding:16px 0 4px}
+@media (max-width:640px){.embed .bar div{padding-right:0}}
 </style>
 </head>
 <body>
@@ -286,6 +293,24 @@ h3{font-size:17px;margin:22px 0 8px;color:var(--navy)}
     step1.hidden = step !== 1; step2.hidden = step !== 2; step3.hidden = step !== 3;
     $('bar').style.display = step === 3 ? '' : 'none';
     window.scrollTo(0, 0);
+    toTop();
+  }
+  // Embed mode: tell the WordPress page how tall we are (so its iframe never scrolls) and when to scroll back to the top.
+  function height() {
+    if (C.embed && window.parent !== window)
+      // the page's own height: documentElement.scrollHeight never drops below the frame's height, so the frame could grow but never shrink
+      window.parent.postMessage({ type: 'swl-quote-height', height: Math.ceil(document.documentElement.getBoundingClientRect().height) }, '*');
+  }
+  var started = false;  // the first show(1) is the page loading, not a step change: don't pull the WordPress page down to the form
+  function toTop() {
+    if (!started) { started = true; return; }
+    if (!C.embed || window.parent === window) return;
+    height();
+    window.parent.postMessage({ type: 'swl-quote-scrolltop' }, '*');
+  }
+  if (C.embed) {
+    if (window.ResizeObserver) new ResizeObserver(height).observe(document.documentElement);
+    window.addEventListener('load', height);
   }
   $('toType').onclick = function () { if (details()) show(2); };
   show(1);
@@ -309,15 +334,19 @@ h3{font-size:17px;margin:22px 0 8px;color:var(--navy)}
         main.innerHTML = '';
         main.appendChild(el('div', { cls: 'done' }, [el('h2', { text: 'Thanks, ' + first + '!' }),
           el('p', { text: 'Your request is on its way to Bill Dubinsky. He’ll be in touch soon with your quote.' }),
-          el('p', { cls: 'small', text: 'Questions in the meantime? Call (907) 222-7738.' })]));
+          el('p', { cls: 'small', text: 'Questions in the meantime? Call ' + (C.phone || '(907) 222-7738') + '.' })]));
         $('bar').style.display = 'none';
         window.scrollTo(0, 0);
+        toTop();
       })
       .catch(function (e) { err.textContent = e.message === 'Failed to fetch' ? 'We couldn’t send that. Please check your connection and try again.' : e.message; err.scrollIntoView({ block: 'center' }); $('next').disabled = false; $('next').textContent = 'Send my request'; });
   }
   $('next').onclick = submit;
 
+  if (!C.embed) {  // the WordPress sites already have the chat bubble
   var w = document.createElement('script'); w.src = C.api + '/widget.js?site=' + C.site; w.async = true; document.body.appendChild(w);
+  }
+  height();
 })();
 </script>
 </body>

@@ -355,6 +355,14 @@ def test_quote_page_served_for_each_company():
         assert "Patient gowns" in tlg and '"site": "tlg"' in tlg and "https://chat.thelaundrygroup.com/logo/tlg.png" in tlg
         assert '"phone": "(907) 222-7738"' in sw and '"phone": "(907) 519-0761"' in tlg  # each company's own number
         assert '"home": "https://thelaundrygroup.com/"' in tlg
+        assert 'class="embed"' not in sw and '"embed": false' in sw  # the standalone page is unchanged
+        r = urllib.request.urlopen(urllib.request.Request(f"http://127.0.0.1:{srv.server_port}/quote?embed=1",
+                                                          headers={"Host": "chat.thelaundrygroup.com"}))
+        page, csp = r.read().decode(), r.headers.get("Content-Security-Policy", "")
+        assert '<html lang="en" class="embed">' in page and '"embed": true' in page and '"site": "tlg"' in page
+        assert r.headers.get("X-Frame-Options") is None
+        assert csp == ("frame-ancestors https://snowwhitelinen.com https://www.snowwhitelinen.com "
+                       "https://thelaundrygroup.com https://www.thelaundrygroup.com")
     finally:
         srv.shutdown()
 
