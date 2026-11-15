@@ -8,7 +8,7 @@ customers get a week ahead.
 - Routes 5 and 12 (Kenai Peninsula, Fairbanks) run Mon Tue Wed Fri around third-party shipping and slide the same way
   using Thursday.
 - The Laundry Group (branch 2) works six days a week and doesn't close for holidays (Scott, 11/15): its stops never
-  move and its customers get no notice.
+  move, and its customers are told, in the same notice, that we're open as always (peace of mind).
 - A holiday on a weekend moves nothing here; Donna's answers say the office will confirm that week.
 - A week before (NOTICE_DAYS), Donna posts the notice in #service-desk with Send / Cancel (announce.py): every customer
   whose delivery moves, by text and email, each told their own day. Nothing goes out until the office taps Send.
@@ -94,6 +94,20 @@ def notice(name: str, holiday: date, account_moves: list[tuple[date, date]]) -> 
     return f"We're closed {_day(holiday)} for {name}, so {moved} instead. Questions? Just reply."
 
 
+def open_notice(name: str, holiday: date) -> str:
+    """The Laundry Group's customers: peace of mind that we're working the holiday (Scott, 11/15)."""
+    return (f"{name} is {_day(holiday)}, and we're open as always: your deliveries that week come on their usual days. "
+            "Questions? Just reply.")
+
+
+def open_accounts(alliant, holiday: date) -> list[str]:
+    """The Laundry Group customers with a stop the holiday week (none for a Sunday holiday: no deliveries that day)."""
+    if holiday.weekday() == 6:
+        return []
+    return list(dict.fromkeys(r["account"] for r in getattr(alliant, "stops", [])
+                              if r.get("account") and open_on_holidays(r.get("branch", "1"))))
+
+
 def plan(alliant, holiday: date) -> dict[str, list[tuple[date, date]]]:
     """{account: [(usual date, new date), ...]} for every stop whose day moves that week (route_stops.csv)."""
     out: dict[str, list[tuple[date, date]]] = {}
@@ -114,14 +128,14 @@ def holiday_pass(desk, today: date) -> list[str]:
     from .announce import Announcer  # noqa: F401  (the Send / Cancel buttons and the sending live there)
     posted = []
     for d, name in upcoming(today, POST_DAYS):
-        if (d - today).days != POST_DAYS or d.weekday() >= 5:
+        if (d - today).days != POST_DAYS:
             continue
         key = f"holiday/{d.isoformat()}"
         ann = desk.announcer()
         if key in ann._load():
             continue
-        per_account = plan(desk.alliant, d)
-        if per_account and ann.propose_holiday(key, name, d, per_account):
+        per_account, still_open = plan(desk.alliant, d), open_accounts(desk.alliant, d)
+        if (per_account or still_open) and ann.propose_holiday(key, name, d, per_account, still_open):
             posted.append(key)
     return posted
 

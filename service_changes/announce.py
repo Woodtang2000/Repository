@@ -136,35 +136,41 @@ class Announcer:
                                          unfurl_links=False)
         return True
 
-    def propose_holiday(self, key: str, name: str, holiday, per_account: dict) -> bool:
+    def propose_holiday(self, key: str, name: str, holiday, per_account: dict, still_open: list | None = None) -> bool:
         """A holiday notice (holidays.py): each customer whose delivery moves is told their own day. Same Send / Cancel
         card as any announcement, posted in #service-desk by Donna herself, never sent without a tap."""
         from collections import Counter
-        from .holidays import NOTICE_DAYS, notice
+        from .holidays import NOTICE_DAYS, notice, open_notice
         from datetime import timedelta
+        still_open = [a for a in (still_open or []) if a not in per_account]
         messages = {acct: notice(name, holiday, m) for acct, m in per_account.items()}
-        phones, emails = self.contacts(list(per_account))
+        messages.update({acct: open_notice(name, holiday) for acct in still_open})
+        phones, emails = self.contacts(list(messages))
         moved = Counter(f"{a:%a} → {b:%a %-m/%-d}" for m in per_account.values() for a, b in m)
         send_by = holiday - timedelta(days=NOTICE_DAYS)
-        sample = next(iter(messages.values()))
+        examples = [messages[a] for a in (next(iter(per_account), None), next(iter(still_open), None)) if a]
+        sample = examples[0]
         with self.lock:
             data = self._load()
             if key in data:
                 return False
             data[key] = {"by": "donna", "who": f"{name} notice", "message": sample, "messages": messages,
-                         "subject": f"{name}: your delivery day", "phones": phones, "emails": emails,
-                         "accounts": len(per_account), "status": "waiting" if (phones or emails) else "nobody",
+                         "subject": f"{name}: your deliveries", "phones": phones, "emails": emails,
+                         "accounts": len(messages), "status": "waiting" if (phones or emails) else "nobody",
                          "at": time.time()}
             self._save(data)
-        text = (f"🗓️ *{name}, {holiday:%A %B} {holiday.day}*: {len(per_account)} customers' deliveries move ("
-                + ", ".join(f"{k}: {v}" for k, v in sorted(moved.items())) + ").\n")
+        text = f"🗓️ *{name}, {holiday:%A %B} {holiday.day}*: " + "; ".join(x for x in (
+            (f"{len(per_account)} customers' deliveries move (" + ", ".join(f"{k}: {v}" for k, v in sorted(moved.items()))
+             + ")") if per_account else "",
+            f"{len(still_open)} Laundry Group customers hear we're open as usual" if still_open else "") if x) + ".\n"
         if not (phones or emails):
             self.desk.slack.chat_postMessage(channel=self.desk.desk_id, unfurl_links=False,
                                              text=text + "None of them has a texting number or email on file, so I have "
                                                          "no one to tell. Please let them know another way.")
             return True
         text += (f"Send them each their own day by *{send_by:%A %B} {send_by.day}* (a week ahead): {len(phones)} texts, "
-                 f"{len(emails)} emails. For example:\n> {sample}\nNothing goes out until you tap Send.")
+                 f"{len(emails)} emails. For example:\n" + "\n".join(f"> {m}" for m in examples)
+                 + "\nNothing goes out until you tap Send.")
         blocks = [{"type": "section", "text": {"type": "mrkdwn", "text": text}},
                   {"type": "actions", "block_id": "announce", "elements": [
                       {"type": "button", "action_id": SEND, "value": key, "style": "primary",

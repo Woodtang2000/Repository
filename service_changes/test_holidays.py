@@ -34,7 +34,7 @@ def test_a_week_ahead_each_customer_gets_their_own_day_after_the_office_taps_sen
     assert holidays.holiday_pass(d, date(2026, 12, 16)) == ["holiday/2026-12-25"]
     assert holidays.holiday_pass(d, date(2026, 12, 16)) == []  # once
     card = d.slack.posts[-1]["text"]
-    assert "*Christmas Day, Friday December 25*: 3 customers' deliveries move" in card and "Thu → Wed 12/23: 2" in card and "by *Friday December 18*" in card
+    assert "*Christmas Day, Friday December 25*: 3 customers' deliveries move" in card and "Thu → Wed 12/23: 2" in card and "1 Laundry Group customers hear we're open as usual" in card and "by *Friday December 18*" in card
     sent = []
     import service_changes.sms as sms
     from . import bird
@@ -54,3 +54,19 @@ def test_the_laundry_group_is_open_every_holiday():
     assert holidays.slide_day("2", "4") == "Wed" and holidays.open_on_holidays("2") and not holidays.open_on_holidays("1")
     s = holiday_schedule(date(2026, 11, 12), branch="2", route="4")
     assert "Thanksgiving, Thursday, November 26: we're open; deliveries are as usual." in s and "instead" not in s
+
+
+def test_laundry_group_customers_hear_we_are_open(tmp_path, monkeypatch):
+    d = desk(tmp_path)  # its TLG route 4 hospital has a texting number
+    d.announcer = lambda a=announce.Announcer(d): a
+    assert holidays.holiday_pass(d, date(2027, 11, 16)) == ["holiday/2027-11-25"]  # Thanksgiving 2027
+    sent = []
+    import service_changes.sms as sms
+    from . import bird
+    monkeypatch.setattr(sms, "send_sms", lambda to, body: sent.append((to, body)))
+    monkeypatch.setattr(bird, "send", lambda to, subject, text, **kw: sent.append((to, text)))
+    d.announcer().act({"user": {"id": "UANA"}, "actions": [{"action_id": announce.SEND, "value": "holiday/2027-11-25"}],
+                       "container": {"message_ts": "5.5"}})
+    assert dict(sent)["+19075559999"] == ("The Laundry Group: Thanksgiving is Thursday, November 25, and we're open as "
+                                          "always: your deliveries that week come on their usual days. Questions? Just reply.")
+    assert holidays.open_accounts(d.alliant, date(2027, 7, 4)) == []  # a Sunday: no deliveries that day anyway
