@@ -353,6 +353,8 @@ def test_quote_page_served_for_each_company():
         sw, tlg = get("/quote", "chat.snowwhitelinen.com"), get("/quote", "chat.thelaundrygroup.com")
         assert "Confetti Grey" in sw and "Patient gowns" not in sw
         assert "Patient gowns" in tlg and '"site": "tlg"' in tlg and "https://chat.thelaundrygroup.com/logo/tlg.png" in tlg
+        assert '"phone": "(907) 222-7738"' in sw and '"phone": "(907) 519-0761"' in tlg  # each company's own number
+        assert '"home": "https://thelaundrygroup.com/"' in tlg
     finally:
         srv.shutdown()
 

@@ -408,6 +408,8 @@ def slack_poster(slack, data_dir: str, sales_channel: str, desk_channel: str):
 
 WIDGET = os.path.join(REPO, "website_chat", "widget.js")
 QUOTE_PAGE = os.path.join(REPO, "website_chat", "quote.html")
+QUOTE_PHONES = {"sw": "(907) 222-7738", "tlg": "(907) 519-0761"}  # the header's call link, each company's own office
+QUOTE_HOMES = {"sw": "https://snowwhitelinen.com/", "tlg": "https://thelaundrygroup.com/"}  # the logo goes back to the site
 DONNA_PAGE = os.path.join(REPO, "website_chat", "donna.html")  # Scott's talk-to-Donna page (no key in it)
 LOGOS = {"sw": os.path.join(REPO, "brand", "logo_sw.png"), "tlg": os.path.join(REPO, "brand", "logo_tlg.png")}
 
@@ -530,6 +532,7 @@ def make_handler(chat: Chat, public_url: str):
                 site = (q.get("site") or [default])[0] if (q.get("site") or [default])[0] in COMPANIES else default
                 c = COMPANIES[site]
                 cfg = {"api": base, "site": site, "name": c["name"], "logo": f"{base}/logo/{site}.png",
+                       "phone": QUOTE_PHONES[site], "home": QUOTE_HOMES[site],
                        "catalog": catalog.public(catalog.load()[site], lambda sku: catalog.pic_path(chat.data_dir, sku)),
                        "picv": catalog.picture_versions(chat.data_dir, catalog.load()[site])}
                 with open(QUOTE_PAGE) as f:

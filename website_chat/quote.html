@@ -13,6 +13,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 -apple-system
 header{background:#fff;border-bottom:4px solid var(--gold)}
 .top{max-width:1040px;margin:0 auto;padding:18px 16px;display:flex;align-items:center;gap:16px}
 .top img{height:56px;width:auto}
+.top a.home{margin-left:0;display:flex}
 .top a{margin-left:auto;color:var(--navy);font-weight:600;text-decoration:none;white-space:nowrap}
 .hero{background:var(--navy);color:#fff}
 .hero div{max-width:1040px;margin:0 auto;padding:28px 16px 30px}
@@ -85,7 +86,7 @@ h3{font-size:17px;margin:22px 0 8px;color:var(--navy)}
 </style>
 </head>
 <body>
-<header><div class="top"><img id="logo" alt=""><a href="tel:+19072227738">(907) 222-7738</a></div></header>
+<header><div class="top"><a id="home" class="home"><img id="logo" alt=""></a><a id="callus" href="tel:+19072227738">(907) 222-7738</a></div></header>
 <section class="hero"><div><h1>Get a quote</h1><p id="intro"></p></div></section>
 <main id="main"></main>
 <div class="bar" id="bar"><div><span id="count"></span><button class="btn" id="next" type="button">Send my request</button></div></div>
@@ -101,6 +102,8 @@ h3{font-size:17px;margin:22px 0 8px;color:var(--navy)}
     return e;
   }
   $('logo').src = C.logo; $('logo').alt = C.name;
+  if (C.home) $('home').href = C.home;
+  if (C.phone) { $('callus').textContent = C.phone; $('callus').href = 'tel:+1' + C.phone.replace(/\D/g, ''); }
   document.title = 'Get a quote · ' + C.name;
   $('intro').textContent = 'Tell us about your business, pick what you need, and Bill will put together your quote. No prices to figure out and no obligation.';
 
