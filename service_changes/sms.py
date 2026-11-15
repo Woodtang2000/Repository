@@ -554,7 +554,8 @@ def customer_facts(alliant: Alliant, account: str) -> str:
             g = alliant.garments.get((account, w.employee), {})
             out.append(f"- {w.name}: " + (", ".join(f"{k} x{v}" for k, v in g.items()) or "no garments"))
     from .context import holiday_schedule
-    hol = holiday_schedule()
+    parts = account.split("-")
+    hol = holiday_schedule(branch=parts[1] if len(parts) > 2 else "1", route=cust.route if cust else "")
     if hol:  # "what's your Thanksgiving schedule?" (Scott, 11/12)
         out.append(hol)
     return "\n".join(out)

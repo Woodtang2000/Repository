@@ -1151,6 +1151,16 @@ class Desk:
             self.new_accounts().garment_pass(now)
         except Exception as e:
             print(time.strftime("%H:%M"), "garment watch:", str(e)[:200], flush=True)
+        try:  # holiday notices: the card for the office 9 days ahead, so customers hear a week before (holidays.py)
+            from datetime import datetime
+            from . import holidays
+            today = datetime.fromtimestamp(now, ALASKA)
+            if holidays.enabled() and today.hour >= 8 and self.__dict__.get("_holiday_day") != today.date():
+                self._holiday_day = today.date()
+                for key in holidays.holiday_pass(self, today.date()):
+                    print(time.strftime("%H:%M"), "holiday notice card:", key, flush=True)
+        except Exception as e:
+            print(time.strftime("%H:%M"), "holiday notices:", str(e)[:200], flush=True)
 
     def jobs(self):
         """Donna's Alliant work queue (alliant_jobs.py)."""

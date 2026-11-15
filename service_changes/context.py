@@ -76,37 +76,16 @@ def service_day(ts: str | float) -> str:
     return DAYS[datetime.fromtimestamp(float(ts), ALASKA).weekday()]
 
 
-# Holiday deliveries, as Scott sets them each year (11/12): (the day, why, the day its stops are delivered instead).
-# Every other day, holidays included, is a normal delivery day. A holiday not listed: the office confirms.
-HOLIDAY_MOVES = [
-    ("2026-11-26", "Thanksgiving", "2026-11-25"),
-    ("2026-12-24", "Christmas week", "2026-12-23"),   # Scott, 11/13: Thursday's stops slide to Wednesday,
-    ("2026-12-25", "Christmas Day", "2026-12-24"),    # and Friday's to Thursday; Monday-Wednesday as usual
-    ("2026-12-31", "New Year's week", "2026-12-30"),  # New Year's the same way (Scott, 11/12: "same with New Year's")
-    ("2027-01-01", "New Year's Day", "2026-12-31"),
-]
-HOLIDAYS_TO_CONFIRM: list = []
-
-
-def holiday_schedule(today: "date | None" = None, days: int = 60) -> str:
-    """What customers may be told about holiday deliveries in the next `days` days (HOLIDAY_MOVES)."""
-    from datetime import date, timedelta
+def holiday_schedule(today: "date | None" = None, days: int = 60, branch: str = "1", route: str = "") -> str:
+    """What customers may be told about holiday deliveries in the next `days` days, for their own route (holidays.py:
+    the six holidays and how each route slides; Scott, 11/15)."""
+    from .holidays import schedule_text
     today = today or datetime.now(ALASKA).date()
-    soon = lambda d: today <= d <= today + timedelta(days=days)
-    out = []
-    for day, why, to in HOLIDAY_MOVES:
-        d, t = date.fromisoformat(day), date.fromisoformat(to)
-        if soon(d):
-            out.append(f"- {why}: {d:%A %B} {d.day} stops are delivered on {t:%A %B} {t.day} instead.")
-    for day, why in HOLIDAYS_TO_CONFIRM:
-        d = date.fromisoformat(day)
-        if soon(d):
-            out.append(f"- {why}, {d:%A %B} {d.day}: the office will confirm that day's deliveries.")
+    out = schedule_text(today, branch, route, days)
     if not out:
         return ""
-    return ("Holiday deliveries (every other day, holidays included, is a normal delivery day; a day whose own stops "
-            "move still gets the stops moved onto it; say only what is listed, and for anything else say the office "
-            "will confirm):\n" + "\n".join(out))
+    return ("Holiday deliveries (every day not listed is a normal delivery day; say only what is listed, and for anything "
+            "else say the office will confirm):\n" + "\n".join(out))
 
 
 OFFICE_PHONES = {"Snow White Linen": "(907) 222-7738", "The Laundry Group": "(907) 519-0761"}

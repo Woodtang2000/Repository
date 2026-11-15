@@ -136,6 +136,43 @@ class Announcer:
                                          unfurl_links=False)
         return True
 
+    def propose_holiday(self, key: str, name: str, holiday, per_account: dict) -> bool:
+        """A holiday notice (holidays.py): each customer whose delivery moves is told their own day. Same Send / Cancel
+        card as any announcement, posted in #service-desk by Donna herself, never sent without a tap."""
+        from collections import Counter
+        from .holidays import NOTICE_DAYS, notice
+        from datetime import timedelta
+        messages = {acct: notice(name, holiday, m) for acct, m in per_account.items()}
+        phones, emails = self.contacts(list(per_account))
+        moved = Counter(f"{a:%a} → {b:%a %-m/%-d}" for m in per_account.values() for a, b in m)
+        send_by = holiday - timedelta(days=NOTICE_DAYS)
+        sample = next(iter(messages.values()))
+        with self.lock:
+            data = self._load()
+            if key in data:
+                return False
+            data[key] = {"by": "donna", "who": f"{name} notice", "message": sample, "messages": messages,
+                         "subject": f"{name}: your delivery day", "phones": phones, "emails": emails,
+                         "accounts": len(per_account), "status": "waiting" if (phones or emails) else "nobody",
+                         "at": time.time()}
+            self._save(data)
+        text = (f"🗓️ *{name}, {holiday:%A %B} {holiday.day}*: {len(per_account)} customers' deliveries move ("
+                + ", ".join(f"{k}: {v}" for k, v in sorted(moved.items())) + ").\n")
+        if not (phones or emails):
+            self.desk.slack.chat_postMessage(channel=self.desk.desk_id, unfurl_links=False,
+                                             text=text + "None of them has a texting number or email on file, so I have "
+                                                         "no one to tell. Please let them know another way.")
+            return True
+        text += (f"Send them each their own day by *{send_by:%A %B} {send_by.day}* (a week ahead): {len(phones)} texts, "
+                 f"{len(emails)} emails. For example:\n> {sample}\nNothing goes out until you tap Send.")
+        blocks = [{"type": "section", "text": {"type": "mrkdwn", "text": text}},
+                  {"type": "actions", "block_id": "announce", "elements": [
+                      {"type": "button", "action_id": SEND, "value": key, "style": "primary",
+                       "text": {"type": "plain_text", "text": f"Send to {len(phones) + len(emails)}"}},
+                      {"type": "button", "action_id": CANCEL, "value": key, "text": {"type": "plain_text", "text": "Cancel"}}]}]
+        self.desk.slack.chat_postMessage(channel=self.desk.desk_id, text=text, blocks=blocks, unfurl_links=False)
+        return True
+
     def act(self, payload: dict) -> str:
         """Send or Cancel, office or owner only, once."""
         user = payload.get("user", {}).get("id")
@@ -172,9 +209,10 @@ class Announcer:
         from .context import company_for
         from .sms import send_sms
         out = {"texts": 0, "emails": 0, "failed": 0}
+        msg = lambda acct: (a.get("messages") or {}).get(acct, a["message"])  # a holiday notice: each customer's own day
         for phone, acct in a["phones"].items():
             try:
-                send_sms(phone, f"{company_for(acct)}: {a['message']}")
+                send_sms(phone, f"{company_for(acct)}: {msg(acct)}")
                 out["texts"] += 1
             except Exception as e:
                 out["failed"] += 1
@@ -182,7 +220,7 @@ class Announcer:
         for email, acct in a["emails"].items():
             company = company_for(acct)
             try:
-                bird.send(email, f"{company}: {a['subject']}", f"Hello,\n\n{a['message']}\n\nThank you,\n\n"
+                bird.send(email, f"{company}: {a['subject']}", f"Hello,\n\n{msg(acct)}\n\nThank you,\n\n"
                           + bird.signature(company), company=company, key=f"announce/{a['at']}/{email}")
                 out["emails"] += 1
             except Exception as e:
