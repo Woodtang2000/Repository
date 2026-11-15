@@ -34,7 +34,7 @@ def test_a_week_ahead_each_customer_gets_their_own_day_after_the_office_taps_sen
     assert holidays.holiday_pass(d, date(2026, 12, 16)) == ["holiday/2026-12-25"]
     assert holidays.holiday_pass(d, date(2026, 12, 16)) == []  # once
     card = d.slack.posts[-1]["text"]
-    assert "*Christmas Day, Friday December 25*: 4 customers' deliveries move" in card and "Thu → Wed 12/23: 3" in card and "by *Friday December 18*" in card
+    assert "*Christmas Day, Friday December 25*: 3 customers' deliveries move" in card and "Thu → Wed 12/23: 2" in card and "by *Friday December 18*" in card
     sent = []
     import service_changes.sms as sms
     from . import bird
@@ -47,3 +47,10 @@ def test_a_week_ahead_each_customer_gets_their_own_day_after_the_office_taps_sen
                                      "delivery comes Wednesday, December 23 instead. Questions? Just reply.")
     assert "your Friday delivery comes Thursday, December 24" in texts["+19075552222"]  # route 12
     assert "Monday" not in " ".join(texts.values())  # Monday stops don't move at Christmas
+
+
+def test_the_laundry_group_is_open_every_holiday():
+    from .context import holiday_schedule
+    assert holidays.slide_day("2", "4") == "Wed" and holidays.open_on_holidays("2") and not holidays.open_on_holidays("1")
+    s = holiday_schedule(date(2026, 11, 12), branch="2", route="4")
+    assert "Thanksgiving, Thursday, November 26: we're open; deliveries are as usual." in s and "instead" not in s

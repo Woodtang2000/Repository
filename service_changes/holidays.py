@@ -7,6 +7,8 @@ customers get a week ahead.
   on Thursday and Thursday's on Wednesday; Memorial Day: Monday's on Tuesday and Tuesday's on Wednesday).
 - Routes 5 and 12 (Kenai Peninsula, Fairbanks) run Mon Tue Wed Fri around third-party shipping and slide the same way
   using Thursday.
+- The Laundry Group (branch 2) works six days a week and doesn't close for holidays (Scott, 11/15): its stops never
+  move and its customers get no notice.
 - A holiday on a weekend moves nothing here; Donna's answers say the office will confirm that week.
 - A week before (NOTICE_DAYS), Donna posts the notice in #service-desk with Send / Cancel (announce.py): every customer
   whose delivery moves, by text and email, each told their own day. Nothing goes out until the office taps Send.
@@ -39,6 +41,10 @@ def holidays(year: int) -> list[tuple[date, str]]:
             (_nth_weekday(year, 11, 3, 4), "Thanksgiving"), (date(year, 12, 25), "Christmas Day")]
 
 
+def open_on_holidays(branch: str) -> bool:
+    return (str(branch).lstrip("0") or "1") == "2"  # The Laundry Group: six days a week, every holiday
+
+
 def slide_day(branch: str, route: str) -> str:
     return SLIDE.get((str(branch).lstrip("0") or "1", str(route).lstrip("0")), SLIDE_DAY)
 
@@ -67,6 +73,8 @@ def _day(d: date) -> str:
 def schedule_text(today: date, branch: str = "1", route: str = "", days: int = 60) -> list[str]:
     """Plain lines for the holidays in the next `days` days, for one route (or the usual routes when none is given)."""
     out = []
+    if open_on_holidays(branch):
+        return [f"- {name}, {_day(d)}: we're open; deliveries are as usual." for d, name in upcoming(today, days)]
     for d, name in upcoming(today, days):
         if d.weekday() >= 5:
             out.append(f"- {name} is {_day(d)}: the office will confirm that week's deliveries.")
@@ -92,7 +100,7 @@ def plan(alliant, holiday: date) -> dict[str, list[tuple[date, date]]]:
     monday = holiday - timedelta(days=holiday.weekday())
     for r in getattr(alliant, "stops", []):
         day = (r.get("day") or "")[:3].title()
-        if day not in DAYS or not r.get("account"):
+        if day not in DAYS or not r.get("account") or open_on_holidays(r.get("branch", "1")):
             continue
         usual = monday + timedelta(days=DAYS.index(day))
         new = moves(holiday, slide_day(r.get("branch", "1"), r.get("route", ""))).get(usual)
