@@ -70,3 +70,9 @@ def test_laundry_group_customers_hear_we_are_open(tmp_path, monkeypatch):
     assert dict(sent)["+19075559999"] == ("The Laundry Group: Thanksgiving is Thursday, November 25, and we're open as "
                                           "always: your deliveries that week come on their usual days. Questions? Just reply.")
     assert holidays.open_accounts(d.alliant, date(2027, 7, 4)) == []  # a Sunday: no deliveries that day anyway
+
+
+def test_a_weekend_holiday_moves_nothing():
+    from .context import holiday_schedule
+    s = holiday_schedule(date(2027, 6, 20))
+    assert "the 4th of July is Sunday, July 4, a weekend: deliveries that week are as usual." in s

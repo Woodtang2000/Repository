@@ -9,7 +9,7 @@ customers get a week ahead.
   using Thursday.
 - The Laundry Group (branch 2) works six days a week and doesn't close for holidays (Scott, 11/15): its stops never
   move, and its customers are told, in the same notice, that we're open as always (peace of mind).
-- A holiday on a weekend moves nothing here; Donna's answers say the office will confirm that week.
+- A holiday on a weekend moves nothing (Scott, 11/15), and Snow White customers get no notice for it.
 - A week before (NOTICE_DAYS), Donna posts the notice in #service-desk with Send / Cancel (announce.py): every customer
   whose delivery moves, by text and email, each told their own day. Nothing goes out until the office taps Send.
 """
@@ -77,7 +77,7 @@ def schedule_text(today: date, branch: str = "1", route: str = "", days: int = 6
         return [f"- {name}, {_day(d)}: we're open; deliveries are as usual." for d, name in upcoming(today, days)]
     for d, name in upcoming(today, days):
         if d.weekday() >= 5:
-            out.append(f"- {name} is {_day(d)}: the office will confirm that week's deliveries.")
+            out.append(f"- {name} is {_day(d)}, a weekend: deliveries that week are as usual.")
             continue
         m = moves(d, slide_day(branch, route) if route else SLIDE_DAY)
         if not m:
