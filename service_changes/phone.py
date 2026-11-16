@@ -128,8 +128,12 @@ class Turn(BaseModel):
 
 
 def office_open(now: datetime | None = None, hours: str = OFFICE_HOURS) -> bool:
-    """"Mon-Fri 8:00-17:00" (Alaska time)."""
+    """"Mon-Fri 8:00-17:00" (Alaska time). Closed on the six holidays (holidays.py), so Donna takes a message instead of
+    putting a caller through to an empty office on Thanksgiving."""
     now = (now or datetime.now(ALASKA)).astimezone(ALASKA)
+    from .holidays import holidays
+    if any(d == now.date() for d, _ in holidays(now.year)):
+        return False
     m = re.match(r"\s*(\w{3})-(\w{3})\s+(\d{1,2}):(\d\d)-(\d{1,2}):(\d\d)", hours)
     if not m:
         return False

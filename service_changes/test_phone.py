@@ -236,3 +236,13 @@ def test_an_unknown_employee_number_cant_enter_changes(desk):
     call(p, "+19075550000", "+18885197604", "midas wants 50 more towels")
     [m] = p.slack.posts
     assert m["meta"]["kind"] == "employee_call"
+
+
+def test_the_office_is_closed_on_holidays():
+    from datetime import datetime
+    from .context import ALASKA
+    from .phone import office_open
+    assert office_open(datetime(2026, 11, 25, 10, 0, tzinfo=ALASKA))       # the Wednesday before Thanksgiving
+    assert not office_open(datetime(2026, 11, 26, 10, 0, tzinfo=ALASKA))   # Thanksgiving
+    assert not office_open(datetime(2026, 12, 25, 10, 0, tzinfo=ALASKA))   # Christmas
+    assert not office_open(datetime(2026, 11, 25, 17, 30, tzinfo=ALASKA))  # after 5
