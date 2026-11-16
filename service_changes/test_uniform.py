@@ -210,8 +210,8 @@ def test_a_driver_repair_texts_and_emails_the_customer_when_it_is_fixed(u, monke
                               "garments": [{"barcode": "000004729628", "problem": "button"}]})["ref"]
     d.uniform().close(driver)
     assert [p for p, _ in texts] == ["+19075550100"] and [t for t, _, _ in mails] == ["bob@example.com"]  # this account only
-    assert texts[0][1].endswith("Reply STOP to opt out.") and mails[0][2].endswith("anything else needs fixing.")
-    assert "your driver picked up for repair" in texts[0][1] and "Coverall navy (size 52 L)".lower() in texts[0][1].lower()
+    assert texts[0][1].endswith("Reply here if anything else needs fixing, or reply STOP to opt out.") and mails[0][2].endswith("anything else needs fixing.")
+    assert "The coverall navy (size 52 L) your driver picked up for repair has been repaired and will come back with your next delivery" in texts[0][1] and "Coverall navy (size 52 L)".lower() in texts[0][1].lower()
     assert d.uniform().load()["requests"][driver]["status"] == "done"
     assert "Told: the customer (1 by text, 1 by email)" in cards[-1]
     texts.clear(), mails.clear()

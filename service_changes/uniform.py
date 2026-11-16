@@ -527,7 +527,7 @@ class Uniform:
         fixed = {"WR": "replaced", "SZ": "checked for size", "AA": "checked", "ST": "treated"}.get(rec["code"], "repaired")
         brand = "The Laundry Group" if rec.get("brand") == "TLG" or "-2-" in rec["account"] else "Snow White Linen"
         verb = 'has' if len(rec['garments']) == 1 else 'have'
-        msg = f"{brand}: your {what} {verb} been {fixed} and go back with your next delivery. Ref {ref}. " \
+        msg = f"{brand}: your {what} {verb} been {fixed} and will come back with your next delivery. Ref {ref}. " \
               f"Reply here if anything else needs fixing."
         told = []
         if rec["contact"].get("phone"):
@@ -538,10 +538,11 @@ class Uniform:
             # A driver's report: the customer never asked us, so tell the people linked to this account for texts and
             # email that what they handed the driver is fixed (Scott, 11/15). Only contacts linked to this account.
             phones, emails = self.customer_contacts(rec["account"])
-            msg = f"{brand}: the {what} your driver picked up for repair {verb} been {fixed} and go back with your " \
-                  f"next delivery. Ref {ref}. Reply here if anything else needs fixing."
+            msg = f"{brand}: The {what} your driver picked up for repair {verb} been {fixed} and will come back with " \
+                  f"your next delivery. Ref {ref}. Reply here if anything else needs fixing."
             for p in phones:  # a text we start (the customer didn't ask us): the opt-out on it
-                self.send_text(p, msg + " Reply STOP to opt out.")
+                from .announce import with_stop
+                self.send_text(p, with_stop(msg))
             for e in emails:
                 self.send_email(e, f"{brand}: your repair {ref} is done", msg)
             if phones or emails:
