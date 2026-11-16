@@ -44,7 +44,7 @@ def test_a_week_ahead_each_customer_gets_their_own_day_after_the_office_taps_sen
                               "container": {"message_ts": "5.5"}}).startswith("sent")
     texts = dict(sent)
     assert texts["+19075551234"] == ("Snow White Linen: We're closed Friday, December 25 for Christmas Day, so your Thursday "
-                                     "delivery comes Wednesday, December 23 instead. Questions? Just reply.")
+                                     "delivery comes Wednesday, December 23 instead. Questions? Just reply. Reply STOP to opt out.")
     assert "your Friday delivery comes Thursday, December 24" in texts["+19075552222"]  # route 12
     assert "Monday" not in " ".join(texts.values())  # Monday stops don't move at Christmas
 
@@ -68,7 +68,7 @@ def test_laundry_group_customers_hear_we_are_open(tmp_path, monkeypatch):
     d.announcer().act({"user": {"id": "UANA"}, "actions": [{"action_id": announce.SEND, "value": "holiday/2027-11-25"}],
                        "container": {"message_ts": "5.5"}})
     assert dict(sent)["+19075559999"] == ("The Laundry Group: Thanksgiving is Thursday, November 25, and we're open as "
-                                          "always: your deliveries that week come on their usual days. Questions? Just reply.")
+                                          "always: your deliveries that week come on their usual days. Questions? Just reply. Reply STOP to opt out.")
     assert holidays.open_accounts(d.alliant, date(2027, 7, 4)) == []  # a Sunday: no deliveries that day anyway
 
 

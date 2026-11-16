@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 
 FILE = "announcements.json"
 SEND, CANCEL = "announce_send", "announce_cancel"
+STOP_LINE = " Reply STOP to opt out."  # on every text we start ourselves (toll-free review, Scott 11/16); not on email
 ASK = re.compile(r"^\s*(?:donna,?\s+)?(?:announce|let|tell|text|email|notify|message|warn)\b.{0,80}\b(?:customers?|"
                  r"route\s*\d+|everyone|all (?:of )?(?:our|the)|(?:mon|tues|wednes|thurs|fri|satur|sun)day)", re.I)
 DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
@@ -218,7 +219,7 @@ class Announcer:
         msg = lambda acct: (a.get("messages") or {}).get(acct, a["message"])  # a holiday notice: each customer's own day
         for phone, acct in a["phones"].items():
             try:
-                send_sms(phone, f"{company_for(acct)}: {msg(acct)}")
+                send_sms(phone, f"{company_for(acct)}: {msg(acct)}{STOP_LINE}")  # texts we start: the opt-out on each
                 out["texts"] += 1
             except Exception as e:
                 out["failed"] += 1

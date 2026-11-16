@@ -540,8 +540,8 @@ class Uniform:
             phones, emails = self.customer_contacts(rec["account"])
             msg = f"{brand}: the {what} your driver picked up for repair {verb} been {fixed} and go back with your " \
                   f"next delivery. Ref {ref}. Reply here if anything else needs fixing."
-            for p in phones:
-                self.send_text(p, msg)
+            for p in phones:  # a text we start (the customer didn't ask us): the opt-out on it
+                self.send_text(p, msg + " Reply STOP to opt out.")
             for e in emails:
                 self.send_email(e, f"{brand}: your repair {ref} is done", msg)
             if phones or emails:

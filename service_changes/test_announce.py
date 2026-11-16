@@ -52,7 +52,7 @@ def test_route_4_is_running_late(tmp_path, monkeypatch):
                                    "container": {"message_ts": "5.5"}})
     assert tap("UDRIVER", announce.SEND) == "ignored: not office" and not sent
     assert tap("UANA", announce.SEND).startswith("sent")
-    assert ("text", "+19075551234", "Snow White Linen: Our route 4 truck is running about 2 hours late today. Sorry for the wait!") in sent
+    assert ("text", "+19075551234", "Snow White Linen: Our route 4 truck is running about 2 hours late today. Sorry for the wait! Reply STOP to opt out.") in sent
     assert {s[1] for s in sent if s[0] == "email"} == {"ap@midas.com", "owner@midas.com", "deli@costco.com"}
     assert "Sent by Ana to Snow White · route 4" in d.slack.updates[-1]
     assert tap("UANA", announce.SEND) == "already handled" and len(sent) == 4

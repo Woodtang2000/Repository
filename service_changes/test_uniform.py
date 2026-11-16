@@ -210,6 +210,7 @@ def test_a_driver_repair_texts_and_emails_the_customer_when_it_is_fixed(u, monke
                               "garments": [{"barcode": "000004729628", "problem": "button"}]})["ref"]
     d.uniform().close(driver)
     assert [p for p, _ in texts] == ["+19075550100"] and [t for t, _, _ in mails] == ["bob@example.com"]  # this account only
+    assert texts[0][1].endswith("Reply STOP to opt out.") and mails[0][2].endswith("anything else needs fixing.")
     assert "your driver picked up for repair" in texts[0][1] and "Coverall navy (size 52 L)".lower() in texts[0][1].lower()
     assert d.uniform().load()["requests"][driver]["status"] == "done"
     assert "Told: the customer (1 by text, 1 by email)" in cards[-1]
@@ -218,3 +219,4 @@ def test_a_driver_repair_texts_and_emails_the_customer_when_it_is_fixed(u, monke
                           "contact": {"phone": "+19075550123"}})["ref"]
     d.uniform().close(qr)  # a page request tells only the person who asked
     assert [p for p, _ in texts] == ["+19075550123"] and not mails
+    assert "STOP" not in texts[0][1]  # a reply to someone who asked: no opt-out line needed
