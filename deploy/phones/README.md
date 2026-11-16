@@ -8,7 +8,10 @@ Vonage Business (account 313154):
 - Service line (907) 802-2449, call group 503: Sonja (404) + Ana (406) ring together 25 s, then the group voicemail,
   emailed to Sonja, Ana and Bill. No menu.
 - Bill (907) 519-0752, ext 403: Follow Me, Bill 20 s, then Scott (410) 15 s, then Bill's voicemail.
-- Menus (virtual receptionists): Snow White Main 519-0762 (1 service group, 2 Bill, 3-4 Sonja), TLG Main 519-0761
+- Snow White Main 519-0762 (ext 499) since 11/16: Mon-Fri 8-5 Alaska the menu (1 service group, 2 Bill, 3-4 Sonja);
+  all other times and on holidays (one-day schedules, Thanksgiving, Christmas, New Year's) it forwards with no
+  greeting to Donna, (866) 827-8398, with Originating Caller ID ($0.03/min). Add each year's holidays there.
+- Other menus: TLG Main 519-0761
   (1 ext 420, 2-4 Bill), Dondees 802-2418 / 802-2447 (rings 414, then 414 voicemail to Service@dondeeslaundry.com).
 - Ext 420 "TLG Service Desk": the TLG plant-floor desk phones (Front Counter, Garment Sort, Clean Room). Keep.
 - Kept licenses: 403 Bill, 404 Sonja, 406 Ana, 410 Scott, 414 Dondees, 420 TLG plant, 501 Esa.
