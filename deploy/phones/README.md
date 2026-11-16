@@ -20,3 +20,9 @@ Vonage Business (account 313154):
 Legacy Alaska Communications (ACS) lines, forwarding only; plan is to port them to Twilio and Donna:
 (907) 222-7738 Snow White original (website "Main"), (907) 258-4200 Alaska Cleaners -> TLG Main, (907) 279-0251
 Dondees Laundromat. (907) 868-9410 (old "24hr hotline") goes nowhere: removed from the website 11/16.
+
+Twilio toll-free verifications (both approved): HH7e0ec402eb1b0f799421e4618756b366 (866) 827-8398 and
+HHbba8f80da2087f4e039a4a24e82aa886 (888) 519-7604. Their use case covers replies only; Twilio ticket #30401022
+(11/16) asks to add service notices (holiday changes, "we're open", repair updates), name The Laundry Group as an
+affiliate, replace the samples and point both opt-in proofs at snowwhitelinen.com/sms-terms. Asked first whether an
+update pauses texting; if so, hold until after 11/27. Texts Donna starts end with the STOP line (announce.with_stop).
