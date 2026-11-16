@@ -20,7 +20,7 @@ import os
 import re
 import time
 
-from .phone import CUSTOMER_RULES, DRIVER_RULES, EMPLOYEE_LINE, EMPLOYEE_RULES, OFFICE_PHONE, PERSONALITY, Turn, digits, \
+from .phone import CUSTOMER_RULES, DRIVER_RULES, EMPLOYEE_LINE, EMPLOYEE_RULES, OFFICE_PHONE, PERSONALITY, SALES_PHONE, Turn, digits, \
     office_open
 
 TOOLS = ("caller_info", "customer_request", "new_lead", "employee_message", "driver_change", "handheld_help",
@@ -359,7 +359,8 @@ EMPLOYEE_TOOLS_NOTE = """Your tools on this line:
 
 
 def prompt(line: str) -> str:
-    office = (f"The office number for transfers is {OFFICE_PHONE}; caller_info says whether it's open. When it's "
+    office = (f"Transfers go to the service line ({OFFICE_PHONE}), or to Bill ({SALES_PHONE}) when the caller wants Bill, "
+              f"a manager, sales, pricing or new service; caller_info says whether the office is open. When it's "
               "closed, take a message instead and say someone will call back next business day.")
     if line == "employees":
         rules = EMPLOYEE_RULES.format(office=office) + DRIVER_RULES.format(name="the caller (if caller_info says they're "
@@ -477,7 +478,10 @@ def _tool(hook: dict, name: str, url: str, token: str) -> dict:
     return t
 
 
-TRANSFER_WHEN = "The caller asks for a person, the office or someone by name, and caller_info says the office is open."
+TRANSFER_WHEN = ("The caller asks for a person, the office, service or someone by name (other than Bill), and caller_info "
+                 "says the office is open.")
+SALES_WHEN = ("The caller asks for Bill, a manager, sales, pricing, a quote or starting new service, and caller_info says "
+              "the office is open.")
 
 
 def _system_tools(shape: str = "new") -> list[dict]:
@@ -488,12 +492,14 @@ def _system_tools(shape: str = "new") -> list[dict]:
            "goodbye.", "params": {"system_tool_type": "end_call"}}
     if shape == "end":
         return [end]
-    dest = ({"transfer_destination": {"type": "phone", "phone_number": OFFICE_PHONE}, "transfer_type": "conference"}
-            if shape == "new" else {"phone_number": OFFICE_PHONE})
-    return [end, {"type": "system", "name": "transfer_to_number", "description": "Put the caller through to the office "
-                  "(a person), only while caller_info says it's open. Tell them you're putting them through first.",
+    dest = lambda n: ({"transfer_destination": {"type": "phone", "phone_number": n}, "transfer_type": "conference"}
+                      if shape == "new" else {"phone_number": n})
+    return [end, {"type": "system", "name": "transfer_to_number", "description": "Put the caller through to a person, "
+                  "only while caller_info says the office is open: service questions to the service line, Bill, a "
+                  "manager or sales to Bill. Tell them you're putting them through first.",
                   "params": {"system_tool_type": "transfer_to_number", "enable_client_message": True,
-                             "transfers": [{**dest, "condition": TRANSFER_WHEN}]}}]
+                             "transfers": [{**dest(OFFICE_PHONE), "condition": TRANSFER_WHEN},
+                                           {**dest(SALES_PHONE), "condition": SALES_WHEN}]}}]
 
 
 def _agent_body(agent: dict, hook: dict, line: str, url: str, token: str, system: str | bool) -> dict:
@@ -566,7 +572,7 @@ def setup(public_url: str, data_dir: str, undo: bool = False) -> None:
                     _api("PATCH", f"/v1/convai/agents/{aid}", body)
                 else:
                     aid = _api("POST", "/v1/convai/agents/create", body)["agent_id"]
-                print(f"{LABEL[line]}: " + ("transfer to the office ON (" + OFFICE_PHONE + ")" if system in ("new", "old")
+                print(f"{LABEL[line]}: " + ("transfer ON (service " + OFFICE_PHONE + ", Bill " + SALES_PHONE + ")" if system in ("new", "old")
                                             else "⚠️ transfer to the office OFF: ElevenLabs didn't take it; add Transfer "
                                                  "to number in the agent's Tools"))
                 break

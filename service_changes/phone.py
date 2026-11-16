@@ -40,7 +40,10 @@ from .context import ALASKA, company_for
 
 CUSTOMER_LINE = re.sub(r"\D", "", os.environ.get("PHONE_CUSTOMER_NUMBER", "8668278398"))[-10:]
 EMPLOYEE_LINE = re.sub(r"\D", "", os.environ.get("PHONE_EMPLOYEE_NUMBER", "8885197604"))[-10:]
-OFFICE_PHONE = os.environ.get("OFFICE_PHONE", "+19072227738")
+# Transfers (Scott, 11/16): the direct service line (rings Bill, Sonja and Ana; not the main line's phone tree), and
+# Bill's own line for a manager or sales.
+OFFICE_PHONE = os.environ.get("OFFICE_PHONE", "+19078022449")
+SALES_PHONE = os.environ.get("SALES_PHONE", "+19075190752")
 OFFICE_HOURS = os.environ.get("PHONE_OFFICE_HOURS", "Mon-Fri 8:00-17:00")
 EMPLOYEE_CHANNEL = os.environ.get("EMPLOYEE_CALLS_CHANNEL", "employee-calls")
 DESK_CHANNEL = os.environ.get("DESK_CHANNEL", "service-desk")

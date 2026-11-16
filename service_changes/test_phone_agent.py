@@ -188,6 +188,8 @@ def test_transfer_to_the_office_in_the_current_shape_and_the_older_one():
     assert new["system_tool_type"] == "transfer_to_number" and new["transfers"][0]["transfer_type"] == "conference"
     assert new["transfers"][0]["transfer_destination"] == {"type": "phone", "phone_number": pa.OFFICE_PHONE}
     assert pa._system_tools("old")[1]["params"]["transfers"][0]["phone_number"] == pa.OFFICE_PHONE
+    assert new["transfers"][1]["transfer_destination"]["phone_number"] == pa.SALES_PHONE  # Bill: a manager or sales
+    assert pa.OFFICE_PHONE == "+19078022449" and "Bill, a manager, sales" in new["transfers"][1]["condition"]
     assert [t["name"] for t in pa._system_tools("end")] == ["end_call"]
 
 
