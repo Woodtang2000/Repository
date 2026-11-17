@@ -1256,8 +1256,19 @@ class Desk:
             return "notebook"
         boss = owner or user in AR_USERS  # Scott and Bill (11/10): pause, resume and retry, without owner mode
         if boss and re.match(r"^\s*donna,?\s+(?:retry|try again|redo)\b", ev.get("text", ""), re.I):
-            # every ticket waiting on Alliant's sign-in, back in her queue at once
-            self.slack.chat_postMessage(channel=channel, text=self.jobs().retry_waiting(user))
+            one = re.search(r"\bUR-\d+\b", ev.get("text", ""), re.I)
+            if one:  # "Donna retry UR-1013": one uniform request back to Alliant
+                self.slack.chat_postMessage(channel=channel, text=self.uniform().retry(one.group(0).upper(), user))
+                return "uniform retry"
+            # every ticket waiting on Alliant's sign-in, and every uniform request she couldn't enter, back at once
+            text = self.jobs().retry_waiting(user)
+            try:
+                done = [x for x in self.uniform().retry_failed(user) if "sent back" in x]
+                if done:
+                    text += f"\nUniform requests sent back: {len(done)}."
+            except Exception as e:
+                print(time.strftime("%H:%M"), "uniform retry:", str(e)[:200], flush=True)
+            self.slack.chat_postMessage(channel=channel, text=text)
             return "alliant retry"
         cmd = re.match(r"^\s*donna,?\s+(pause|stop|resume|start|go)\b", ev.get("text", ""), re.I)
         if boss and cmd:  # Donna's Alliant work: "Donna pause" / "Donna resume"

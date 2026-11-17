@@ -220,3 +220,23 @@ def test_a_driver_repair_texts_and_emails_the_customer_when_it_is_fixed(u, monke
     d.uniform().close(qr)  # a page request tells only the person who asked
     assert [p for p, _ in texts] == ["+19075550123"] and not mails
     assert "STOP" not in texts[0][1]  # a reply to someone who asked: no opt-out line needed
+
+
+def test_a_request_donna_could_not_enter_can_be_sent_back(u, monkeypatch):
+    slack, d = u
+    monkeypatch.setenv("UNIFORM_TEST", "off")
+    d.uniform()._channel = None
+    ref = d.uniform().new({"source": "qr", "garments": [{"barcode": "000004729628", "problem": "button"}]})["ref"]
+    d.uniform().act(tap("uniform_approve", ref))
+    job = d.jobs().next()
+    d.jobs().result(job["id"], "needs_person", "Garment Inquiry isn't reachable from my Alliant login")
+    rec = d.uniform().load()["requests"][ref]
+    assert rec["status"] == "approved" and not rec["job"] and d.uniform().retryable(rec)
+    assert d.uniform().act(tap("uniform_retry", ref, user="U9")) == "ignored: not office"
+    assert d.uniform().act(tap("uniform_retry", ref)).startswith(f"{ref} sent back")
+    again = d.jobs().next()
+    assert again["kind"] == "service_code" and again["id"] != job["id"] and "BR" in again["ticket"]
+    assert d.uniform().retry(ref) .startswith(f"{ref} isn't waiting")  # once
+    d.jobs().result(again["id"], "entered", "1 garment got BR")
+    assert d.uniform().load()["requests"][ref]["status"] == "entered"
+    assert d.uniform().retry_failed("U2") == []

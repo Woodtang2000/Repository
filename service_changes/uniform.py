@@ -347,6 +347,10 @@ class Uniform:
         blocks = [{"type": "section", "text": {"type": "mrkdwn", "text": "\n".join(self.lines(rec))[:2900]}}]
         if rec["status"] == "new":
             blocks.append(self.buttons(rec))
+        elif self.retryable(rec):  # approved, but Donna couldn't enter it: send it back to her once it's fixed
+            blocks.append({"type": "actions", "block_id": "uniform", "elements": [
+                {"type": "button", "action_id": "uniform_retry", "style": "primary",
+                 "value": json.dumps({"ref": rec["ref"]}), "text": {"type": "plain_text", "text": "🔁 Try again in Alliant"}}]})
         if status:
             blocks.append({"type": "context", "elements": [{"type": "mrkdwn", "text": status[:2000]}]})
         text = self.lines(rec)[0]
@@ -398,6 +402,8 @@ class Uniform:
             self.desk.slack.chat_postEphemeral(channel=self.channel(), user=user, text="Only the office approves uniform requests.")
             return "ignored: not office"
         rec = self.load()["requests"].get(ref)
+        if act.get("action_id") == "uniform_retry":
+            return self.retry(ref, user)
         if not rec or rec["status"] != "new":
             return "not open"
         who = (self.desk.name(user) or "office").split()[0]
@@ -423,6 +429,35 @@ class Uniform:
         rec = self.update(ref, job=jid)
         self.card(rec, f"✅ Approved by {who}. 🤖 Entering *{rec['code']}* in Alliant now.")
         return f"{ref} approved, job {jid}"
+
+    @staticmethod
+    def retryable(rec: dict) -> bool:
+        """Approved, sent to Alliant, and sent back by Donna: nothing entered, no job waiting."""
+        return rec.get("status") == "approved" and not rec.get("job") and bool(rec.get("failed_at") or rec.get("decided_at"))
+
+    def retry(self, ref: str, user: str = "") -> str:
+        """Back to Donna's Alliant queue: the "Try again in Alliant" button, or "Donna retry UR-1013" (Scott, 11/17:
+        UR-1013 stopped because her login had no Inquiry button; he added it)."""
+        rec = self.load()["requests"].get(ref)
+        if not rec:
+            return f"I don't have {ref}."
+        if not self.retryable(rec):
+            return f"{ref} isn't waiting on a retry ({rec.get('status')})."
+        if test_mode():
+            return f"{ref}: test mode, nothing goes to Alliant."
+        who = (self.desk.name(user) or "office").split()[0] if user else "office"
+        jid = self.desk.jobs().custom_job("service_code", self.job_text(rec), {"account": rec["account"], "request_id": ref})
+        rec = self.update(ref, job=jid, failed_at=None)
+        self.card(rec, f"✅ Approved by {rec.get('by')}. 🔁 Sent back to Alliant by {who}: entering *{rec['code']}* now.")
+        return f"{ref} sent back to my Alliant queue." + (
+            " (I'm paused: say \"Donna resume\" when you're ready.)" if self.desk.jobs().load().get("paused") else "")
+
+    def retry_failed(self, user: str, days: int = 7) -> list[str]:
+        """Every request Donna couldn't enter in the last `days` days, back in her queue ("Donna retry")."""
+        cutoff = time.time() - days * 86400
+        refs = [r["ref"] for r in self.load()["requests"].values()
+                if self.retryable(r) and (r.get("failed_at") or r.get("decided_at") or 0) >= cutoff]
+        return [self.retry(ref, user) for ref in refs]
 
     def job_text(self, rec: dict) -> str:
         """The workstation job: exactly which code on exactly which garments (rules: "Service codes")."""
@@ -454,9 +489,10 @@ class Uniform:
             self.card(rec, f"✅ Approved by {rec.get('by')}. 🤖 Entered in Alliant {datetime.now(ALASKA):%-I:%M %p}. ⏳ Waiting for "
                            "the plant to pull it at the next scan.")
             return f"{ref} entered"
-        rec = self.update(ref, status="approved", job="")
+        rec = self.update(ref, status="approved", job="", failed_at=time.time())
         self.card(rec, f"⚠️ I couldn't enter it: {((question + ' ') if question else '') + (job.get('note') or '')}"[:1500]
-                  + f"\nPlease enter *{rec['code']}* by hand: {HOW[rec['scope']]}.")
+                  + f"\nPlease enter *{rec['code']}* by hand: {HOW[rec['scope']]}. Or fix what stopped me and tap "
+                    "*Try again in Alliant*.")
         return f"{ref} {job['status']}"
 
     # ---- closing the loop -----------------------------------------------------------------------------------------
