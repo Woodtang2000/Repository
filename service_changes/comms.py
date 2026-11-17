@@ -129,6 +129,11 @@ def suggest(slack, addr: str) -> list[str]:
             out += ((card.get("metadata") or {}).get("event_payload") or {}).get("accounts") or []
     except Exception:
         pass
+    try:  # Salesforce's Contacts and Accounts (sf_directory.py): a named person on an account beats a domain match
+        from .sf_directory import guess
+        out += guess(_data(), _alliant(), addr)[0]
+    except Exception as e:
+        print(time.strftime("%H:%M"), "customer-messages Salesforce guess:", str(e)[:150], flush=True)
     try:
         al = _alliant()
         a = (addr or "").strip().lower()

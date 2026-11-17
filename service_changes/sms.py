@@ -461,6 +461,16 @@ def signup_card(slack, desk_id: str, alliant: Alliant, phone: str, who: str, sai
     waiting = open_card(slack, channel, "+1" + phone_key(phone))
     lines = [head + (f": {who}" if who else ""), f"_{said[:600]}_"]
     lines += caller_id_lines(cid or {}, name(accounts[0]) if accounts else "")
+    if data_dir:  # whose number (or email) this is in Salesforce: a guess for the office, never a link by itself
+        try:
+            from .sf_directory import guess
+            sf_accounts, sf_line = guess(data_dir, alliant, phone)
+            if sf_line:
+                lines.append(sf_line)
+                if not accounts:
+                    accounts = sf_accounts
+        except Exception as e:
+            print(time.strftime("%H:%M"), "Salesforce guess:", str(e)[:150], flush=True)
     if current:
         lines.append("This number is now on: " + ", ".join(f"{a} {name(a)}" for a in current))
     if others:  # the same number naming different customers: could be someone fishing, so the owner hears about it

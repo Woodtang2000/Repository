@@ -1151,6 +1151,12 @@ class Desk:
             self.new_accounts().garment_pass(now)
         except Exception as e:
             print(time.strftime("%H:%M"), "garment watch:", str(e)[:200], flush=True)
+        try:  # Salesforce contacts' phones and emails, once a day: who an unlinked texter or caller probably is
+            from . import sf_directory
+            if sf_directory.refresh(self.data_dir, now):
+                print(time.strftime("%H:%M"), "Salesforce directory refreshed", flush=True)
+        except Exception as e:
+            print(time.strftime("%H:%M"), "Salesforce directory:", str(e)[:200], flush=True)
         try:  # holiday notices: the card for the office 9 days ahead, so customers hear a week before (holidays.py)
             from datetime import datetime
             from . import holidays
