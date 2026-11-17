@@ -66,5 +66,18 @@ def test_alliant_card_contacts_missing_from_salesforce(tmp_path, monkeypatch):
                "1205-1-00005": {"contact": "Accounts", "email": "ap@midas.com", "location_contact": "Tom Lee", "phone": "907-555-7777"},
                "8800-1-00001": {"contact": "Ann Owner", "email": "ann@newplace.com"}})
     rows = sf_directory.compare(str(tmp_path), al)
-    assert [(r["account"], r["role"], r["name"], r["account_in_salesforce"]) for r in rows] == [
-        ("1205-1-00005", "on-site contact", "Tom Lee", "yes"), ("8800-1-00001", "invoice contact", "Ann Owner", "NO")]
+    assert [(r["salesforce_account"], r["role"], r["name"], r["kind"], r["account_in_salesforce"]) for r in rows] == [
+        ("1205", "on-site contact", "Tom Lee", "person", "yes"), ("8800", "invoice contact", "Ann Owner", "person", "NO")]
+
+
+def test_several_addresses_and_several_locations_make_one_row(tmp_path, monkeypatch):
+    fake_sf(monkeypatch, [{"Name": "Fran", "Phone": "", "Email": "fgiarratano@bobsservices.com",
+                           "Account": {"AccountNumber": "1003", "Name": "Bob's"}}], [{"AccountNumber": "1003"}])
+    sf_directory.build(str(tmp_path))
+    card = {"contact": "AP", "email": "accounting@bobsservices.com; fgiarratano@bobsservices.com"}
+    other = {"contact": "INVOICES", "email": "ap@other.com"}
+    al = SimpleNamespace(customers=[SimpleNamespace(account=a, name="X") for a in
+                                    ("1003-1-00000", "1003-1-00002", "1004-1-00000", "1004-1-00001")],
+                         cards={"1003-1-00000": card, "1003-1-00002": card, "1004-1-00000": other, "1004-1-00001": other})
+    rows = sf_directory.compare(str(tmp_path), al)
+    assert len(rows) == 1 and rows[0]["locations"] == "1004-1-00000 1004-1-00001" and rows[0]["kind"] == "billing"

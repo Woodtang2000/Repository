@@ -111,20 +111,31 @@ def guess(data_dir: str, alliant, addr: str) -> tuple[list[str], str]:
     return accounts, f"📇 Salesforce has this {'email' if '@' in key else 'number'} for: {who}"
 
 
+GENERIC = re.compile(r"^(?:a/?p|ap inbox|accounts? payable|accounting|invoices?(?: only| & statements)?|billing|"
+                     r"office|manager|owner|bookkeep\w*)$", re.I)
+
+
+def _emails(s) -> list[str]:
+    """An Alliant email box can hold several addresses ("a@x.com; b@x.com")."""
+    return [e.lower() for e in re.findall(r"[\w.+'-]+@[\w-]+(?:\.[\w-]+)+", str(s or ""))]
+
+
 def compare(data_dir: str, alliant) -> list[dict]:
     """Every person on an Alliant customer card (the invoice contact and the on-site contact) that isn't on the
-    matching Salesforce Account: no Contact there with the same phone, email or name. Read-only; for the Sales agent
-    to import after Scott's OK. Sub-accounts billed by another company (Costco, Safeway) are left out."""
+    matching Salesforce Account (Salesforce has one Account per account number, so one row per account and person,
+    with the locations listed): no Contact there with any of the same addresses, phones or the same name.
+    Read-only; for the Sales agent to import after Scott's OK. Sub-accounts billed by another company (Costco,
+    Safeway) are left out. Generic names ("AP", "Invoices") are billing mailboxes: kind "billing"."""
     from .context import sub_account
     d = load(data_dir)
     in_sf = set(d.get("accounts") or [])
-    have = {}
+    have: dict[str, set] = {}
     for table in ("phones", "emails"):
         for key, hits in (d.get(table) or {}).items():
             for acct, _ in hits:
                 have.setdefault(acct, set()).add(key)
-    out = []
     names = {c.account: c.name for c in getattr(alliant, "customers", [])}
+    rows: dict[tuple, dict] = {}
     for account, card in sorted(getattr(alliant, "cards", {}).items()):
         if account not in names or sub_account(account):
             continue
@@ -135,15 +146,25 @@ def compare(data_dir: str, alliant) -> list[dict]:
                    card.get("location_email"))]
         for role, who, phone, mobile, email in people:
             who = " ".join(str(who or "").split())
-            keys = {k for k in (_digits(phone), _digits(mobile), str(email or "").strip().lower()) if k and k not in OURS}
-            if not who and not keys:
+            mails = _emails(email)
+            phones = [p for p in (_digits(phone), _digits(mobile)) if p and p not in OURS]
+            keys = set(mails) | set(phones)
+            if not keys:
                 continue
-            if keys & known or (who and who.lower() in known_names):
+            if keys & known or (who and not GENERIC.match(who) and who.lower() in known_names):
                 continue
-            out.append({"account": account, "location": names[account], "salesforce_account": base,
-                        "account_in_salesforce": "yes" if base in in_sf else "NO", "role": role, "name": who,
-                        "phone": str(phone or "").strip(), "mobile": str(mobile or "").strip(),
-                        "email": str(email or "").strip()})
+            key = (base, who.lower(), tuple(sorted(keys)))
+            row = rows.get(key)
+            if row:
+                row["locations"].append(account)
+                continue
+            rows[key] = {"salesforce_account": base, "account_in_salesforce": "yes" if base in in_sf else "NO",
+                         "locations": [account], "location_name": names[account], "role": role,
+                         "kind": "billing" if (not who or GENERIC.match(who)) else "person", "name": who,
+                         "phone": _digits(phone), "mobile": _digits(mobile), "emails": mails}
+    out = []
+    for r in rows.values():
+        out.append({**r, "locations": " ".join(r["locations"]), "emails": "; ".join(r["emails"])})
     return out
 
 
@@ -163,16 +184,18 @@ def main() -> None:
     build(a.data)
     rows = compare(a.data, Alliant.from_dir(a.data))
     path = os.path.join(a.data, "alliant_contacts_not_in_salesforce.csv")
-    fields = ["account", "location", "salesforce_account", "account_in_salesforce", "role", "name", "phone", "mobile", "email"]
+    fields = ["salesforce_account", "account_in_salesforce", "location_name", "locations", "role", "kind", "name",
+              "phone", "mobile", "emails"]
     with open(path, "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=fields)
         w.writeheader()
         w.writerows(rows)
-    locs = {r["account"] for r in rows}
+    accts = {r["salesforce_account"] for r in rows}
     no_acct = {r["salesforce_account"] for r in rows if r["account_in_salesforce"] == "NO"}
-    print(f"{len(rows)} Alliant card contacts aren't in Salesforce, across {len(locs)} locations "
-          f"({sum(r['role'] == 'invoice contact' for r in rows)} invoice, {sum(r['role'] == 'on-site contact' for r in rows)} "
-          f"on-site). {len(no_acct)} account numbers have no Salesforce Account at all. List: {path}")
+    print(f"{len(rows)} Alliant card contacts aren't in Salesforce, on {len(accts)} Salesforce Accounts "
+          f"({sum(r['kind'] == 'person' for r in rows)} people, {sum(r['kind'] == 'billing' for r in rows)} billing mailboxes; "
+          f"{sum(bool(r['emails']) for r in rows)} with email, {sum(bool(r['phone'] or r['mobile']) for r in rows)} with phone). "
+          f"{len(no_acct)} account numbers have no Salesforce Account at all. List: {path}")
 
 
 if __name__ == "__main__":
