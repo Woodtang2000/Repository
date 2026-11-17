@@ -44,10 +44,24 @@ cat > ~/Donna/donna_worker.sh <<'EOF'
 #!/bin/bash
 # Donna's Alliant work loop: launchd runs this every minute (deploy/donna_workstation.md in the Service Desk repo).
 # One Claude session at a time, around the clock, in one Alliant tab: it keeps Alliant awake between jobs and ends at
-# 4 AM so the next one starts fresh (same Alliant session, new tab, no sign-in).
+# 4 AM so the next one starts fresh (same Alliant session, new tab, no sign-in). A fresh Chrome each morning clears the
+# old tabs.
 export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
 export BASH_DEFAULT_TIMEOUT_MS=600000 BASH_MAX_TIMEOUT_MS=600000   # her 5-minute waits for the next job
 LOG="$HOME/Donna/logs/$(date +%F).log"
+# 11/17: no sessions from 3:45 to 4:00. A session started then sees "4 AM", stops in seconds, and leaves a tab behind.
+HM=$(date +%H%M)
+if [ "$HM" -ge 0345 ] && [ "$HM" -lt 0400 ]; then exit 0; fi
+# Once a day, before the 4 AM session: a fresh Chrome, so yesterday's tabs don't pile up. Nothing else is running
+# (launchd never starts a second copy), and quitting this way skips Chrome's "Leave site?" box. Alliant keeps running on
+# the remote desktop; the new session's tab reconnects to it, as it does every morning.
+FRESH="$HOME/Donna/logs/.chrome-fresh-$(date +%F)"
+if [ "$HM" -ge 0400 ] && [ "$HM" -lt 0500 ] && [ ! -e "$FRESH" ]; then
+  touch "$FRESH"
+  echo "=== $(date) fresh Chrome: closing yesterday's tabs" >> "$LOG"
+  pkill -x "Google Chrome"; sleep 5
+  open -a "Google Chrome"; sleep 20
+fi
 echo "=== $(date) session starts" >> "$LOG"
 cd "$HOME/Donna"
 ENABLE_CLAUDEAI_MCP_SERVERS=false claude -p --chrome --permission-mode auto "You are Donna at your Alliant workstation, \
