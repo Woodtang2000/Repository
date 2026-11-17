@@ -2386,6 +2386,21 @@ class Desk:
                 return
             ev = req.payload.get("event", {})
             channel = ev.get("channel") or ev.get("item", {}).get("channel")
+            if ev.get("type") == "message" and ev.get("subtype") is None and not ev.get("bot_id") \
+                    and ev.get("channel_type") != "im" and re.match(r"^\s*donna,?\s+(?:retry|try again|redo)\b.*\bUR-\d+",
+                                                                    ev.get("text", ""), re.I):
+                # "Donna retry UR-1013" right in #uniform-requests (Scott, 11/16), office or owner only
+                def uniform_retry(e=ev):
+                    try:
+                        u = e.get("user")
+                        if channel != self.uniform().channel() or not (self.is_office(u) or self.is_owner(u)):
+                            return
+                        ref = re.search(r"\bUR-\d+\b", e.get("text", ""), re.I).group(0).upper()
+                        self.slack.chat_postMessage(channel=channel, thread_ts=e.get("ts"), text=self.uniform().retry(ref, u))
+                    except Exception as x:
+                        print(time.strftime("%H:%M"), "uniform retry error:", x, flush=True)
+                threading.Thread(target=uniform_retry, daemon=True).start()
+                return
             if ev.get("type") == "message" and ev.get("channel_type") == "im" and not ev.get("bot_id") \
                     and ev.get("subtype") is None and ev.get("user") not in (None, self.me):
                 def private(e=ev):
