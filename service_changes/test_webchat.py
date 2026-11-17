@@ -355,6 +355,9 @@ def test_quote_page_served_for_each_company():
         assert "Patient gowns" in tlg and '"site": "tlg"' in tlg and "https://chat.thelaundrygroup.com/logo/tlg.png" in tlg
         assert '"phone": "(907) 222-7738"' in sw and '"phone": "(907) 519-0761"' in tlg  # each company's own number
         assert '"home": "https://thelaundrygroup.com/"' in tlg
+        icon = urllib.request.urlopen(urllib.request.Request(f"http://127.0.0.1:{srv.server_port}/uniform-icon.png",
+                                                             headers={"Host": "chat.snowwhitelinen.com"})).read()
+        assert icon[:8] == b"\x89PNG\r\n\x1a\n"
         assert 'class="embed"' not in sw and '"embed": false' in sw  # the standalone page is unchanged
         r = urllib.request.urlopen(urllib.request.Request(f"http://127.0.0.1:{srv.server_port}/quote?embed=1",
                                                           headers={"Host": "chat.thelaundrygroup.com"}))

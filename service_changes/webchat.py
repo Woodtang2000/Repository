@@ -481,6 +481,9 @@ def make_handler(chat: Chat, public_url: str):
             if u.path == "/donna-avatar.png":  # Donna's picture, beside her sign-off in customer emails
                 with open(os.path.join(REPO, "brand", "donna_google_profile.png"), "rb") as f:
                     return self._send(200, f.read(), "image/png", cache=86400)
+            if u.path == "/uniform-icon.png":  # the Repairs home-screen icon (yellow shirt) for the /uniform pages
+                with open(os.path.join(REPO, "deploy", "uniform_requests", "uniform_icon.png"), "rb") as f:
+                    return self._send(200, f.read(), "image/png", cache=86400)
             if u.path == "/donna-icon.png":  # Donna's home-screen icon (navy and gold, like Squirrel Tamer's acorn)
                 with open(os.path.join(REPO, "website_chat", "donna_icon.png"), "rb") as f:
                     return self._send(200, f.read(), "image/png", cache=86400)
