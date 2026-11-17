@@ -52,3 +52,19 @@ def test_the_new_texter_card_shows_the_salesforce_guess(tmp_path, monkeypatch):
     sms.signup_card(slack, "CDESK", al, "+19075551234", "", "need more towels", [], data_dir=str(tmp_path))
     text = str(posted[-1])
     assert "Salesforce has this number for: Jane Smith at Midas (1205)" in text and "Best match: *1205-1-00004*" in text
+
+
+def test_alliant_card_contacts_missing_from_salesforce(tmp_path, monkeypatch):
+    fake_sf(monkeypatch, [{"Name": "Jane Smith", "Phone": "(907) 555-1234", "Email": "ap@midas.com",
+                           "Account": {"AccountNumber": "1205", "Name": "Midas"}}],
+            [{"AccountNumber": "1205", "Name": "Midas", "Phone": None}])
+    sf_directory.build(str(tmp_path))
+    al = SimpleNamespace(
+        customers=[SimpleNamespace(account="1205-1-00004", name="MIDAS #4"), SimpleNamespace(account="1205-1-00005", name="MIDAS #5"),
+                   SimpleNamespace(account="8800-1-00001", name="NEW PLACE")],
+        cards={"1205-1-00004": {"contact": "Jane Smith", "email": "ap@midas.com", "location_contact": "Bob", "phone": "907-555-1234"},
+               "1205-1-00005": {"contact": "Accounts", "email": "ap@midas.com", "location_contact": "Tom Lee", "phone": "907-555-7777"},
+               "8800-1-00001": {"contact": "Ann Owner", "email": "ann@newplace.com"}})
+    rows = sf_directory.compare(str(tmp_path), al)
+    assert [(r["account"], r["role"], r["name"], r["account_in_salesforce"]) for r in rows] == [
+        ("1205-1-00005", "on-site contact", "Tom Lee", "yes"), ("8800-1-00001", "invoice contact", "Ann Owner", "NO")]

@@ -45,6 +45,7 @@ def build(data_dir: str) -> dict:
 
     phones: dict[str, list] = {}
     emails: dict[str, list] = {}
+    names: dict[str, list] = {}  # account number -> contact names, lowercase (the Alliant comparison)
 
     def add(table, key, acct, label):
         if key and acct and [acct, label] not in table.setdefault(key, []):
@@ -57,9 +58,14 @@ def build(data_dir: str) -> dict:
         for p in (c.get("Phone"), c.get("MobilePhone")):
             add(phones, _digits(p), acct, label)
         add(emails, (c.get("Email") or "").strip().lower(), acct, label)
+        n = " ".join((c.get("Name") or "").lower().split())
+        if acct and n and n not in names.setdefault(acct, []):
+            names[acct].append(n)
     for a in rows("SELECT Name, Phone, AccountNumber FROM Account WHERE Alliant_Account__c = true AND Phone != null"):
         add(phones, _digits(a.get("Phone")), str(a.get("AccountNumber") or "").strip(), f"{a.get('Name') or ''} (main number)")
-    data = {"at": time.time(), "phones": phones, "emails": emails}
+    accounts = sorted({str(a.get("AccountNumber") or "").strip() for a in
+                       rows("SELECT AccountNumber FROM Account WHERE Alliant_Account__c = true")} - {""})
+    data = {"at": time.time(), "phones": phones, "emails": emails, "names": names, "accounts": accounts}
     path = os.path.join(data_dir, FILE)
     with open(path + ".tmp", "w") as f:
         json.dump(data, f)
@@ -103,3 +109,71 @@ def guess(data_dir: str, alliant, addr: str) -> tuple[list[str], str]:
         return [], ""
     who = "; ".join(f"{label} ({acct})" for acct, label in hits[:3])
     return accounts, f"📇 Salesforce has this {'email' if '@' in key else 'number'} for: {who}"
+
+
+def compare(data_dir: str, alliant) -> list[dict]:
+    """Every person on an Alliant customer card (the invoice contact and the on-site contact) that isn't on the
+    matching Salesforce Account: no Contact there with the same phone, email or name. Read-only; for the Sales agent
+    to import after Scott's OK. Sub-accounts billed by another company (Costco, Safeway) are left out."""
+    from .context import sub_account
+    d = load(data_dir)
+    in_sf = set(d.get("accounts") or [])
+    have = {}
+    for table in ("phones", "emails"):
+        for key, hits in (d.get(table) or {}).items():
+            for acct, _ in hits:
+                have.setdefault(acct, set()).add(key)
+    out = []
+    names = {c.account: c.name for c in getattr(alliant, "customers", [])}
+    for account, card in sorted(getattr(alliant, "cards", {}).items()):
+        if account not in names or sub_account(account):
+            continue
+        base = account.split("-")[0]
+        known, known_names = have.get(base, set()), set(d.get("names", {}).get(base, []))
+        people = [("invoice contact", card.get("contact"), "", "", card.get("email")),
+                  ("on-site contact", card.get("location_contact"), card.get("phone"), card.get("mobile"),
+                   card.get("location_email"))]
+        for role, who, phone, mobile, email in people:
+            who = " ".join(str(who or "").split())
+            keys = {k for k in (_digits(phone), _digits(mobile), str(email or "").strip().lower()) if k and k not in OURS}
+            if not who and not keys:
+                continue
+            if keys & known or (who and who.lower() in known_names):
+                continue
+            out.append({"account": account, "location": names[account], "salesforce_account": base,
+                        "account_in_salesforce": "yes" if base in in_sf else "NO", "role": role, "name": who,
+                        "phone": str(phone or "").strip(), "mobile": str(mobile or "").strip(),
+                        "email": str(email or "").strip()})
+    return out
+
+
+def main() -> None:
+    """python -m service_changes.sf_directory --compare : refresh the Salesforce copy, then write
+    data/alliant_contacts_not_in_salesforce.csv and print the counts. Reads Salesforce; writes nothing there."""
+    import argparse
+    import csv
+    from .context import Alliant
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--compare", action="store_true")
+    ap.add_argument("--data", default="service_changes/data")
+    a = ap.parse_args()
+    if not a.compare:
+        ap.print_help()
+        return
+    build(a.data)
+    rows = compare(a.data, Alliant.from_dir(a.data))
+    path = os.path.join(a.data, "alliant_contacts_not_in_salesforce.csv")
+    fields = ["account", "location", "salesforce_account", "account_in_salesforce", "role", "name", "phone", "mobile", "email"]
+    with open(path, "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=fields)
+        w.writeheader()
+        w.writerows(rows)
+    locs = {r["account"] for r in rows}
+    no_acct = {r["salesforce_account"] for r in rows if r["account_in_salesforce"] == "NO"}
+    print(f"{len(rows)} Alliant card contacts aren't in Salesforce, across {len(locs)} locations "
+          f"({sum(r['role'] == 'invoice contact' for r in rows)} invoice, {sum(r['role'] == 'on-site contact' for r in rows)} "
+          f"on-site). {len(no_acct)} account numbers have no Salesforce Account at all. List: {path}")
+
+
+if __name__ == "__main__":
+    main()
