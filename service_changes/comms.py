@@ -117,6 +117,21 @@ def contact_key(addr: str) -> str:
     return a if "@" in a else "+1" + _digits(a)
 
 
+def card_matches(alliant, addr: str) -> tuple[list[str], list[str]]:
+    """(locations whose Alliant card lists this exact email or phone, locations whose card uses the same company email
+    domain). Free mail (gmail, yahoo...) never counts as a company domain."""
+    a = (addr or "").strip().lower()
+    dom = a.split("@")[-1] if "@" in a else ""
+    exact, same_domain = [], []
+    for acct, card in getattr(alliant, "cards", {}).items():
+        text = " ".join(str(card.get(f) or "") for f in ("email", "location_email", "phone", "mobile")).lower()
+        if ("@" in a and a in text) or ("@" not in a and _digits(a) and _digits(a) in re.sub(r"\D", "", text)):
+            exact.append(acct)
+        elif dom and dom not in FREE_MAIL and "@" + dom in text:
+            same_domain.append(acct)
+    return exact, same_domain
+
+
 def suggest(slack, addr: str) -> list[str]:
     """Best accounts for someone not linked yet (Scott, 11/12: "a suggestion and a button"): the guess on their waiting
     #new-contacts card, then the Alliant cards that list this email or phone, then (email) customers whose cards use
@@ -135,17 +150,8 @@ def suggest(slack, addr: str) -> list[str]:
     except Exception as e:
         print(time.strftime("%H:%M"), "customer-messages Salesforce guess:", str(e)[:150], flush=True)
     try:
-        al = _alliant()
-        a = (addr or "").strip().lower()
-        dom = a.split("@")[-1] if "@" in a else ""
-        same_domain = []
-        for acct, card in al.cards.items():
-            text = " ".join(str(card.get(f) or "") for f in ("email", "location_email", "phone")).lower()
-            if ("@" in a and a in text) or ("@" not in a and _digits(a) and _digits(a) in re.sub(r"\D", "", text)):
-                out.append(acct)
-            elif dom and dom not in FREE_MAIL and "@" + dom in text:
-                same_domain.append(acct)
-        out += same_domain
+        exact, same_domain = card_matches(_alliant(), addr)
+        out += exact + same_domain
     except Exception as e:
         print(time.strftime("%H:%M"), "customer-messages suggestion:", str(e)[:150], flush=True)
     return list(dict.fromkeys(x for x in out if x))[:20]

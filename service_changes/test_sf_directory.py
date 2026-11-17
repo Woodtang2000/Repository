@@ -81,3 +81,20 @@ def test_several_addresses_and_several_locations_make_one_row(tmp_path, monkeypa
                          cards={"1003-1-00000": card, "1003-1-00002": card, "1004-1-00000": other, "1004-1-00001": other})
     rows = sf_directory.compare(str(tmp_path), al)
     assert len(rows) == 1 and rows[0]["locations"] == "1004-1-00000 1004-1-00001" and rows[0]["kind"] == "billing"
+
+
+def test_the_new_texter_card_checks_the_alliant_cards_too(tmp_path, monkeypatch):
+    from . import sms
+    from .context import Alliant, Customer
+    posted = []
+    slack = SimpleNamespace(chat_postMessage=lambda **kw: posted.append(kw) or {"ts": "1.1"},
+                            conversations_history=lambda **kw: {"messages": []})
+    monkeypatch.setattr(sms, "cards_channel", lambda s, d: "CNEW")
+    monkeypatch.setattr(sms, "open_card", lambda s, c, k: None)
+    al = Alliant(customers=[Customer("1205-1-00004", "MIDAS #4", "4", ["Thu"])],
+                 cards={"1205-1-00004": {"phone": "(907) 555-4321", "email": "ap@midas.com; owner@midas.com"}})
+    sms.signup_card(slack, "CDESK", al, "+19075554321", "", "need towels", [], data_dir=str(tmp_path))
+    assert "Alliant card lists this number for: 1205-1-00004 MIDAS #4" in str(posted[-1])
+    assert "Best match: *1205-1-00004*" in str(posted[-1])
+    sms.signup_card(slack, "CDESK", al, "owner@midas.com", "", "need towels", [], data_dir=str(tmp_path), kind="email_signup")
+    assert "Alliant card lists this email for: 1205-1-00004" in str(posted[-1])
