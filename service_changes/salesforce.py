@@ -258,7 +258,8 @@ def split_name(name: str) -> tuple[str, str]:
     return (" ".join(parts[:-1]), parts[-1]) if len(parts) > 1 else ("", parts[0])
 
 
-def sync_contact(accounts: list[str], name: str, email: str = "", phone: str = "") -> list[str]:
+def sync_contact(accounts: list[str], name: str, email: str = "", phone: str = "",
+                 why: str = "Added by Donna when the office linked them to the account.") -> list[str]:
     """A number or email the office just linked to Alliant accounts, onto the Salesforce Account whose Account Number
     is the Alliant account's first part (5045-1-00000 -> 5045; 1204-1 and 1204-2 are the same Account): found among
     its Contacts by email or phone, blanks are filled in (email, mobile) and nothing is overwritten; not found, a new
@@ -299,7 +300,7 @@ def sync_contact(accounts: list[str], name: str, email: str = "", phone: str = "
                     else "already there"))
                 continue
             new = {"AccountId": acct["Id"], "LastName": last,
-                   "Description": "Added by Donna when the office linked them to the account."}
+                   "Description": why}
             if first:
                 new["FirstName"] = first
             if email:

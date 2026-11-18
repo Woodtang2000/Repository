@@ -52,6 +52,7 @@ _PACKS: dict[str, int] = {}
 # Customer-specific SKUs (Scott 11/18: "Customer specific SKU's shouldn't be on the site"): any catalog SKU whose
 # Salesforce Stock Class is Custom is left off the page and refused in a request, read in the same pass as the packs.
 _HIDDEN: set[str] = set()
+HIDE_CLASSES = ("Custom", "Logo mat")  # Scott, 11/18: one customer's logo mats are hidden like Custom SKUs
 
 
 def pack_sizes() -> dict[str, int]:
@@ -72,13 +73,13 @@ def read_packs() -> str:
     wanted = sorted({s for site in ("sw", "tlg") for s in skus(load()[site])})
     token, instance = salesforce._token()
     q = ("SELECT ProductCode, Pack_Size__c, Stock_Class__c FROM Product2 WHERE IsActive = true "
-         "AND (Pack_Size__c != null OR Stock_Class__c = 'Custom') AND ProductCode IN ("
+         "AND (Pack_Size__c != null OR Stock_Class__c IN ('Custom', 'Logo mat')) AND ProductCode IN ("
          + ",".join(salesforce._q(s) for s in wanted) + ")")
     recs = salesforce._call("GET", f"{instance}/services/data/{salesforce.API}/query?" + urllib.parse.urlencode({"q": q}),
                             token).get("records") or []
     packs, custom = {}, set()
     for r in recs:
-        if r.get("ProductCode") and r.get("Stock_Class__c") == "Custom":
+        if r.get("ProductCode") and r.get("Stock_Class__c") in HIDE_CLASSES:
             custom.add(r["ProductCode"])
         try:
             n = int(float(r.get("Pack_Size__c") or 0))

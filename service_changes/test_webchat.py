@@ -374,7 +374,7 @@ def test_quote_quantities_round_up_to_whole_packs(monkeypatch):
     assert catalog.pack_sizes() == {"5-01-01": 20, "1-01-03": 100}
     # a SKU marked Stock Class = Custom (one customer's item) is left off the page and can't be requested
     recs.append({"ProductCode": "1-02-04", "Pack_Size__c": None, "Stock_Class__c": "Custom"})
-    recs.append({"ProductCode": "5-81-02", "Pack_Size__c": None, "Stock_Class__c": "Custom"})
+    recs.append({"ProductCode": "5-81-02", "Pack_Size__c": None, "Stock_Class__c": "Logo mat"})  # logo mats too
     monkeypatch.setattr(catalog.salesforce, "_call", lambda m, url, tok: {"records": recs})
     monkeypatch.setattr(catalog, "_HIDDEN", set())
     assert "1-02-04, 5-81-02" in catalog.read_packs() and catalog.hidden() == {"1-02-04", "5-81-02"}

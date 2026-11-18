@@ -392,3 +392,25 @@ def test_no_entry_before_the_wrapup_form_is_done():
     r = copy.deepcopy(REQ)
     del r["wrapup_done_by"]
     assert any(g.startswith("wrapup_done_by") for g in na.missing(r))
+
+
+def test_new_account_contacts_wait_for_the_account_number(tmp_path, monkeypatch):
+    # Scott, 11/18: Sales writes the base number (6021) to Account.AccountNumber on "Entered in Alliant"
+    from types import SimpleNamespace
+    from . import new_accounts as na, salesforce
+    calls, state = [], {"numbered": False}
+    monkeypatch.setattr(salesforce, "configured", lambda: True)
+    monkeypatch.setattr(salesforce, "sync_contact", lambda accts, name, email="", phone="", why="": calls.append(
+        (accts, name, email, phone)) or ([f"{name} on CAFE: added"] if state["numbered"] else ["⚠️ no Salesforce account numbered 6021"]))
+    posts = []
+    desk = SimpleNamespace(data_dir=str(tmp_path), slack=SimpleNamespace(chat_postMessage=lambda **kw: posts.append(kw)))
+    h = na.NewAccounts(desk)
+    h.save({"r1": {"thread": "9.0", "req": {"location_contact": {"name": "Pat Lee", "email": "pat@cafe.com", "phone": "907-555-1111"},
+                                            "invoice_email": "ap@cafe.com"},
+                   "contacts": {"customer_number": "6021-1-00000", "since": 1000.0}}})
+    assert h.contacts_pass(2000.0) == ["6021-1-00000: waiting for AccountNumber"] and not posts
+    assert h.contacts_pass(2100.0) == []  # tried less than ten minutes ago
+    state["numbered"] = True
+    h.contacts_pass(3000.0)
+    assert [c[1] for c in calls[-2:]] == ["Pat Lee", "Accounts Payable"] and calls[-1][0] == ["6021-1-00000"]
+    assert "Contacts on the Salesforce Account" in posts[-1]["text"] and h.contacts_pass(9000.0) == []  # once

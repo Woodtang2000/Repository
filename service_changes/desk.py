@@ -1183,6 +1183,11 @@ class Desk:
             self.uniform().done_pass(now)
         except Exception as e:
             print(time.strftime("%H:%M"), "uniform pass:", str(e)[:200], flush=True)
+        try:  # new accounts' contacts onto their Salesforce Account, once Sales has numbered it
+            for line in self.new_accounts().contacts_pass(now):
+                print(time.strftime("%H:%M"), "new-account contacts:", line, flush=True)
+        except Exception as e:
+            print(time.strftime("%H:%M"), "new-account contacts:", str(e)[:200], flush=True)
         try:  # new garment accounts: issued vs billed, once a morning (#stockroom)
             self.new_accounts().garment_pass(now)
         except Exception as e:

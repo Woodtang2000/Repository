@@ -32,6 +32,13 @@ def _po_key(o: dict) -> str:
     return f"{o.get('po', '')}/{o.get('line') or o.get('sku', '') + '/' + o.get('wearer', '')}"
 
 
+def held() -> set[str]:
+    """WELCOME_HOLD in /etc/service-desk.env: account numbers (the part before the "-"), emails or email domains whose
+    welcome waits (Scott, 11/18: Pursuit's lodges were entered on a Snow White route by mistake; hold until Sales says
+    the routes are right). Remove the entry and the welcome goes out on the next pass."""
+    return {x.strip().lower() for x in os.environ.get("WELCOME_HOLD", "").split(",") if x.strip()}
+
+
 class Notices:
     def __init__(self, desk):
         self.desk = desk
@@ -84,8 +91,12 @@ class Notices:
             # one welcome per person, naming all their new locations (11/17: one lodge manager got 4 welcomes at once)
             from .context import company_for
             by_person: dict[tuple[str, str], list[str]] = {}
+            hold = held()
             for acct in sorted(accounts - seen_accts):
-                for e in self.emails(acct):
+                to = self.emails(acct)
+                if acct.split("-")[0] in hold or any(e.lower() in hold or e.lower().split("@")[-1] in hold for e in to):
+                    continue  # held (WELCOME_HOLD): not marked seen, so it's welcomed once the hold comes off
+                for e in to:
                     by_person.setdefault((e, company_for(acct)), []).append(acct)
                 seen_accts.add(acct)
             for (e, _), accts in by_person.items():

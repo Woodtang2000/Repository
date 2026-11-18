@@ -57,3 +57,15 @@ def test_one_welcome_for_several_new_locations_without_billing_lines(tmp_path, m
     assert "your 2 locations" in lodge and "Talkeetna Lodge: deliveries on Monday and Thursday" in lodge and "Denali Lodge" in lodge
     pizza = next(t for to, s, t in sent if to == "owner@pizza.com")
     assert "40 Towel Bar Mop" in pizza and "Nog" not in pizza and "Surcharge" not in pizza
+
+
+def test_a_held_welcome_waits_until_the_hold_comes_off(tmp_path, monkeypatch):
+    d, sent, posts = setup(tmp_path, monkeypatch)
+    n = notices.Notices(d)
+    n.pass_()
+    d.alliant.customers.append(Customer("7001-2-00000", "TALKEETNA LODGE", "4", ["Mon"]))
+    d.alliant.cards["7001-2-00000"] = {"email": "gm@pursuit.com"}
+    monkeypatch.setenv("WELCOME_HOLD", "pursuit.com")
+    assert n.pass_()["welcome"] == 0 and not sent
+    monkeypatch.setenv("WELCOME_HOLD", "")
+    assert n.pass_()["welcome"] == 1 and sent[0][0] == "gm@pursuit.com"

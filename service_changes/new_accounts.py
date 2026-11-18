@@ -456,6 +456,10 @@ class NewAccounts:
             return "no customer number"
         check = self.invoice_check(req, cust)
         ok = check.get("ok")
+        with self.lock:  # its contacts go on the Salesforce Account once Sales has numbered it (contacts_pass)
+            data = self.load()
+            data.setdefault(rid, {})["contacts"] = {"customer_number": cust, "since": time.time()}
+            self.save(data)
         self.result(req, thread, "entered" if ok else "waiting",
                     "" if ok else check.get("why", "the projected invoice differs from the contract"),
                     customer_number=cust, account_number=cust.split("-")[0],
@@ -560,6 +564,51 @@ class NewAccounts:
                      + self._tags())
             w = self._save_watch(cust, ts=head["ts"])
         self.desk.slack.chat_postMessage(channel=STOCKROOM_ID, thread_ts=w["ts"], text=text[:3900], unfurl_links=False)
+
+    def contacts_pass(self, now: float | None = None) -> list[str]:
+        """A new account's people onto its Salesforce Account (Scott, 11/18): the location contact and the invoice email
+        from the handoff. The Account is found by AccountNumber = the part before the first "-" (6021-1-00000 -> 6021),
+        which Sales writes when it reads "Entered in Alliant"; until it's there, try again each pass for a day, then tell
+        the thread. Existing Contacts are matched by email or phone first (salesforce.sync_contact), so people Sales
+        merged aren't added again. Nothing is overwritten."""
+        from . import salesforce
+        now = now or time.time()
+        if not salesforce.configured():
+            return []
+        out = []
+        for rid, rec in list(self.load().items()):
+            job = rec.get("contacts") if isinstance(rec, dict) else None
+            if not job or job.get("done") or now - job.get("tried", 0) < 600:
+                continue
+            req, cust = rec.get("req") or {}, job["customer_number"]
+            c = req.get("location_contact") or {}
+            people = [(c.get("name") or "", c.get("email") or "", c.get("phone") or "")]
+            inv = (req.get("invoice_email") or "").strip().lower()
+            if inv and inv != (c.get("email") or "").strip().lower():
+                people.append((req.get("invoice_contact") or "Accounts Payable", inv, ""))
+            lines = []
+            for name, email, phone in people:
+                if name or email or phone:
+                    lines += salesforce.sync_contact([cust], name or email, email=email, phone=phone,
+                                                     why="Added by Donna from the new-account handoff.")
+            waiting = any("no Salesforce account numbered" in ln for ln in lines)
+            with self.lock:
+                data = self.load()
+                j = data.get(rid, {}).get("contacts") or {}
+                j["tried"] = now
+                if not waiting or now - j.get("since", now) > 86400:
+                    j["done"] = True
+                    if rec.get("thread"):
+                        note = ("Contacts on the Salesforce Account: " if not waiting else
+                                "Couldn't add the contacts to Salesforce: ") + "; ".join(lines)
+                        try:
+                            self.desk.slack.chat_postMessage(channel=CHANNEL, thread_ts=rec["thread"], text=note[:3000])
+                        except Exception as e:
+                            print(time.strftime("%H:%M"), "contacts note not posted:", str(e)[:150], flush=True)
+                data.setdefault(rid, {})["contacts"] = j
+                self.save(data)
+            out.append(f"{cust}: {'waiting for AccountNumber' if waiting and not j.get('done') else '; '.join(lines)}")
+        return out
 
     def garment_pass(self, now: float) -> None:
         """Once a morning (from 8 AM): every new garment account still being watched."""
