@@ -1,7 +1,7 @@
 from . import salesforce
 
 
-def fake(monkeypatch, accounts, contacts):
+def fake(monkeypatch, accounts, contacts, elsewhere=()):
     calls = []
     monkeypatch.setenv("SF_DOMAIN", "x.my.salesforce.com")
     monkeypatch.setenv("SF_CLIENT_ID", "id")
@@ -10,10 +10,12 @@ def fake(monkeypatch, accounts, contacts):
 
     def call(method, url, token, body=None):
         calls.append((method, url.split("/v62.0/")[-1], body))
+        if method == "GET" and "FROM+AccountContactRelation" in url:  # an Account's direct and related contacts
+            return {"records": [{"ContactId": c["Id"], "Contact": c} for c in contacts]}
         if method == "GET" and "FROM+Account" in url:
             return {"records": accounts}
-        if method == "GET":
-            return {"records": contacts}
+        if method == "GET":  # Contacts anywhere with this email or phone
+            return {"records": list(elsewhere)}
         return {}
     monkeypatch.setattr(salesforce, "_call", call)
     return calls
@@ -46,3 +48,19 @@ def test_no_account_or_two_writes_nothing(monkeypatch):
     fake(monkeypatch, [{"Id": "1", "Name": "A"}, {"Id": "2", "Name": "B"}], [])
     assert "more than one" in salesforce.sync_contact(["1204-2-00001"], "Bob", phone="9075550000")[0]
     assert not [c for c in calls if c[0] in ("PATCH", "POST")]
+
+
+def test_someone_already_on_another_account_is_related_not_duplicated(monkeypatch):
+    # Sales' cleanup (11/16): Dawn Haynes is one Contact on Subway of Mat-Su, related to Midnight Sun Subway
+    dawn = {"Id": "003D", "Name": "Dawn Haynes", "Email": "dawn@subway.com", "MobilePhone": "(907) 631-9443", "Phone": None,
+            "AccountId": "001MATSU"}
+    calls = fake(monkeypatch, [{"Id": "001MID", "Name": "Midnight Sun Subway"}], [dawn])
+    assert salesforce.sync_contact(["3010-1-00000"], "Dawn", phone="9076319443") == ["Dawn Haynes on Midnight Sun Subway: already there"]
+    calls = fake(monkeypatch, [{"Id": "001NEW", "Name": "New Subway"}], [], elsewhere=[dawn])
+    assert salesforce.sync_contact(["3099-1-00000"], "Dawn", phone="9076319443") == \
+        ["Dawn Haynes on New Subway: related (already a contact on another account)"]
+    [post] = [c for c in calls if c[0] == "POST"]
+    assert post[1].endswith("sobjects/AccountContactRelation") and post[2]["ContactId"] == "003D"
+    calls = fake(monkeypatch, [{"Id": "001NEW", "Name": "New Subway"}], [], elsewhere=[dawn, {**dawn, "Id": "003E"}])
+    assert "the Sales agent can pick" in salesforce.sync_contact(["3099-1-00000"], "Dawn", phone="9076319443")[0]
+    assert not [c for c in calls if c[0] == "POST"]

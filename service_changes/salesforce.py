@@ -284,9 +284,29 @@ def sync_contact(accounts: list[str], name: str, email: str = "", phone: str = "
             if acct["Id"] in done:
                 continue
             done.add(acct["Id"])
-            contacts = query(f"SELECT Id, Name, Email, MobilePhone, Phone FROM Contact WHERE AccountId = {_q(acct['Id'])} LIMIT 500")
-            hit = next((c for c in contacts if (email and (c.get("Email") or "").lower() == email) or
-                        (phone and phone in (_digits(c.get("MobilePhone")), _digits(c.get("Phone"))))), None)
+            # its direct AND related contacts (Sales' cleanup, 11/16: one person on several accounts is one Contact,
+            # direct on one Account and related to the others through AccountContactRelation)
+            rel = query("SELECT ContactId, Contact.Name, Contact.Email, Contact.MobilePhone, Contact.Phone "
+                        f"FROM AccountContactRelation WHERE AccountId = {_q(acct['Id'])} LIMIT 500")
+            contacts = [{"Id": r["ContactId"], **{k: (r.get("Contact") or {}).get(k) for k in ("Name", "Email", "MobilePhone", "Phone")}}
+                        for r in rel]
+            match = lambda c: (email and (c.get("Email") or "").lower() == email) or \
+                (phone and phone in (_digits(c.get("MobilePhone")), _digits(c.get("Phone"))))
+            hit = next((c for c in contacts if match(c)), None)
+            if hit is None and (email or phone):  # the same person on another Account: relate them, never a duplicate
+                where = " OR ".join(([f"Email = {_q(email)}"] if email else [])
+                                    + ([f"MobilePhone LIKE {_q('%' + phone[-4:])}"] if phone else []))
+                elsewhere = [c for c in query(f"SELECT Id, Name, Email, MobilePhone, Phone, AccountId FROM Contact WHERE {where} LIMIT 20")
+                             if match(c)]
+                if len(elsewhere) == 1:
+                    _call("POST", f"{base}/sobjects/AccountContactRelation", token,
+                          {"AccountId": acct["Id"], "ContactId": elsewhere[0]["Id"], "IsActive": True})
+                    out.append(f"{elsewhere[0]['Name']} on {acct['Name']}: related (already a contact on another account)")
+                    continue
+                if len(elsewhere) > 1:
+                    out.append(f"⚠️ {len(elsewhere)} Contacts on other accounts have this {'email' if email else 'phone'}; "
+                               f"not added to {acct['Name']}, so the Sales agent can pick the right one")
+                    continue
             if hit:
                 fill = {}
                 if email and not hit.get("Email"):
