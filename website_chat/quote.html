@@ -30,6 +30,9 @@ h2{font-size:22px;margin:30px 0 4px;letter-spacing:-.015em;color:var(--navy)}
 .pic span{font-size:30px;font-weight:700;color:rgba(0,55,70,.35)}
 .name{font-weight:700;font-size:13px;letter-spacing:.04em;text-transform:uppercase;line-height:1.25;text-align:center;color:var(--navy);min-height:2.5em;display:flex;align-items:center;justify-content:center}
 .note{font-size:12.5px;color:var(--sub);margin-top:2px;text-align:center}
+.pack{font-size:12.5px;color:var(--sub);margin-top:2px;text-align:center}
+.adj{font-size:12px;color:#8a5a00;text-align:center;line-height:1.3}
+.adj:empty{display:none}
 .seg{justify-content:center}
 .seg.yn{justify-content:flex-start;gap:8px}
 .seg.yn button{padding:10px 26px;font-size:15px}
@@ -121,6 +124,17 @@ h3{font-size:17px;margin:22px 0 8px;color:var(--navy)}
   }
 
   function opts(it) { return it.options || [{ label: '', sku: it.sku }]; }
+  // Items that come in packs (Salesforce Pack_Size__c, by SKU) step by the pack, like the reps' Add items screen:
+  // + starts at one pack, +/- move a pack at a time, and a typed amount goes up to the next whole pack.
+  // Uniforms are counted in employees, so they always step by 1.
+  var MAX = 5000;
+  function packOf(group, sku) { var n = !group.garments && sku && (C.packs || {})[sku]; return n > 1 ? n : 1; }
+  function packUp(v, pack) {
+    if (pack <= 1 || v <= 0) return v;
+    var up = Math.ceil(v / pack) * pack;
+    return up <= MAX ? up : Math.floor(MAX / pack) * pack;
+  }
+  function comesIn(pack) { return 'comes in ' + pack + 's'; }
   function card(group, it) {
     var pic = el('div', { cls: 'pic' });
     var showPic = function (sku) {
@@ -129,21 +143,40 @@ h3{font-size:17px;margin:22px 0 8px;color:var(--navy)}
       else pic.appendChild(el('span', { text: it.name.charAt(0) }));
     };
     showPic(it.picture);
-    var box = el('div', { cls: 'item' }, [pic, el('div', {}, [el('div', { cls: 'name', text: it.name }), it.note ? el('div', { cls: 'note', text: it.note }) : null])]);
     var many = !!it.options;
+    var packs = opts(it).map(function (o) { return packOf(group, o.sku); });
+    var samePack = packs.every(function (p) { return p === packs[0]; }) && packs[0] > 1;  // one pack size for the whole card
+    var box = el('div', { cls: 'item' }, [pic, el('div', {}, [el('div', { cls: 'name', text: it.name }), it.note ? el('div', { cls: 'note', text: it.note }) : null,
+      samePack ? el('div', { cls: 'pack', text: comesIn(packs[0]) }) : null])]);
     if (many) box.appendChild(el('div', { cls: 'cap', text: group.garments ? 'Employees for each' : 'How many of each, per week' }));
     var mark = function () { box.className = 'item' + (opts(it).some(function (o) { return (state[it.id + '|' + o.label] || {}).qty; }) ? ' on' : ''); };
     opts(it).forEach(function (o) {
       var key = it.id + '|' + o.label;
-      var s = state[key] = state[key] || { id: it.id, option: o.label, qty: 0 };
-      var input = el('input', { type: 'number', min: '0', max: '5000', inputmode: 'numeric', value: String(s.qty), 'aria-label': (group.garments ? 'Employees for ' : 'Quantity of ') + it.name + (o.label ? ' ' + o.label : '') });
-      var set = function (v) { v = Math.max(0, Math.min(5000, parseInt(v, 10) || 0)); s.qty = v; input.value = v; mark(); count(); };
+      var pack = packOf(group, o.sku);
+      var s = state[key] = state[key] || { id: it.id, option: o.label, qty: 0, pack: pack };
+      var input = el('input', { type: 'number', min: '0', max: String(MAX), step: String(pack), inputmode: 'numeric', value: String(s.qty), 'aria-label': (group.garments ? 'Employees for ' : 'Quantity of ') + it.name + (o.label ? ' ' + o.label : '') + (pack > 1 ? ', ' + comesIn(pack) : '') });
+      var adj = el('div', { cls: 'adj', role: 'status' });
+      var whole = function (v) { return Math.max(0, Math.min(MAX, parseInt(v, 10) || 0)); };
+      // typed: round up to a whole pack and say so; buttons land on whole packs already
+      var set = function (v, typed) {
+        v = whole(v);
+        var r = packUp(v, pack);
+        adj.textContent = typed && r !== v ? 'Changed ' + v + ' to ' + r + ', ' + comesIn(pack) : '';
+        s.qty = r; input.value = r; mark(); count();
+      };
       var minus = el('button', { type: 'button', text: '−', 'aria-label': 'Less' }), plus = el('button', { type: 'button', text: '+', 'aria-label': 'More' });
-      minus.onclick = function () { set(s.qty - 1); }; plus.onclick = function () { set(s.qty + 1); if (many && C.picv[o.sku]) showPic(o.sku); };
-      input.oninput = function () { set(input.value); };
-      var row = el('div', { cls: 'qty' + (many ? ' opt' : '') }, [el('label', { text: o.label || (group.garments ? 'Employees' : 'Per week') }), minus, input, plus]);
+      minus.onclick = function () { set(Math.ceil(s.qty / pack) * pack - pack); };
+      plus.onclick = function () { set(Math.floor(s.qty / pack) * pack + pack); if (many && C.picv[o.sku]) showPic(o.sku); };
+      // while typing, keep what they typed (rounding "3" to 20 mid-number would fight them); round when they leave the box
+      input.oninput = function () { s.qty = whole(input.value); adj.textContent = ''; mark(); count(); };
+      input.onchange = function () { set(input.value, true); };
+      input.onkeydown = function (e) { if (e.key === 'Enter') input.blur(); };
+      var label = o.label || (group.garments ? 'Employees' : 'Per week');
+      if (pack > 1 && !samePack) label += ' · in ' + pack + 's';  // sizes that come in different packs say so on their own line
+      var row = el('div', { cls: 'qty' + (many ? ' opt' : '') }, [el('label', { text: label }), minus, input, plus]);
       if (many && C.picv[o.sku]) row.onmouseenter = function () { showPic(o.sku); };
       box.appendChild(row);
+      if (pack > 1) box.appendChild(adj);
     });
     mark();
     return box;
@@ -318,7 +351,7 @@ h3{font-size:17px;margin:22px 0 8px;color:var(--navy)}
   function submit() {
     if (sent) return;
     var items = [];
-    cat.groups.forEach(function (g) { g.items.forEach(function (it) { opts(it).forEach(function (o) { var s = state[it.id + '|' + o.label]; if (s && s.qty > 0) items.push({ id: it.id, qty: s.qty, option: o.label }); }); }); });
+    cat.groups.forEach(function (g) { g.items.forEach(function (it) { opts(it).forEach(function (o) { var s = state[it.id + '|' + o.label]; if (s && s.qty > 0) items.push({ id: it.id, qty: packUp(s.qty, s.pack || 1), option: o.label }); }); }); });
     var interests = (cat.interests || []).filter(function (i) { return picked[i]; });
     if (!items.length && !interests.length && !v('other')) { err.textContent = 'Please pick at least one item, or tell us what you need.'; err.scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
     if (!details()) { show(1); return; }

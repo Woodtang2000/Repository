@@ -42,8 +42,55 @@ def public(site_catalog: dict, have_picture) -> dict:
     return out
 
 
-def lines(site_catalog: dict, picked: list) -> tuple[list[dict], str | None]:
-    """The visitor's picks as order lines [{sku, name, option, qty, how_often, wearers}], or an error to show them."""
+# Pack sizes ---------------------------------------------------------------------------------------------------------
+# Some items only come in packs (bar mops in 20s, napkins in 100s): Salesforce Product2.Pack_Size__c, by Product Code
+# (the SKU). The quote page steps those items by the pack, like the reps' Add items screen does. They're read from
+# Salesforce every few minutes (keep_packs in webchat.py) and held in memory only, so a change there shows on the page
+# within PACK_EVERY seconds. Until the first read (or if Salesforce is down at start) every item steps by 1.
+PACK_EVERY = 300
+_PACKS: dict[str, int] = {}
+
+
+def pack_sizes() -> dict[str, int]:
+    """{sku: pack size} for the catalog's items that come in packs of more than 1, as last read from Salesforce."""
+    return dict(_PACKS)
+
+
+def read_packs() -> str:
+    """Read the catalog SKUs' pack sizes from Salesforce into memory. Keeps the last good values if it fails."""
+    if not salesforce.configured():
+        return "Salesforce isn't connected, so items step by 1"
+    wanted = sorted({s for site in ("sw", "tlg") for s in skus(load()[site])})
+    token, instance = salesforce._token()
+    q = ("SELECT ProductCode, Pack_Size__c FROM Product2 WHERE IsActive = true AND Pack_Size__c != null AND ProductCode IN ("
+         + ",".join(salesforce._q(s) for s in wanted) + ")")
+    recs = salesforce._call("GET", f"{instance}/services/data/{salesforce.API}/query?" + urllib.parse.urlencode({"q": q}),
+                            token).get("records") or []
+    packs = {}
+    for r in recs:
+        try:
+            n = int(float(r.get("Pack_Size__c") or 0))
+        except (TypeError, ValueError):
+            continue
+        if n > 1 and r.get("ProductCode"):
+            packs[r["ProductCode"]] = max(n, packs.get(r["ProductCode"], 0))  # two active Products, one SKU: the bigger pack
+    changed = packs != _PACKS
+    _PACKS.clear()
+    _PACKS.update(packs)
+    return f"{len(packs)} catalog items come in packs" + (" (changed)" if changed else "")
+
+
+def round_to_pack(qty: int, pack: int) -> int:
+    """Up to the next whole pack, never past MAX_QTY (then down to the last whole pack under it)."""
+    if pack <= 1 or qty <= 0:
+        return qty
+    up = -(-qty // pack) * pack
+    return up if up <= MAX_QTY else MAX_QTY // pack * pack
+
+
+def lines(site_catalog: dict, picked: list, packs: dict | None = None) -> tuple[list[dict], str | None]:
+    """The visitor's picks as order lines [{sku, name, option, qty, how_often, wearers}], or an error to show them.
+    Quantities of items that come in packs are rounded up to whole packs (the page already does; this is the backstop)."""
     items = {it["id"]: (g, it) for g in site_catalog["groups"] for it in g["items"]}
     out = []
     for p in picked[:80] if isinstance(picked, list) else []:
@@ -68,7 +115,7 @@ def lines(site_catalog: dict, picked: list) -> tuple[list[dict], str | None]:
         if g.get("garments"):
             line["wearers"] = qty
         else:
-            line.update(qty=qty, how_often=how)
+            line.update(qty=round_to_pack(qty, (packs or {}).get(line["sku"], 1)), how_often=how)
         out.append(line)
     return out, None
 

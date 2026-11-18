@@ -343,6 +343,42 @@ def test_quote_request_goes_to_sales_with_items():
     assert "Interested in: Laundry soap and chemicals" in sales.card_text({**posted[-1][1], "id": "2"})
 
 
+def test_quote_quantities_round_up_to_whole_packs(monkeypatch):
+    from . import catalog
+    assert catalog.round_to_pack(35, 20) == 40 and catalog.round_to_pack(40, 20) == 40 and catalog.round_to_pack(1, 100) == 100
+    assert catalog.round_to_pack(7, 1) == 7 and catalog.round_to_pack(0, 20) == 0
+    assert catalog.round_to_pack(4990, 20) == 5000 and catalog.round_to_pack(4999, 30) == 4980  # never past the cap
+    cat = catalog.load()["sw"]
+    packs = {"5-01-01": 20, "1-02-04": 5}
+    lines, err = catalog.lines(cat, [{"id": "bar-mop", "qty": 35}, {"id": "tablecloth-white", "qty": 7, "option": "52 x 120"},
+                                     {"id": "cook-shirt-white", "qty": 3}], packs)
+    assert err is None and [l.get("qty") for l in lines[:2]] == [40, 10] and lines[2]["wearers"] == 3  # employees aren't packs
+    assert catalog.lines(cat, [{"id": "bar-mop", "qty": 35}])[0][0]["qty"] == 35  # no sizes read yet: as typed
+    # sizes come from Salesforce (active Products with a pack size), held in memory; a failed read keeps the last ones
+    recs = [{"ProductCode": "5-01-01", "Pack_Size__c": 20.0}, {"ProductCode": "1-01-03", "Pack_Size__c": 100},
+            {"ProductCode": "5-02-01", "Pack_Size__c": 1}]
+    monkeypatch.setattr(catalog.salesforce, "configured", lambda: True)
+    monkeypatch.setattr(catalog.salesforce, "_token", lambda: ("t", "https://x"))
+    seen = []
+    monkeypatch.setattr(catalog.salesforce, "_call", lambda m, url, tok: seen.append(url) or {"records": recs})
+    monkeypatch.setattr(catalog, "_PACKS", {})
+    assert catalog.read_packs().startswith("2 catalog items")
+    assert catalog.pack_sizes() == {"5-01-01": 20, "1-01-03": 100} and "Pack_Size__c" in seen[0]
+    def down(*a):
+        raise OSError("Salesforce is down")
+    monkeypatch.setattr(catalog.salesforce, "_call", down)
+    try:
+        catalog.read_packs()
+    except OSError:
+        pass
+    assert catalog.pack_sizes() == {"5-01-01": 20, "1-01-03": 100}
+    chat_posted = []
+    chat = webchat.Chat(FakeClaude(), lambda kind, item: chat_posted.append(item), "/tmp")
+    assert chat.quote("sw", {"name": "Pat", "business": "Diner", "phone": "907-555-0101",
+                             "items": [{"id": "bar-mop", "qty": 35}]}) == {"ok": True}
+    assert chat_posted[0]["items"][0]["qty"] == 40
+
+
 def test_quote_page_served_for_each_company():
     srv = webchat.ThreadingHTTPServer(("127.0.0.1", 0), webchat.make_handler(
         webchat.Chat(FakeClaude(), lambda *a: None, "/tmp"), "https://chat.snowwhitelinen.com"))
@@ -355,6 +391,7 @@ def test_quote_page_served_for_each_company():
         assert "Patient gowns" in tlg and '"site": "tlg"' in tlg and "https://chat.thelaundrygroup.com/logo/tlg.png" in tlg
         assert '"phone": "(907) 222-7738"' in sw and '"phone": "(907) 519-0761"' in tlg  # each company's own number
         assert '"home": "https://thelaundrygroup.com/"' in tlg
+        assert '"packs": {' in sw  # pack sizes go to the page with the catalog
         icon = urllib.request.urlopen(urllib.request.Request(f"http://127.0.0.1:{srv.server_port}/uniform-icon.png",
                                                              headers={"Host": "chat.snowwhitelinen.com"})).read()
         assert icon[:8] == b"\x89PNG\r\n\x1a\n"

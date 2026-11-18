@@ -233,7 +233,7 @@ class Chat:
             return {"error": blocked}
         pick = lambda k, n=300: re.sub(r"\s+", " ", str(form.get(k) or "")).strip()[:n]
         cat = catalog.load()[site]
-        lines, problem = catalog.lines(cat, form.get("items"))
+        lines, problem = catalog.lines(cat, form.get("items"), catalog.pack_sizes())
         if problem:
             return {"error": problem}
         interests = [i for i in cat.get("interests", []) if i in (form.get("interests") or [])]
@@ -543,7 +543,8 @@ def make_handler(chat: Chat, public_url: str):
                 cfg = {"api": base, "site": site, "name": c["name"], "logo": f"{base}/logo/{site}.png",
                        "phone": QUOTE_PHONES[site], "home": QUOTE_HOMES[site], "embed": embed,
                        "catalog": catalog.public(catalog.load()[site], lambda sku: catalog.pic_path(chat.data_dir, sku)),
-                       "picv": catalog.picture_versions(chat.data_dir, catalog.load()[site])}
+                       "picv": catalog.picture_versions(chat.data_dir, catalog.load()[site]),
+                       "packs": catalog.pack_sizes()}  # {sku: pack size} from Salesforce: those items step by the pack
                 with open(QUOTE_PAGE) as f:
                     page = f.read().replace("__CONFIG__", json.dumps(cfg).replace("</", "<\\/")).replace("__TITLE__", c["name"])
                 if embed:  # the class is on <html> from the first paint, so the header never flashes inside the frame
@@ -1057,6 +1058,23 @@ def keep_pictures(data_dir: str) -> None:
     threading.Thread(target=run, daemon=True).start()
 
 
+def keep_packs() -> None:
+    """Read the catalog's pack sizes from Salesforce at start and every few minutes, so the quote page follows a change
+    made there (catalog.read_packs). A failed read keeps the last good sizes and tries again next time."""
+    def run():
+        last = ""
+        while True:
+            try:
+                said = catalog.read_packs()
+                if said != last:
+                    print(time.strftime("%H:%M"), "catalog:", said, flush=True)
+                last = said
+            except Exception as e:
+                print(time.strftime("%H:%M"), "catalog pack sizes failed (keeping the last ones):", str(e)[:200], flush=True)
+            time.sleep(catalog.PACK_EVERY)
+    threading.Thread(target=run, daemon=True).start()
+
+
 def keep_portal_awake(every: int = 600) -> None:
     """Visit the customer portal (PORTAL_URL) every 10 minutes. Alliant's portal goes to sleep when nobody uses it for a
     while (Microsoft's web server does that after about 20 minutes) and the next customer waits while it wakes up.
@@ -1100,6 +1118,7 @@ def main():
     from .alliant_help import Helper  # the Alliant training notes, for employees' how-to questions on the 888 line
     chat.phone.helper = Helper(slack, claude, args.data, None, None)
     keep_pictures(args.data)
+    keep_packs()
     keep_portal_awake()
     srv = ThreadingHTTPServer(("127.0.0.1", args.port), make_handler(chat, args.public_url.rstrip("/")))
     print(time.strftime("%H:%M"), f"website chat on 127.0.0.1:{args.port} for {args.public_url}", flush=True)
