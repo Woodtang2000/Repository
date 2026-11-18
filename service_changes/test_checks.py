@@ -696,6 +696,10 @@ def test_special_and_credit_invoices():
     r = check(p(Category.special_order, [Change(action=Action.add, item="aprons", quantity=20)]), a)
     assert any("doesn't have aprons on their account. Add 20 APRON WHITE BIB (5-22-01) as a one-time item" in q for q in r.questions)
     assert any("What day" in q for q in r.questions)
+    # a customer's own special (Jason at Peppercini's, 11/17): extra for one delivery, so one-time without asking anyone
+    r = check(p(Category.special_order, [Change(action=Action.add, item="aprons", quantity=20)], invoice_date="Thursday"), a,
+              asker="customer")
+    assert not r.questions and "one-time line" in ticket(r, a)
     r = check(p(Category.special_order, [Change(action=Action.add, item="aprons", quantity=20, one_time=True)],
                 invoice_date="Tuesday"), a)
     assert not r.questions and "• *20*  APRON WHITE BIB `5-22-01` _(not on the account: one-time line, Add Line, RS)_" in ticket(r, a)

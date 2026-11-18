@@ -76,6 +76,8 @@ ACTIONABLE = {Category.item_change, Category.wearer_change, Category.hold_or_clo
 OWNER_ACTIONABLE = ACTIONABLE | {Category.credit_invoice}
 CANT = re.compile(r"\b(?:I can'?t|I'm not able to|I am not able to|I don'?t have (?:a way|access)|isn'?t something I can|"
                   r"noted it for Scott|that'?s one for Scott)\b", re.I)  # Donna saying no: logged for Scott
+FOLLOW_UP = re.compile(r"\b(?:they|their|them|theirs|that (?:account|customer|one|location)|this (?:account|customer)|"
+                       r"same (?:account|customer)|what about|and (?:what|how|when))\b", re.I)  # the customer just discussed
 ADDRESSED = re.compile(r"^\s*(?:hey|hi|ok|okay)?[\s,]*donna\b", re.I)  # a message to Donna herself, in a channel
 # Scott telling Donna a change himself (owner_change): worth parsing as one; "yes" / "no" to her readback.
 CHANGE_Q = re.compile(r"\b(change|add|stop|cancel|take (?:off|away)|remove|increase|decrease|raise|lower|cut|bump|drop|"
@@ -786,7 +788,7 @@ class Desk:
         except Exception as e:
             print(time.strftime("%H:%M"), "cant_do reply failed:", str(e)[:150], flush=True)
 
-    def office_lookup(self, h: dict, top: list[dict], channel: str | None = None, say=None) -> bool:
+    def office_lookup(self, h: dict, top: list[dict], channel: str | None = None, say=None, context: str = "") -> bool:
         """A question typed in the office channel ("how many shop towels does Midas get?"), answered from the Alliant
         export right in the channel, like the route channels. Any customer on any route; no daily limit and no log,
         since it is the office. If the bot just asked this person which customer, this message is read as the answer.
@@ -815,8 +817,14 @@ class Desk:
         if sku_answer:
             say(f"<@{user}> {sku_answer}"[:3900], {"kind": "answer", "skus": True})
             return True
-        parsed = parse_message(self.claude, text, self.desk_name, h["ts"], self.alliant, author=self.name(user),
-                               office=True)
+        if not context and str(channel or "").startswith("D") and top:  # a private message: the last few lines before it
+            before = [m for m in top if float(m.get("ts", 0)) < float(h["ts"]) and float(h["ts"]) - float(m["ts"]) < 1800][-4:]
+            context = "\n".join(("Donna: " if _is_bot(m, self.me) else "Them: ") + m.get("text", "")[:600] for m in before)
+        # A follow-up names no customer ("and what products do they get?" after "what does Lucky Market owe?"):
+        # the conversation so far says which one (Scott, 11/18: the app "doesn't see it" until a new chat)
+        parsed = parse_message(self.claude, (f"Earlier in this conversation:\n{context}\n\nNow they ask: {text}"
+                                             if context else text), self.desk_name, h["ts"], self.alliant,
+                               author=self.name(user), office=True)
         if AR_Q.search(text):  # "how much does Midas owe us, and when did they last pay?"
             return self.ar_answer(user, text, parsed, here, say)
         if parsed.category != Category.lookup:
@@ -1446,8 +1454,12 @@ class Desk:
             facts = route_facts(self.alliant, route.group(1))
             if facts:
                 reply, kind = spoken(answer_lookup(self.claude, text, facts, asker=self.asker(owner)).answer), "route"
-        if not reply and (ask or self.sounds_like_lookup(text)) and not (scott and PULSE.search(text)) \
-                and self.office_lookup(h, [], channel="voice", say=lambda t, p: heard.append((t, p))) and heard:
+        follow_up = talk.get("last") in ("lookup", "route", "sku") and FOLLOW_UP.search(text)  # "and their mats?"
+        context = "\n".join(("Donna: " if t["role"] == "assistant" else "Them: ") + t["content"][:600]
+                            for t in talk["turns"][-4:])
+        if not reply and (ask or follow_up or self.sounds_like_lookup(text)) and not (scott and PULSE.search(text)) \
+                and self.office_lookup(h, [], channel="voice", say=lambda t, p: heard.append((t, p)),
+                                       context=context) and heard:
             kind = "lookup"
             said, payload = heard[-1]
             reply = spoken(said)
@@ -1458,6 +1470,7 @@ class Desk:
             reply = owner_chat(self.claude, talk["turns"][-16:] + [{"role": "user", "content": text}], about, spoken=True,
                                person="" if scott else self.name(owner))
         talk["turns"] += [{"role": "user", "content": text}, {"role": "assistant", "content": reply or "I'm here."}]
+        talk["last"] = kind
         print(time.strftime("%H:%M"), f"voice: answered ({kind}) in {time.time() - now:.1f}s", flush=True)
         return reply or "I'm here. What do you need?"
 
@@ -1649,7 +1662,8 @@ class Desk:
         goes straight to Donna, which is much quicker when you're talking."""
         low = text.lower()
         if re.search(r"\d|\bhow (many|much)\b|\b(account|route|stop|deliver\w*|garments?|wearers?|uniforms?|mats?|towels?|"
-                     r"aprons?|mops?|napkins?|shirts?|pants|coats?|sheets?|linens?|items?|barcode)\b", low):
+                     r"aprons?|mops?|napkins?|shirts?|pants|coats?|sheets?|linens?|items?|barcode|products?|orders?|"
+                     r"rent\w*|suppl(?:y|ies)|set up for|owe\w*|balance|invoices?|paid|pay\w*)\b", low):
             return True
         words = set(re.findall(r"[a-z']{4,}", low))
         names = getattr(self, "_name_words", None)

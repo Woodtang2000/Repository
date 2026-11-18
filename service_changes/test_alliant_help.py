@@ -193,8 +193,14 @@ def test_hey_donna_voice(monkeypatch):
 
     asked = []
 
-    def lookup(h, top, channel=None, say=None):
+    contexts = []
+
+    def lookup(h, top, channel=None, say=None, context=""):
         asked.append(h["text"])
+        contexts.append(context)
+        if "their aprons" in h["text"] and "SAFEWAY" in context:  # the follow-up knows which customer
+            say("<@U4KFSQCDQ> *4000-1-01807* SAFEWAY: 10 aprons a week", {"kind": "answer"})
+            return True
         if "mats" in h["text"] and "Answer:" not in h["text"]:
             say("<@U4KFSQCDQ> Which customer?", {"kind": "office_ask", "q": h["text"]})
             return True
@@ -210,9 +216,12 @@ def test_hey_donna_voice(monkeypatch):
     assert Desk.voice(d, "how many mats do they get", "c1") == "Which customer?"
     assert Desk.voice(d, "Safeway 1807", "c1") == "4000-1-01807 SAFEWAY: 6 mats a week"
     assert asked[-1] == "how many mats do they get\nDonna asked: Which customer?\nAnswer: Safeway 1807"
+    # 11/18: a follow-up that names no customer used to go to plain chat, which had no account data
+    assert Desk.voice(d, "and what about their aprons", "c1") == "4000-1-01807 SAFEWAY: 10 aprons a week"
+    assert "Donna: 4000-1-01807 SAFEWAY: 6 mats a week" in contexts[-1]
     assert Desk.voice(d, "should we raise the route 4 minimum?", "c1") == "Leave it with me."
     turns, was_spoken = chats[-1]
-    assert was_spoken and len(turns) == 5 and turns[-1]["content"] == "should we raise the route 4 minimum?"
+    assert was_spoken and len(turns) == 7 and turns[-1]["content"] == "should we raise the route 4 minimum?"
 
 
 def test_donna_voice_needs_scotts_key(monkeypatch):

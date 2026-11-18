@@ -340,7 +340,7 @@ def off_day(parsed: ParsedMessage, alliant: Alliant) -> str:
     return "" if WEEKDAYS[m.group(1).lower()] in cust.service_days else "/".join(cust.service_days)
 
 
-def _check_invoice(parsed: ParsedMessage, alliant: Alliant, who: str) -> Result:
+def _check_invoice(parsed: ParsedMessage, alliant: Alliant, who: str, asker: str = "staff") -> Result:
     """A special (S) or credit (C) invoice: one-time lines at Alliant's own price; nothing about the standing order
     changes. Items on the account come from the Items button; on a special, an item that isn't on the account can be a
     one-time line (Add Line, rental service) once they say yes to it. A credit only ever uses the account's items.
@@ -361,6 +361,12 @@ def _check_invoice(parsed: ParsedMessage, alliant: Alliant, who: str) -> Result:
             else:
                 cc.one_time_sku = usual[0]
                 cc.alliant_item = usual[1]
+                if asker == "customer" and not ch.one_time:
+                    # the customer asked for a special: something extra on one delivery, not a new standing item
+                    # (Jason at Peppercini's, 11/17: 30 red aprons for Thanksgiving). One-time is what they meant.
+                    ch.one_time = True
+                    cc.notes.append(f"Not on their account: a one-time line for {ch.quantity or ''} {usual[1]} "
+                                    f"({usual[0]}) on this special only".replace("for  ", "for "))
                 if not ch.one_time:
                     cc.questions.append(f"{who} doesn't have {ch.item} on their account. Add {ch.quantity or 'them'} "
                                         f"{usual[1]} ({usual[0]}) as a one-time item on this special?")
@@ -387,7 +393,7 @@ def check(parsed: ParsedMessage, alliant: Alliant, asker: str = "staff") -> Resu
     question is worded for."""
     who = parsed.customer_as_written or "this customer"
     if parsed.category in INVOICES:
-        return _check_invoice(parsed, alliant, who)
+        return _check_invoice(parsed, alliant, who, asker)
     expand_all(parsed, alliant)
     out = []
     for ch in parsed.changes:
