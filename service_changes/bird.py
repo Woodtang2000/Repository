@@ -51,10 +51,19 @@ def received(since_iso: str, inbound_address_id: str = "") -> list[dict]:
     return sorted(msgs, key=lambda m: m.get("received_at") or "")
 
 
+def reply_address(company: str = "Snow White Linen") -> str:
+    """The one address customers should use (Barry at Lucky Market, 11/16: "Currently showing 3 separate emails.
+    Which one?"). Emails go out from a sending address (EMAIL_FROM) but every reply lands here."""
+    tlg = company == "The Laundry Group"
+    return ((tlg and os.environ.get("EMAIL_REPLY_TO_TLG")) or os.environ.get("EMAIL_REPLY_TO")
+            or "service@snowwhitelinen.com").strip()
+
+
 def signature(company: str = "Snow White Linen") -> str:
-    """Donna's sign-off on every customer email: texting is the quickest way to reach her."""
+    """Donna's sign-off on every customer email: texting is the quickest way to reach her, and the one email address."""
     from .context import office_phone
-    return (f"Donna\n{company}\nText me any time: 866-TAP-TEXT (866-827-8398)\nOffice: {office_phone(company)}")
+    return (f"Donna\n{company}\nText me any time: 866-TAP-TEXT (866-827-8398)\nEmail: {reply_address(company)}\n"
+            f"Office: {office_phone(company)}")
 
 
 BRANDS = {  # brand/README.md: the same logo, navy and gold as every other document

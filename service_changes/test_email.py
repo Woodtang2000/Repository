@@ -296,3 +296,18 @@ def test_the_driver_gets_the_delivery_ticket_pdf_in_their_thread(tmp_path):
     assert specials.share_with_driver(d, slack, "S0148781") == "" and len(uploads) == 1  # once
     import json, os
     assert json.load(open(os.path.join(d, "specials", "S0148781.json")))["account"] == "5045-1-00000"  # kept both halves
+
+
+def test_junk_never_reaches_customer_messages(monkeypatch, tmp_path):
+    # 11/18: #customer-messages was mostly vendors and spam, each inviting staff to "add" it to an account
+    from types import SimpleNamespace
+    from . import email_desk, comms
+    logged = []
+    monkeypatch.setattr(comms, "log", lambda *a, **kw: logged.append(a))
+    d = SimpleNamespace(state={"pending": {"held@x.com": {}}}, key=lambda a: a.lower(), word="email",
+                        contacts=lambda: {"amy@fuel.com": {}})
+    email_desk.EmailDesk.log_in(d, "sales@vendor.com", "Buy our software")
+    assert logged == []  # unknown: waits for the junk check in sign_up
+    email_desk.EmailDesk.log_in(d, "Amy@Fuel.com", "coveralls please")
+    email_desk.EmailDesk.log_in(d, "held@x.com", "still me")
+    assert [a[2] for a in logged] == ["Amy@Fuel.com", "held@x.com"]

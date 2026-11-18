@@ -15,6 +15,9 @@ import re
 import time
 
 FILE = "notices.json"
+# Billing and service lines that aren't something a customer "is set up for" ("0 Nog Lbs Delivered", 11/17)
+INTERNAL = re.compile(r"\b(?:nog|lbs?|pounds?|fees?|charges?|minimum|fuel|energy|surcharge|service|delivery|delivered|"
+                      r"invoice|tax|credit|adjust\w*|misc\w*)\b", re.I)
 MAX_PER_PASS = 25
 
 
@@ -78,13 +81,18 @@ class Notices:
                 out["garments"] += 1
             seen_po.update(_po_key(o) for o in lines)  # once, sent or not (no email on the card: nothing to send)
         if accounts and len(accounts - seen_accts) <= MAX_PER_PASS:  # dozens at once is a feed change, not new customers
+            # one welcome per person, naming all their new locations (11/17: one lodge manager got 4 welcomes at once)
+            from .context import company_for
+            by_person: dict[tuple[str, str], list[str]] = {}
             for acct in sorted(accounts - seen_accts):
-                to = self.emails(acct)
-                if to and budget > 0:
-                    budget -= len(to)
-                    self.welcome(acct, to)
-                    out["welcome"] += 1
+                for e in self.emails(acct):
+                    by_person.setdefault((e, company_for(acct)), []).append(acct)
                 seen_accts.add(acct)
+            for (e, _), accts in by_person.items():
+                if budget > 0:
+                    budget -= 1
+                    self.welcome(accts, [e])
+                    out["welcome"] += 1
         else:
             seen_accts |= accounts
         self._save({"po": sorted(seen_po), "accounts": sorted(seen_accts)})
@@ -120,17 +128,26 @@ class Notices:
                 f"delivery{f' ({day})' if day else ''}. If anything doesn't fit right, just reply or text us.")
         self._send(acct, to, "new garments on the way", body, "garments", f"garments arrived ({items})")
 
-    def welcome(self, acct: str, to: list[str]) -> None:
+    def welcome(self, accts: str | list[str], to: list[str]) -> None:
+        """One welcome for one person: their location (with what it's set up for), or all their new locations at once."""
         from .context import company_for
+        accts = [accts] if isinstance(accts, str) else accts
         data = self.desk.alliant
-        cust = next((c for c in data.customers if c.account == acct), None)
-        items = [f"{data.autocount.get(acct, {}).get(i, q)} {i.title()}" for i, q in data.items.get(acct, {}).items()][:12]
-        day = self._next_day(acct)
-        company = company_for(acct)
-        body = (f"Welcome to {company}! I'm Donna, and I'll be helping take care of your account"
-                + (f" ({cust.name.title()})" if cust else "") + "."
-                + (f"\n\nYour deliveries are on {day}." if day else "")
-                + ("\n\nYou're set up for: " + ", ".join(items) + "." if items else "")
-                + "\n\nNeed more of something, less, a new employee's uniforms, or a skipped week? Just text me at "
-                  "866-TAP-TEXT (866-827-8398) or reply to this email, any time, and I'll take care of it.")
-        self._send(acct, to, "welcome", body, "welcome", "welcome email")
+        name = lambda a: next((c.name.title() for c in data.customers if c.account == a), "")
+        days = lambda a: self._next_day(a).replace(" or ", " and ")
+        company = company_for(accts[0])
+        if len(accts) == 1:
+            acct = accts[0]
+            items = [f"{n} {i.title()}" for i, q in data.items.get(acct, {}).items()
+                     if (n := _num(data.autocount.get(acct, {}).get(i, q))) > 0 and not INTERNAL.search(i)][:12]
+            body = (f"Welcome to {company}! I'm Donna, and I'll be helping take care of your account"
+                    + (f" ({name(acct)})" if name(acct) else "") + "."
+                    + (f"\n\nYour deliveries are on {days(acct)}." if days(acct) else "")
+                    + ("\n\nYou're set up for: " + ", ".join(items) + "." if items else ""))
+        else:
+            body = (f"Welcome to {company}! I'm Donna, and I'll be helping take care of your {len(accts)} locations:\n"
+                    + "\n".join(f"- {name(a) or a}" + (f": deliveries on {days(a)}" if days(a) else "") for a in accts))
+        body += ("\n\nNeed more of something, less, a new employee's uniforms, or a skipped week? Just text me at "
+                 "866-TAP-TEXT (866-827-8398) or reply to this email, any time, and I'll take care of it.")
+        self._send(accts[0], to, "welcome", body, "welcome", "welcome email"
+                   + (f" ({len(accts)} locations: {', '.join(accts)})" if len(accts) > 1 else ""))

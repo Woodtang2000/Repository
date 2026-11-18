@@ -1,3 +1,4 @@
+import time
 import json
 import pytest
 
@@ -500,3 +501,16 @@ def test_a_question_that_isnt_a_request_still_gets_an_answer(desk):
     assert texts[-1][1] == sms.CHECKING and len(slack.posts) == 1
     td.handle("+19075551234", 'Loved \u201cGood question!\u201d', "S3")  # a reaction is not a question
     assert len(slack.posts) == 1 and len(texts) == 1
+
+
+def test_an_unanswered_question_goes_to_the_office(desk):
+    # Amy Wilker, 11/10: Donna asked about a new hire's coveralls, she never answered, and nothing reached anyone
+    td, slack, texts, seen = desk
+    td.handle("+19075551234", "need more towels", "S1")
+    assert texts[-1][1].startswith("Happy to!") and not slack.posts
+    assert td.stranded_pass(time.time() + 3600) == 0  # an hour: still waiting on them
+    assert td.stranded_pass(time.time() + 4 * 3600) == 1
+    [card] = slack.posts
+    assert card["meta"]["kind"] == "sms_question" and "never answered my question" in json.dumps(card)
+    assert "need more towels" in json.dumps(card)
+    assert td.stranded_pass(time.time() + 8 * 3600) == 0  # once

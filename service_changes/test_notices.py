@@ -38,3 +38,22 @@ def test_garments_arrived_and_welcome(tmp_path, monkeypatch):
     assert n.pass_() == {"garments": 0, "welcome": 0} and len(sent) == 2  # once each
     monkeypatch.setenv("CUSTOMER_NOTICES", "off")
     assert n.pass_() == {}
+
+
+def test_one_welcome_for_several_new_locations_without_billing_lines(tmp_path, monkeypatch):
+    # 11/17: a lodge manager got 4 welcome emails in the same minute, one saying "You're set up for: 0 Nog Lbs Delivered"
+    d, sent, posts = setup(tmp_path, monkeypatch)
+    n = notices.Notices(d)
+    n.pass_()
+    for acct, name, day in (("7001-2-00000", "TALKEETNA LODGE", "Mon"), ("7002-2-00000", "DENALI LODGE", "Wed")):
+        d.alliant.customers.append(Customer(acct, name, "4", [day, "Thu"]))
+        d.alliant.cards[acct] = {"email": "gm@lodges.com"}
+    d.alliant.customers.append(Customer("7003-1-00000", "PIZZA PLACE", "5", ["Fri"]))
+    d.alliant.cards["7003-1-00000"] = {"email": "owner@pizza.com"}
+    d.alliant.items["7003-1-00000"] = {"NOG LBS DELIVERED": 0, "FUEL SURCHARGE": 1, "TOWEL BAR MOP": 40}
+    assert n.pass_()["welcome"] == 2
+    lodge = next(t for to, s, t in sent if to == "gm@lodges.com")
+    assert len([1 for to, s, t in sent if to == "gm@lodges.com"]) == 1  # one email, both lodges
+    assert "your 2 locations" in lodge and "Talkeetna Lodge: deliveries on Monday and Thursday" in lodge and "Denali Lodge" in lodge
+    pizza = next(t for to, s, t in sent if to == "owner@pizza.com")
+    assert "40 Towel Bar Mop" in pizza and "Nog" not in pizza and "Surcharge" not in pizza

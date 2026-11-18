@@ -350,6 +350,13 @@ class EmailDesk(TextDesk):
         bird.send(email_key(to), subject if subject.lower().startswith("re:") else "Re: " + subject,
                   plain(body) + "\n\n" + bird.signature(company), in_reply_to=t.get("msgid", ""), company=company)
 
+    def log_in(self, addr: str, body: str) -> None:
+        """Junk (vendors, newsletters, spam) stays out of #customer-messages (Scott, 11/18: staff were invited to link
+        spam to accounts). A sender who isn't linked or waiting yet is logged by sign_up, once it isn't junk."""
+        key = self.key(addr)
+        if key in self.contacts() or key in self.state.get("pending", {}):
+            TextDesk.log_in(self, addr, body)
+
     def sign_up(self, addr: str, body: str, sid: str, n: int) -> None:
         """An unknown sender: the email itself usually says who they are, so the office gets a card straight away and
         the message is held until it's approved."""
@@ -370,6 +377,8 @@ class EmailDesk(TextDesk):
             junk = None
         if junk is not None and junk.junk:
             return self.filtered(key, who, thread.get("subject", ""), body, sid, junk.kind)
+        if not getattr(self, "_replaying", False):
+            TextDesk.log_in(self, key, body)  # a real person: now it goes in #customer-messages
         found = identify_customer(self.claude, f"From: {who} <{key}>\n{body}", self.alliant.customers)
         self.state["pending"][key] = {"phone": key, "stage": "waiting", "held": [[body, sid]], "at": time.time(),
                                       "name": found.person_name or who}

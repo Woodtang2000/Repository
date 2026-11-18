@@ -39,6 +39,7 @@ ACTIONABLE = {Category.item_change, Category.wearer_change, Category.hold_or_clo
 MAX_ASKS = 2
 MAX_QUESTIONS = 3
 CONVO_MINUTES = 60  # a text within this long of our last question is read as the answer
+STRANDED_HOURS = 3  # no answer to our question this long: the request goes to the office, not nowhere (Amy Wilker, 11/10)
 MAX_TEXTS_PER_DAY = 30  # per number; past this the office is told and the bot stops answering that number today
 # The first reply to a number we don't know names neither company: the same line serves Snow White and The Laundry
 # Group customers, and it reads more like a person (Scott, 2026-10-27). Replies after set-up sign with the customer's
@@ -681,6 +682,8 @@ class TextDesk:
         since = datetime.now(timezone.utc) - timedelta(days=1)
         new = [m for m in self.inbound(since) if m["id"] not in self.state["seen"]]
         handled = self.office_pass() if not first else 0
+        if not first:
+            handled += self.stranded_pass()
         self.demo_pass()
         self.take_asks()
         for m in new:
@@ -693,8 +696,7 @@ class TextDesk:
 
     def handle(self, phone: str, body: str, sid: str) -> None:
         if not getattr(self, "_replaying", False):  # #customer-messages: what they sent (once, not again on approval)
-            from . import comms
-            comms.log("in", self.word, phone, body)
+            self.log_in(phone, body)
         key = self.key(phone)
         if contact_key(phone) in blocked(self.data_dir):  # the office blocked them: no answer, nothing about any account
             self.log(phone, "blocked: ignored")
@@ -1098,6 +1100,39 @@ class TextDesk:
             self.office(f"{self.icon} {self.masked(addr)} is linked, but Salesforce wasn't updated:\n" + "\n".join(problems),
                         {"kind": "salesforce"})
 
+    def log_in(self, addr: str, body: str) -> None:
+        """What they sent, into #customer-messages (comms.py). Email holds back unknown senders until the junk check."""
+        from . import comms
+        comms.log("in", self.word, addr, body)
+
+    def stranded_pass(self, now: float | None = None) -> int:
+        """A customer we asked a question who never answered (Amy Wilker at Alaska Fuel, 11/10: coveralls for a new
+        hire, two questions, no answer, and the request never reached anyone). After STRANDED_HOURS the office gets a
+        card with what they asked and what we asked back, once, to call or text them."""
+        now = now or time.time()
+        posted = 0
+        for key, c in list(self.state.get("convos", {}).items()):
+            if not c.get("asks") or c.get("waiting_card") or now - c.get("at", now) < STRANDED_HOURS * 3600:
+                continue
+            who = self.contacts().get(key) or {}
+            accts = who.get("accounts") or []
+            where = " / ".join(f"*{a}* {self.name(self.alliant, a)}" for a in accts[:3]) or "not linked yet"
+            lines = [ln for ln in c.get("lines", [])][-6:]
+            try:
+                self.office("\n".join([f"{self.icon} {where}: {who.get('name') or 'customer'} {self.masked(c.get('to') or key)} "
+                                        f"never answered my question, so nothing has been entered",
+                                        *["> " + ln[:300] for ln in lines],
+                                        f"Please {self.word if self.word == 'email' else 'call or text'} them to finish it."]),
+                            {"kind": "sms_question", "account": accts[0] if accts else ""}, todo="button")
+            except Exception as e:
+                print(time.strftime("%H:%M"), "stranded card not posted:", str(e)[:150], flush=True)
+                continue
+            c["waiting_card"] = True
+            posted += 1
+        if posted:
+            self.save()
+        return posted
+
     def reword(self, request: str, questions: list[str]) -> list[str]:
         """The check's questions as Donna texts them to the customer (parser.for_customer). If that fails, none: the
         request goes to the office as a ticket that says to call them, rather than staff wording reaching a customer."""
@@ -1112,7 +1147,7 @@ class TextDesk:
         msg = "Happy to! Just one quick question: " + questions[0] if len(questions) == 1 else \
             "Happy to! Just a few quick questions:\n" + "\n".join(f"- {q}" for q in questions)
         self.send(phone, msg)
-        self.state["convos"][self.key(phone)] = {"lines": lines + [f"Snow White asked: {plain(msg)}"],
+        self.state["convos"][self.key(phone)] = {"lines": lines + [f"Snow White asked: {plain(msg)}"], "to": phone,
                                                   "asks": (convo["asks"] if convo else 0) + 1, "at": time.time()}
 
     @staticmethod
