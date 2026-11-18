@@ -311,3 +311,14 @@ def test_junk_never_reaches_customer_messages(monkeypatch, tmp_path):
     email_desk.EmailDesk.log_in(d, "Amy@Fuel.com", "coveralls please")
     email_desk.EmailDesk.log_in(d, "held@x.com", "still me")
     assert [a[2] for a in logged] == ["Amy@Fuel.com", "held@x.com"]
+
+
+def test_donna_address_and_email_answer_window(monkeypatch):
+    # 11/18: Donna's emails reply to donna@ so her conversations don't fill service@; an email answer can come hours later
+    from . import email_desk, sms
+    monkeypatch.setenv("EMAIL_REPLY_TO", "donna@snowwhitelinen.com")
+    assert {"service@snowwhitelinen.com", "donna@snowwhitelinen.com"} <= email_desk.GROUPS()
+    m = {"from": "donna@snowwhitelinen.com", "reply_to": "jo@gmail.com"}
+    assert email_desk.real_sender(m) == "jo@gmail.com"  # passed on by our own mailbox: the customer is the sender
+    assert email_desk.EmailDesk.convo_minutes == 2880 and sms.TextDesk.convo_minutes == 60
+    assert email_desk.EmailDesk.stranded_hours == 24 and sms.TextDesk.stranded_hours == 3

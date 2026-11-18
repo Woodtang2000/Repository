@@ -598,6 +598,7 @@ class TextDesk:
     """Customer texts. email_desk.EmailDesk reuses all of this for customer emails, through the hooks below."""
     word, icon, to_key, signup_kind, list_file = "text", "📱", "sms_to", "sms_signup", "customer_phones.csv"
     add_cmd, remove_cmd, set_up = ADD_CMD, REMOVE_CMD, SET_UP
+    convo_minutes, stranded_hours = CONVO_MINUTES, STRANDED_HOURS  # a text's answer comes in minutes (email: hours)
 
     def key(self, addr: str) -> str:
         return phone_key(addr)
@@ -733,7 +734,7 @@ class TextDesk:
         accounts = who["accounts"]
         mine = only(self.alliant, accounts)
         convo = self.state["convos"].get(self.key(phone))
-        if convo and time.time() - convo["at"] > CONVO_MINUTES * 60:
+        if convo and time.time() - convo["at"] > self.convo_minutes * 60:
             convo = None
         lines = (convo["lines"] if convo else []) + [f"Customer: {body}"]
         text = body if len(lines) == 1 else "\n".join(lines)
@@ -1112,7 +1113,7 @@ class TextDesk:
         now = now or time.time()
         posted = 0
         for key, c in list(self.state.get("convos", {}).items()):
-            if not c.get("asks") or c.get("waiting_card") or now - c.get("at", now) < STRANDED_HOURS * 3600:
+            if not c.get("asks") or c.get("waiting_card") or now - c.get("at", now) < self.stranded_hours * 3600:
                 continue
             who = self.contacts().get(key) or {}
             accts = who.get("accounts") or []

@@ -113,24 +113,36 @@ def _addresses(v) -> list[str]:
     return re.findall(r"[\w.+'-]+@[\w.-]+\.\w+", v or "")
 
 
+def GROUPS() -> set[str]:
+    """Our own shared addresses that can show up as the sender when they pass a customer's email on: service@ (a
+    Google Group), the reply address (EMAIL_REPLY_TO, e.g. donna@ since 11/18) and any in EMAIL_GROUPS."""
+    return {email_key(a) for a in ["service@snowwhitelinen.com", os.environ.get("EMAIL_REPLY_TO", ""),
+                                   os.environ.get("EMAIL_REPLY_TO_TLG", ""), *os.environ.get("EMAIL_GROUPS", "").split(",")]
+            if "@" in a}
+
+
 def real_sender(m: dict) -> str:
     """Who really wrote it. service@ is a Google Group: when the customer's own domain is strict about DMARC (gmail,
     yahoo…) the group rewrites From to the group address ("Jo via service") and puts the customer in Reply-To."""
     frm = (_addresses(m.get("from")) or [""])[0]
-    group = email_key(os.environ.get("EMAIL_REPLY_TO", "service@snowwhitelinen.com"))
-    if email_key(frm) != group:
+    groups = GROUPS()
+    if email_key(frm) not in groups:
         return frm
     headers = m.get("headers") or {}
     if isinstance(headers, list):
         headers = {h.get("name", ""): h.get("value", "") for h in headers if isinstance(h, dict)}
     for v in (m.get("reply_to"), headers.get("Reply-To"), headers.get("X-Original-From"), headers.get("X-Original-Sender")):
-        found = [a for a in _addresses(v) if email_key(a) != group]
+        found = [a for a in _addresses(v) if email_key(a) not in groups]
         if found:
             return found[0]
     return frm
 
 
 class EmailDesk(TextDesk):
+    # Email answers come hours later, not minutes (Scott, 11/18): a reply within two days of Donna's question is read as
+    # its answer, and the office hears about an unanswered one after a day instead of three hours.
+    convo_minutes = 48 * 60
+    stranded_hours = 24
     word, icon, to_key, signup_kind, list_file = "email", "📧", "email_to", "email_signup", "customer_emails.csv"
     add_cmd, remove_cmd = ADD_EMAIL, REMOVE_EMAIL
     set_up = ("You're all set! Email me here any time you need anything for {names}, and I'll confirm each change as soon "
