@@ -67,3 +67,35 @@ def test_unclear_who_asks_first(tmp_path, monkeypatch):
     assert announce.ASK.search("Donna, let route 4 customers know we're running 2 hours late")
     assert announce.ASK.search("Announce: Thanksgiving, Thursday deliveries move to Wednesday")
     assert not announce.ASK.search("how many mats does Midas get")
+
+
+def test_a_burst_that_bird_refuses_is_retried_and_misses_can_be_resent(tmp_path, monkeypatch):
+    # Thanksgiving notice, 11/17: 10 emails went out, the other 165 got "429 Too Many Requests" and were never retried
+    import urllib.error
+    from types import SimpleNamespace
+    from . import announce, bird
+    import service_changes.sms as sms
+    waits, sent, calls = [], [], {"n": 0}
+
+    def flaky(to, subject, text, **kw):
+        calls["n"] += 1
+        if to == "down@x.com" or calls["n"] in (2, 3):  # Bird says slow down twice, and one address never works
+            raise urllib.error.HTTPError("u", 429, "Too Many Requests", {"Retry-After": "3"}, None)
+        sent.append(to)
+    monkeypatch.setattr(bird, "send", flaky)
+    monkeypatch.setattr(bird, "signature", lambda company: "Donna")
+    monkeypatch.setattr(sms, "send_sms", lambda to, body: sent.append(to))
+    a = {"at": 1.0, "message": "Closed Thursday.", "subject": "Thanksgiving", "who": "all",
+         "phones": {"+19075551234": "1205-1-00004"}, "emails": {"a@x.com": "1205-1-00004", "b@x.com": "1205-1-00004",
+                                                                  "down@x.com": "1205-1-00004"}}
+    ann = announce.Announcer(SimpleNamespace(data_dir=str(tmp_path)))
+    out = ann.send(a, sleep=waits.append)
+    assert out["emails"] == 2 and out["texts"] == 1 and out["missing"] == {"phones": [], "emails": ["down@x.com"]}
+    assert 3.0 in waits and set(sent) == {"+19075551234", "a@x.com", "b@x.com"}  # retried after the wait Bird asked for
+    again = ann.send(a, only={"phones": [], "emails": ["b@x.com"]}, sleep=waits.append)
+    assert again["emails"] == 1 and sent[-1] == "b@x.com"  # a resend goes only to the ones named
+    # a notice sent before misses were kept: the message log says who got it that day
+    import json
+    (tmp_path / "comms_threads.json").write_text(json.dumps({"2026-11-17|a@x.com": "1.0", "2026-11-17|9075551234": "2.0",
+                                                             "2026-11-16|b@x.com": "3.0"}))
+    assert announce.delivered_on(str(tmp_path), ["2026-11-17"]) == {"a@x.com", "9075551234"}
