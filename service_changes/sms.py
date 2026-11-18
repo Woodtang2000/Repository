@@ -61,7 +61,7 @@ WHO_ARE_YOU = who_are_you()  # the greeting without a request
 # She never claims to be a person; if asked, she's the company's automated assistant and the office follows up.
 WAITING = "Thank you! I'm getting your account confirmed with our office, and then I'll take care of your request."
 SET_UP = "You're all set! Text me here any time you need anything for {names}."
-GOT_IT = "Consider it done! I've passed it to our office, and I'll {how} you the moment it's entered."
+GOT_IT = "Got it! I've passed it to our office, and I'll {how} you the moment it's entered."  # never "done" before it is
 CHECKING = "Good question! Let me check with our office, and someone will get right back to you."
 # Questions that are the office's decision, never the customer's (Jason Kimmel, 11/17: Donna texted him "Peppercini's
 # doesn't have red aprons on their account. Add 30 APRON RED BIB (5-22-04) as a one-time item on this special?").
@@ -899,7 +899,7 @@ class TextDesk:
             print(time.strftime("%H:%M"), "demo fallback:", e, flush=True)
             reply = demo.fallback(b, body)
             self.send(phone, reply)
-            if reply.startswith("Consider it done"):
+            if reply.startswith(("Got it!", "Consider it done")):
                 self.state.setdefault("demo_due", []).append(
                     {"to": phone, "at": time.time() + demo.ENTER_SECONDS, "changed": {},
                      "text": f"All done! {demo.ENTERED_BY} entered it for you.\nThanks so much!"})

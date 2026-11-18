@@ -61,7 +61,7 @@ def fallback(b: dict, text: str) -> str:
     """The scripted answer for the script line closest to what was texted."""
     said = set(re.findall(r"[a-z]+", text.lower()))
     best = max(b["script"], key=lambda s: len(said & set(re.findall(r"[a-z]+", s[0].lower()))), default=None)
-    return best[1] if best else "Consider it done! I've passed it to our office, and I'll text you the moment it's entered."
+    return best[1] if best else "Got it! I've passed it to our office, and I'll text you the moment it's entered."
 
 
 def started(b: dict) -> str:

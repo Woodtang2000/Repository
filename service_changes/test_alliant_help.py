@@ -131,7 +131,7 @@ def test_scott_gets_donna_in_his_private_messages(monkeypatch):
                                  {"ts": "1.5", "bot_id": "B1", "text": "Morning, Harvey."}]}
 
     seen = {}
-    monkeypatch.setattr(parser, "owner_chat", lambda c, turns, briefing: seen.update(turns=turns) or "Leave it with me.")
+    monkeypatch.setattr(parser, "owner_chat", lambda c, turns, briefing, **kw: seen.update(turns=turns, **kw) or "Leave it with me.")
     monkeypatch.delenv("OWNER_SLACK_ID", raising=False)
     d = SimpleNamespace(slack=S(), me="UBOT", claude=None, is_office=lambda u: False, helper=None,
                         office_lookup=lambda ev, top, channel=None: False, briefing=lambda: "",
@@ -141,6 +141,7 @@ def test_scott_gets_donna_in_his_private_messages(monkeypatch):
     assert Desk.dm(d, ev("U4KFSQCDQ", "what's our biggest risk this week?")) == "donna"
     assert d.slack.posts[-1]["text"] == "Leave it with me."
     assert seen["turns"] == [{"role": "user", "content": "what's our biggest risk this week?"}]  # bot's line first is dropped
+    assert seen["person"] == ""  # Scott gets his own Donna
     assert Desk.dm(d, ev("UDRIVER", "what's our biggest risk?")) == "no notes"  # anyone else: no Donna, no data
     monkeypatch.setenv("OWNER_SLACK_ID", "UOTHER")
     assert not Desk.is_owner(None, "U4KFSQCDQ")
@@ -171,7 +172,7 @@ def test_donnas_read_on_the_operation_and_morning_brief(tmp_path, monkeypatch):
 
     d.pulse = lambda hours=48: Desk.pulse(d, hours)
     got = {}
-    monkeypatch.setattr(parser, "owner_chat", lambda c, turns, about: got.update(about=about) or "Towels were late twice.")
+    monkeypatch.setattr(parser, "owner_chat", lambda c, turns, about, **kw: got.update(about=about) or "Towels were late twice.")
     monkeypatch.setattr(threading, "Thread", lambda target, daemon: SimpleNamespace(start=target))
     monday_6 = datetime(2026, 10, 26, 6, 30, tzinfo=ALASKA).timestamp()
     Desk.owner_brief_pass(d, monday_6)
@@ -540,3 +541,25 @@ def test_bill_has_his_own_key_and_donna_knows_its_him(monkeypatch):
     assert "donna_session" in json.loads(ask({})[1])["answer"] and len(got) == 1  # no session: refused, not Scott
     assert "Hang up" in json.loads(ask({"donna_session": "made-up"})[1])["answer"]
     assert post("/api/donna/agent", "x" * 32)[0] == 401
+
+
+def test_donna_never_goes_silent_and_logs_what_she_cant_do(tmp_path):
+    # Bill, 11/17 in #service-desk: "Donna credit primrose retirement for 20 black aprons" got no answer at all
+    from types import SimpleNamespace
+    from .desk import Desk, ADDRESSED, CANT
+    from . import wishlist
+    d = SimpleNamespace(slack=Slack(), data_dir=str(tmp_path), desk_id="CDESK",
+                        name=lambda u: {"U9SGPJP0C": "Bill Dubinsky", "UANA": "Ana Faamita"}.get(u, u),
+                        is_owner=lambda u: u == "U4KFSQCDQ")
+    Desk.cant_do(d, {"user": "U9SGPJP0C", "ts": "5.0", "text": "Donna credit primrose retirement for 20 black aprons"},
+                 "#service-desk")
+    said = d.slack.posts[-1]
+    assert said["thread_ts"] == "5.0" and "nothing has been done yet" in said["text"] and "private message" in said["text"]
+    Desk.cant_do(d, {"user": "UANA", "ts": "6.0", "text": "Donna, call Peppercini's back"}, "#service-desk")
+    assert "noted it for Scott" in d.slack.posts[-1]["text"] and "nothing has been done" in d.slack.posts[-1]["text"]
+    rows = wishlist.recent(str(tmp_path))
+    assert [r["who"] for r in rows] == ["Bill Dubinsky", "Ana Faamita"] and "primrose" in rows[0]["text"]
+    text = wishlist.summary(str(tmp_path))
+    assert "Bill Dubinsky 1" in text and "call Peppercini" in text
+    assert ADDRESSED.match("Donna credit primrose") and ADDRESSED.match("hey Donna, can you") and not ADDRESSED.match("ask donna")
+    assert CANT.search("I can't send emails from here.") and not CANT.search("Leave it with me.")

@@ -74,6 +74,9 @@ MAX_LOOKUPS_PER_DAY = 15  # per person: past this the bot stops answering and te
 ACTIONABLE = {Category.item_change, Category.wearer_change, Category.hold_or_closure, Category.special_order}
 # Scott and Bill only (owner_change, by private message or voice): a credit invoice moves money
 OWNER_ACTIONABLE = ACTIONABLE | {Category.credit_invoice}
+CANT = re.compile(r"\b(?:I can'?t|I'm not able to|I am not able to|I don'?t have (?:a way|access)|isn'?t something I can|"
+                  r"noted it for Scott|that'?s one for Scott)\b", re.I)  # Donna saying no: logged for Scott
+ADDRESSED = re.compile(r"^\s*(?:hey|hi|ok|okay)?[\s,]*donna\b", re.I)  # a message to Donna herself, in a channel
 # Scott telling Donna a change himself (owner_change): worth parsing as one; "yes" / "no" to her readback.
 CHANGE_Q = re.compile(r"\b(change|add|stop|cancel|take (?:off|away)|remove|increase|decrease|raise|lower|cut|bump|drop|"
                       r"swap|switch|replace|set|make (?:it|that|them)|new wearer|put\b.{0,40}\bon|start|more|fewer|less|"
@@ -739,6 +742,9 @@ class Desk:
                     counts["answered"] += 1
                 elif self.office_lookup(h, top):
                     counts["answered"] += 1
+                elif ADDRESSED.match(text) or f"<@{self.me}>" in text:  # "Donna credit Primrose for 20 aprons": never silence
+                    self.cant_do(h, "#" + self.desk_name)
+                    counts["answered"] += 1
             self.mark_seen(self.desk_id, [h])
         for t in tickets:
             if t["ts"] in done:
@@ -757,6 +763,28 @@ class Desk:
             if t["ts"] not in done:
                 open_t.setdefault((meta(t)["src_channel"], meta(t)["src_ts"]), []).append(t["ts"])
         return open_t
+
+    def cant_do(self, h: dict, where: str) -> None:
+        """Someone asked Donna for something she doesn't do there (Bill, 11/17 in #service-desk: "Donna credit primrose
+        retirement for 20 black aprons" got no answer at all). She says so plainly, in a thread, says where it does get
+        done, and logs it for Scott (wishlist.py). Nothing is claimed as done."""
+        from . import wishlist
+        user, text = h.get("user"), h.get("text", "")
+        boss = self.is_owner(user) or user in AR_USERS
+        if boss and CHANGE_Q.search(text):
+            reply = ("I can't take changes typed here, so nothing has been done yet. Send it to me in a private message "
+                     "(or tell me in the Donna app): I'll read it back, and enter it once you say yes.")
+            why = "change typed in a channel"
+        else:
+            reply = ("I can't do that from here, so nothing has been done. I've noted it for Scott. "
+                     "Here I can answer questions about accounts, routes, garments and balances.")
+            why = "not something Donna does yet"
+        wishlist.add(self.data_dir, self.name(user) or "someone", where, text, why)
+        try:
+            self.slack.chat_postMessage(channel=h.get("channel") or self.desk_id, thread_ts=h.get("ts"),
+                                        text=f"<@{user}> {reply}", unfurl_links=False)
+        except Exception as e:
+            print(time.strftime("%H:%M"), "cant_do reply failed:", str(e)[:150], flush=True)
 
     def office_lookup(self, h: dict, top: list[dict], channel: str | None = None, say=None) -> bool:
         """A question typed in the office channel ("how many shop towels does Midas get?"), answered from the Alliant
@@ -1157,6 +1185,19 @@ class Desk:
                 print(time.strftime("%H:%M"), "Salesforce directory refreshed", flush=True)
         except Exception as e:
             print(time.strftime("%H:%M"), "Salesforce directory:", str(e)[:200], flush=True)
+        try:  # Monday mornings: what people asked Donna last week that she can't do yet, to Scott (wishlist.py)
+            from datetime import datetime
+            from . import wishlist
+            today = datetime.fromtimestamp(now, ALASKA)
+            if today.weekday() == 0 and today.hour >= 8 and self.__dict__.get("_wish_day") != today.date():
+                self._wish_day = today.date()
+                rows = wishlist.recent(self.data_dir, 7, now)
+                if rows:
+                    owner_id = os.environ.get("OWNER_SLACK_ID", "U4KFSQCDQ").split(",")[0].strip()
+                    im = self.slack.conversations_open(users=owner_id)["channel"]["id"]
+                    self.slack.chat_postMessage(channel=im, text=wishlist.summary(self.data_dir, 7, now)[:3900])
+        except Exception as e:
+            print(time.strftime("%H:%M"), "wishlist:", str(e)[:200], flush=True)
         try:  # holiday notices: the card for the office 9 days ahead, so customers hear a week before (holidays.py)
             from datetime import datetime
             from . import holidays
@@ -1253,6 +1294,11 @@ class Desk:
                 self.slack.chat_postMessage(channel=channel, text=said)
             threading.Thread(target=go, daemon=True).start()
             return "move redates"
+        if (owner or user in AR_USERS) and re.match(r"^\s*donna,?\s+(?:wish ?list|wishes|what (?:are|have) people "
+                                                    r"ask(?:ed|ing))\s*\??\s*$", ev.get("text", ""), re.I):
+            from . import wishlist  # what people asked her that she can't do yet
+            self.slack.chat_postMessage(channel=channel, text=wishlist.summary(self.data_dir)[:3900])
+            return "wishlist"
         if owner and re.match(r"^\s*donna,?\s+(?:notebook|notes)\s*$", ev.get("text", ""), re.I):
             from . import notebook  # what she has learned on Alliant's screens
             text = notebook.read(self.data_dir).strip()
@@ -1290,7 +1336,7 @@ class Desk:
                 + (" (I'm paused: say \"Donna resume\" when you're ready.)" if jobs.load().get("paused") else "")))
             return f"screen task {jid}"
         mine = self.__dict__.get("changes", {}).get(channel, {}).get("user") == user
-        if mine or (owner and CHANGE_Q.search(ev.get("text", ""))):
+        if mine or (boss and CHANGE_Q.search(ev.get("text", ""))):  # Bill too (11/18): credits and changes, his yes first
             said = self.owner_change(channel, ev.get("text", ""), channel, typed=ev, user=user)
             if said:  # "change Chili's bar mops to 60": she reads it back, "yes" puts it in her Alliant queue
                 self.slack.chat_postMessage(channel=channel, text=said, unfurl_links=False)
@@ -1299,12 +1345,17 @@ class Desk:
             top = list(reversed(list(_messages(self.slack, channel, time.time() - 900, include_all_metadata=True))))
             if self.office_lookup(ev, top, channel=channel):
                 return "lookup"
-        if owner and not (self.helper and (HOW_TO.search(ev.get("text", "")) or ALLIANT_Q.search(ev.get("text", "")))):
-            from .parser import owner_chat
+        if boss and not (self.helper and (HOW_TO.search(ev.get("text", "")) or ALLIANT_Q.search(ev.get("text", "")))):
+            from .parser import owner_chat  # Bill gets the business Donna (as in his Donna app), not Scott's right hand
             about = self.briefing()
-            if PULSE.search(ev.get("text", "")):
+            if owner and PULSE.search(ev.get("text", "")):
                 about += "\n\n" + self.pulse()
-            reply = owner_chat(self.claude, self.owner_turns(channel, ev), about)
+            reply = owner_chat(self.claude, self.owner_turns(channel, ev), about,
+                               person="" if owner else (self.name(user) or "Bill").split()[0])
+            if CANT.search(reply):  # she had to say she can't: Scott hears what people want (wishlist.py)
+                from . import wishlist
+                wishlist.add(self.data_dir, self.name(user) or "someone", "private message", ev.get("text", ""),
+                             "Donna said she can't")
             self.slack.chat_postMessage(channel=channel, text=reply[:3900] or "I'm here. What do you need?",
                                         unfurl_links=False)
             return "donna"
@@ -1315,6 +1366,9 @@ class Desk:
         reply, missed = self.helper.answer([{"role": "user", "content": ev.get("text", "")}], user)
         if missed:
             reply += "\n\n_I've logged this one for Scott._"
+            from . import wishlist
+            wishlist.add(self.data_dir, self.name(user) or "someone", "private message", ev.get("text", ""),
+                         "no Alliant how-to for it")
         self.slack.chat_postMessage(channel=channel, text=reply[:3900], unfurl_links=False)
         return "how-to"
 

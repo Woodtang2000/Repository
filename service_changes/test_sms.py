@@ -134,7 +134,7 @@ def test_unclear_then_answer_then_ticket(desk):
     assert "Customer: need more towels" in seen["text"] and "Customer: 200" in seen["text"]
     [t] = slack.posts
     assert t["meta"]["kind"] == "ticket" and "📱 Customer text from Jane at Midas (…1234)" in t["text"]
-    assert texts[-1][1].startswith("Consider it done")
+    assert texts[-1][1].startswith("Got it!")
 
 
 def test_two_locations_asks_which(desk):
@@ -174,7 +174,7 @@ def test_new_number_signs_up_and_the_office_approves(desk, monkeypatch):
     assert td.office_pass() == 1
     assert "+15551110000,M8,Bob" in open(td.data_dir + "/customer_phones.csv").read()
     assert texts[2][0] == "+15551110000" and texts[2][1].startswith(sms.SET_UP.format(names="MIDAS #8 (PALMER)"))
-    assert len(texts) == 3 and texts[2][1].count("Consider it done") == 1  # welcome and answer in one text
+    assert len(texts) == 3 and texts[2][1].count("Got it!") == 1  # welcome and answer in one text
     assert [c.account for c in seen["alliant"].customers] == ["M8"]  # the held request ran, for M8 only
     assert "add 200 more towels" in seen["text"] and "hello?" in seen["text"]  # held texts read together, answered once
     assert len([p for p in slack.posts if p["meta"].get("kind") == "ticket"]) == 1
@@ -244,7 +244,7 @@ def test_demo_mode_for_sales_calls(desk, monkeypatch):
     td.handle("+19075554242", "how many bar mops costco", "S2")  # (fake parser: "how many" is a lookup)
     assert [c.account for c in seen["alliant"].customers] == ["9901-1-00001"]  # only the made-up business
     td.handle("+19075554242", "add 200 bar mops", "S3")
-    assert texts[-1][1].startswith("Consider it done") and not slack.posts  # nothing to the office
+    assert texts[-1][1].startswith("Got it!") and not slack.posts  # nothing to the office
     td.demo_pass()
     assert texts[-1][1].startswith("All done!") and "Ana entered it for you" in texts[-1][1]
 
@@ -485,7 +485,7 @@ def test_customer_is_only_asked_what_they_can_answer(desk):
     td.handle("+19075551234", "thursday, we'll pick up", "S2")
     [t] = slack.posts
     assert t["meta"]["kind"] == "ticket" and "one-time item on this special?" in t["text"]  # the office decides
-    assert "Still unclear" not in t["text"] and texts[-1][1].startswith("Consider it done")
+    assert "Still unclear" not in t["text"] and texts[-1][1].startswith("Got it!")
     assert all("one-time" not in body for _, body in texts)
 
 

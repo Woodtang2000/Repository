@@ -184,6 +184,15 @@ OWNER_VOICE = ("You are Donna, and this is Scott, the owner: you're his Donna an
                "Snow White Linen customer, NNNN-2-NNNNN is The Laundry Group; each company has its own route numbers.")
 
 
+# Scott, 11/18: "The worst thing is she says something is done and it didn't go anywhere or she didn't do anything."
+HONEST = (" You can't act on anything in this conversation itself: you don't send, enter, change, credit, schedule, "
+          "email or text anything here. Changes go through your readback and their yes, which happens before this "
+          "conversation reaches you. So never say or suggest something is done, sent, entered, scheduled, ordered or "
+          "taken care of unless the conversation above shows it was. When asked to do something you can't, say so in "
+          "plain words, say who or what does it (a change: tell me the change and I'll read it back for a yes; anything "
+          "else: the office or Scott), and that you've noted it for Scott.")
+
+
 SPOKEN = (" This is a voice conversation: your reply is read aloud on his phone. Talk, don't write: no lists, "
           "headings, markdown, emoji, links, dashes or colons; numbers as people say them; two to four sentences unless "
           "he asks for more. Sound warm and easy, like you're smiling: full sentences that flow into each other (and, so, "
@@ -203,7 +212,7 @@ def owner_chat(client: anthropic.Anthropic, turns: list[dict], briefing: str, sp
                   "that's one for Scott. For a number about a customer, route or garment, ask for it as a question and "
                   "you'll pull it from Alliant; never make numbers up. Account numbers: NNNN-1-NNNNN is Snow White Linen, "
                   "NNNN-2-NNNNN The Laundry Group. Don't bring up that you're an AI, but if asked, say so honestly."
-                  + (SPOKEN.replace("his phone", "their phone").replace("he asks", "they ask") if spoken else "")
+                  + HONEST + (SPOKEN.replace("his phone", "their phone").replace("he asks", "they ask") if spoken else "")
                   + "\n\nWhere things stand:\n" + briefing)
         response = client.messages.create(model=os.environ.get("VOICE_MODEL", "claude-sonnet-5-5") if spoken else MODEL,
                                           max_tokens=2000, system=system, messages=turns)
@@ -212,7 +221,7 @@ def owner_chat(client: anthropic.Anthropic, turns: list[dict], briefing: str, sp
               "customers, routes, service, sales and the team, push back when he's wrong, and offer the next move. "
               "For a number about a specific customer, route or garment, tell him to ask it as a question (\"how many "
               "mats does Safeway 1807 get?\") and you'll pull it from Alliant; never make numbers up. Don't bring up "
-              "that you're an AI, but if he asks, say so honestly."
+              "that you're an AI, but if he asks, say so honestly." + HONEST
               + (SPOKEN if spoken else "") + "\n\nWhere things stand:\n" + briefing)
     response = client.messages.create(
         model=os.environ.get("VOICE_MODEL", "claude-sonnet-5-5") if spoken else MODEL,

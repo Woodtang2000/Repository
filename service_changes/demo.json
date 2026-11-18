@@ -8,9 +8,9 @@
                 "12": ["Danny", "Kim", {"SHIRT COOK BLACK L": 11}]},
     "script": [
       ["How many bar mops do we get each week?", "You get 150 bar mops every week. Want me to bump that up for the busy season?"],
-      ["Can you add 50 more bar mops?", "Consider it done! I've passed it to our office, and I'll text you the moment it's entered."],
+      ["Can you add 50 more bar mops?", "Got it! I've passed it to our office, and I'll text you the moment it's entered."],
       ["What does Danny get for uniforms?", "Danny Kim gets 11 black cook shirts, size L."],
-      ["We're closed next Tuesday for a holiday, skip our delivery", "Consider it done! I've passed it to our office, and I'll text you the moment it's entered."]
+      ["We're closed next Tuesday for a holiday, skip our delivery", "Got it! I've passed it to our office, and I'll text you the moment it's entered."]
     ]
   },
   "grocery": {
@@ -20,7 +20,7 @@
     "wearers": {"21": ["Pat", "Nguyen", {"COAT BUTCHER WHITE L": 11}], "22": ["Sam", "Olsen", {"COAT BUTCHER WHITE XL": 11}]},
     "script": [
       ["How many white aprons do we get?", "You get 60 white bib aprons every week."],
-      ["Add 20 more white aprons please", "Consider it done! I've passed it to our office, and I'll text you the moment it's entered."],
+      ["Add 20 more white aprons please", "Got it! I've passed it to our office, and I'll text you the moment it's entered."],
       ["What mats do we have?", "Four 3x10 charcoal heather mats and four 3x5 black comfort flow mats."]
     ]
   },
@@ -31,9 +31,9 @@
                 "32": ["Tyler", "Banks", {"SHIRT INDUSTRIAL OIL BLOCK XL": 11, "PANT INDUSTRIAL SHOP 36X30": 11}]},
     "script": [
       ["How many shop towels do we get?", "You get 300 shop towels every week."],
-      ["Add 100 shop towels", "Consider it done! I've passed it to our office, and I'll text you the moment it's entered."],
+      ["Add 100 shop towels", "Got it! I've passed it to our office, and I'll text you the moment it's entered."],
       ["What size pants does Tyler wear?", "Tyler Banks wears 36x30 industrial shop pants, 11 pairs."],
-      ["Tyler quit, stop his uniforms", "Consider it done! I've passed it to our office, and I'll text you the moment it's entered."]
+      ["Tyler quit, stop his uniforms", "Got it! I've passed it to our office, and I'll text you the moment it's entered."]
     ]
   },
   "industrial": {
@@ -42,7 +42,7 @@
     "wearers": {"41": ["Dale", "Hughes", {"COVERALL NAVY HI VIS 44 R": 11}], "42": ["Rita", "Cole", {"COVERALL NAVY HI VIS 38 R": 11}]},
     "script": [
       ["How many coveralls does Dale have?", "Dale Hughes has 11 navy hi-vis coveralls, size 44 R."],
-      ["Add 2 more scraper mats", "Consider it done! I've passed it to our office, and I'll text you the moment it's entered."]
+      ["Add 2 more scraper mats", "Got it! I've passed it to our office, and I'll text you the moment it's entered."]
     ]
   },
   "office": {
@@ -51,7 +51,7 @@
     "wearers": {},
     "script": [
       ["What mats do we get?", "Two 4x6 charcoal heather mats and one 3x5 safety logo mat."],
-      ["Can we get one more 4x6 mat for the back door?", "Consider it done! I've passed it to our office, and I'll text you the moment it's entered."]
+      ["Can we get one more 4x6 mat for the back door?", "Got it! I've passed it to our office, and I'll text you the moment it's entered."]
     ]
   },
   "healthcare": {
@@ -60,7 +60,7 @@
     "wearers": {},
     "script": [
       ["How many patient gowns do we get?", "You get 40 patient gowns every week."],
-      ["Add 20 more gowns", "Consider it done! I've passed it to our office, and I'll text you the moment it's entered."]
+      ["Add 20 more gowns", "Got it! I've passed it to our office, and I'll text you the moment it's entered."]
     ]
   },
   "government": {
@@ -69,7 +69,7 @@
     "wearers": {},
     "script": [
       ["How many dust mops do we get?", "You get 4 36\" dust mops every week."],
-      ["We're out for winter break Dec 20 to Jan 5, hold our service", "Consider it done! I've passed it to our office, and I'll text you the moment it's entered."]
+      ["We're out for winter break Dec 20 to Jan 5, hold our service", "Got it! I've passed it to our office, and I'll text you the moment it's entered."]
     ]
   },
   "hospital": {
@@ -79,7 +79,7 @@
     "wearers": {},
     "script": [
       ["How many thermal blankets do we get?", "You get 200 white thermal blankets every week."],
-      ["Add 100 thermal blankets, flu season is here", "Consider it done! I've passed it to our office, and I'll text you the moment it's entered."]
+      ["Add 100 thermal blankets, flu season is here", "Got it! I've passed it to our office, and I'll text you the moment it's entered."]
     ]
   },
   "care": {
@@ -88,7 +88,7 @@
     "wearers": {},
     "script": [
       ["How many bath towels do we get?", "You get 150 bath towels every week."],
-      ["Add 30 twin sheets", "Consider it done! I've passed it to our office, and I'll text you the moment it's entered."]
+      ["Add 30 twin sheets", "Got it! I've passed it to our office, and I'll text you the moment it's entered."]
     ]
   },
   "hotel": {
@@ -97,7 +97,7 @@
     "wearers": {},
     "script": [
       ["How many king sheets do we get?", "You get 80 king flat sheets every week."],
-      ["We're full for the festival this weekend, add 40 bath towels", "Consider it done! I've passed it to our office, and I'll text you the moment it's entered."]
+      ["We're full for the festival this weekend, add 40 bath towels", "Got it! I've passed it to our office, and I'll text you the moment it's entered."]
     ]
   }
 }
