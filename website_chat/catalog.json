@@ -91,6 +91,11 @@
       "sku": "5-23-02"
      },
      {
+      "id": "apron-bistro-black",
+      "name": "Bistro aprons, black",
+      "sku": "5-24-02"
+     },
+     {
       "id": "apron-bar-black",
       "name": "Bar aprons, black",
       "sku": "5-25-02"
@@ -839,6 +844,8 @@
      "apron-black",
      "apron-white",
      "apron-red",
+     "apron-bistro-white",
+     "apron-bistro-black",
      "napkin-black",
      "napkin-white",
      "napkin-burgundy",
