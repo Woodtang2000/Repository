@@ -6,6 +6,8 @@ Sonja Burke to review and send. The rules come from Scott's briefs in Dropbox
 
 The agent never writes to NetSuite or Alliant, and never sends email itself (until Scott says otherwise).
 
+**Every session starts and ends with the Agent Hub** (Dropbox `/Scott Woodland/Agent Hub/`): see `CLAUDE.md` in this folder.
+
 ## Each weekday morning
 
 1. **Pull the data** (read-only) into a scratch folder:
