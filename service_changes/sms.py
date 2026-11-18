@@ -62,6 +62,16 @@ WHO_ARE_YOU = who_are_you()  # the greeting without a request
 WAITING = "Thank you! I'm getting your account confirmed with our office, and then I'll take care of your request."
 SET_UP = "You're all set! Text me here any time you need anything for {names}."
 GOT_IT = "Consider it done! I've passed it to our office, and I'll {how} you the moment it's entered."
+CHECKING = "Good question! Let me check with our office, and someone will get right back to you."
+# Questions that are the office's decision, never the customer's (Jason Kimmel, 11/17: Donna texted him "Peppercini's
+# doesn't have red aprons on their account. Add 30 APRON RED BIB (5-22-04) as a one-time item on this special?").
+# They stay on the office's ticket; the customer is only asked what only they can answer, in their own words.
+OFFICE_ONLY = re.compile(r"one-time item|credit only uses|what should the inventory be|in inventory\)", re.I)
+# A linked customer's text that wants an answer even though it isn't a request ("do you need me to follow up? Or did
+# that phone call take care of the order"): never left without a reply.
+WANTS_ANSWER = re.compile(r"\?|\b(follow(?:ing)?[ -]up|any update|status|did (?:you|that|the|it)|when (?:will|is|are|can)|"
+                          r"still (?:coming|waiting|on)|haven'?t heard|is (?:that|it) (?:done|set|coming))\b", re.I)
+TAPBACK = re.compile(r"^\s*(?:Loved|Liked|Disliked|Laughed at|Emphasized|Questioned|Reacted \S+ to)\s+[“\"]")
 DONE_REACTIONS = {"white_check_mark", "heavy_check_mark", "ballot_box_with_check"}
 PHONE = r"(\+?1?[\s.-]*\(?\d{3}\)?[\s.-]*\d{3}[\s.-]*\d{4})"
 # "add 907-555-1234 to Midas Fairbanks", "add (907) 555-1234 for 1205-1-00004", "remove 907 555 1234"
@@ -739,7 +749,16 @@ class TextDesk:
 
         self.log(phone, f"{parsed.category.value} for {acct or 'no account yet'}")
         if parsed.category == Category.not_a_request:
-            self.state["convos"].pop(self.key(phone), None)
+            earlier = self.state["convos"].pop(self.key(phone), None)
+            if WANTS_ANSWER.search(body) and not TAPBACK.match(body):  # a question or follow-up: never left unanswered
+                self.send(phone, CHECKING)
+                where = f"*{acct}* {self.name(mine, acct)}" if acct else " / ".join(f"*{a}*" for a in accounts)
+                before = [ln for ln in (earlier or {}).get("lines", [])][-4:]
+                self.office("\n".join([f"{self.icon} {where}: {who['name'] or 'customer'} {masked} is waiting on an answer",
+                                        f"_{body[:500]}_"]
+                                       + (["Earlier:"] + ["> " + ln[:300] for ln in before] if before else [])
+                                       + [f"I told them the office will get right back to them. Please reply to them."]),
+                            {"kind": "sms_question", "account": acct or ""}, todo="button")
             return
         if acct is None:
             names = [f"{c.name}" for c in mine.customers] or accounts
@@ -763,14 +782,17 @@ class TextDesk:
             fill_item_matches(self.claude, parsed, mine)
         result = check(parsed, mine, asker="customer")
         asks = convo["asks"] if convo else 0
-        if parsed.category in ACTIONABLE and result.questions and asks < MAX_ASKS:
-            return self.ask(phone, lines, result.questions[:MAX_QUESTIONS], convo)
+        theirs = [q for q in result.questions if not OFFICE_ONLY.search(q)] if parsed.category in ACTIONABLE else []
+        if theirs and asks < MAX_ASKS:  # only what they can answer, worded for them; the office's questions wait on the ticket
+            asked = self.reword(text, theirs)
+            if asked:
+                return self.ask(phone, lines, asked[:MAX_QUESTIONS], convo)
 
         # Ticket for the office; the customer hears back when it's ✅.
         if parsed.category in ACTIONABLE:
             out = ticket(result, mine, with_readback=False).splitlines()
             rb = readback(result) if not result.questions else ""
-            if result.questions:
+            if theirs:
                 out.append("⚠️ _Still unclear after asking. Please call the customer._")
         else:
             out = [f"*{acct}*  {self.name(mine, acct)}", f"📣 *Customer message: {parsed.category.value.replace('_', ' ')}*",
@@ -1047,8 +1069,9 @@ class TextDesk:
         self.send = lambda _to, msg: said.append(msg)  # the welcome and the answer to what they sent go out together
         self._replaying = True
         try:
-            for body, sid in (p or {}).get("held", [])[-3:]:  # what they sent before being set up (the latest few)
-                self.handle(to, body, sid)
+            held = (p or {}).get("held", [])[-3:]  # what they sent before being set up (the latest few), read as one
+            if held:  # message: answered once, not once per text (Jason Kimmel, 11/17, got the same questions twice)
+                self.handle(to, "\n".join(body for body, _ in held), held[-1][1])
         finally:
             self.send = send
             self._replaying = False
@@ -1074,6 +1097,16 @@ class TextDesk:
         if problems:
             self.office(f"{self.icon} {self.masked(addr)} is linked, but Salesforce wasn't updated:\n" + "\n".join(problems),
                         {"kind": "salesforce"})
+
+    def reword(self, request: str, questions: list[str]) -> list[str]:
+        """The check's questions as Donna texts them to the customer (parser.for_customer). If that fails, none: the
+        request goes to the office as a ticket that says to call them, rather than staff wording reaching a customer."""
+        from .parser import for_customer
+        try:
+            return for_customer(self.claude, request, questions)
+        except Exception as e:
+            print(time.strftime("%H:%M"), "customer questions not reworded, sent to the office:", str(e)[:150], flush=True)
+            return []
 
     def ask(self, phone: str, lines: list[str], questions: list[str], convo: dict | None) -> None:
         msg = "Happy to! Just one quick question: " + questions[0] if len(questions) == 1 else \

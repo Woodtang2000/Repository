@@ -131,8 +131,15 @@ def prompt_parts(text: str, channel: str, ts: str, alliant: Alliant, author: str
     if previous:
         rest += ["Previous message in the channel (context only, already handled):", previous, ""]
     if author:
-        who = office if isinstance(office, str) else "office staff" if office else "driver or sales"
-        rest += [f"Posted by: {author} ({who})", ""]
+        if "(the customer" in author:  # their own text or email (sms.py): questions go back to them, not the office
+            rest += [f"Posted by: {author}",
+                     "This is the customer themselves. Write questions_for_driver to them directly (you, your), only "
+                     "about what only they can answer: which day, how many, which size or color, pick up or delivery. "
+                     "Never ask them whether to add an item, about their account, invoices, SKUs or what to enter: the "
+                     "office decides those.", ""]
+        else:
+            who = office if isinstance(office, str) else "office staff" if office else "driver or sales"
+            rest += [f"Posted by: {author} ({who})", ""]
     rest += ["Message:", text]
     return "\n".join(lines), "\n".join(rest)
 
@@ -286,6 +293,29 @@ def parse_message(client: anthropic.Anthropic, text: str, channel: str, ts: str,
     if response.stop_reason == "refusal" or response.parsed_output is None:
         raise RuntimeError(f"Could not parse message (stop_reason={response.stop_reason})")
     return response.parsed_output
+
+
+class CustomerQuestions(BaseModel):
+    questions: list[str] = Field(default_factory=list, description=(
+        "The questions to text the customer, reworded for them, at most 3, duplicates merged. Empty if none is "
+        "something only the customer can answer."))
+
+
+def for_customer(client: anthropic.Anthropic, request: str, questions: list[str]) -> list[str]:
+    """Our check's questions (written for drivers and the office: "Peppercini's doesn't have ...", "in Alliant") made
+    into what Donna texts the customer: addressed to them, plain, no system or SKU talk, near-duplicates merged, and
+    anything that is the office's decision dropped (sms.py keeps those for the office's ticket)."""
+    prompt = ("A customer texted their linen company:\n" + request + "\n\nBefore the office can enter it, these questions "
+              "came up (written for staff):\n" + "\n".join(f"- {q}" for q in questions) + "\n\n"
+              "Rewrite the ones only the customer can answer (which day, how many, size or color, pick up or delivery, "
+              "which item they mean) as short friendly questions to them (you, your). Merge questions that ask the same "
+              "thing. Drop questions about whether to add an item, one-time items, their account, invoices, inventory, "
+              "SKUs or any system: the office decides those. No item codes. Keep the customer's own words for items.")
+    response = client.beta.messages.parse(
+        model=MODEL, max_tokens=2000, messages=[{"role": "user", "content": prompt}], output_format=CustomerQuestions,
+        output_config={"effort": "low"}, betas=["server-side-fallback-2026-07-01"], fallbacks="default")
+    out = response.parsed_output
+    return [q.strip() for q in (out.questions if out else []) if q.strip()][:3]
 
 
 class Identified(BaseModel):

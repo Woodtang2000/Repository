@@ -1,3 +1,4 @@
+import json
 import pytest
 
 from . import sms
@@ -61,8 +62,18 @@ def desk(tmp_path, monkeypatch):
         if "how many" in last:
             return ParsedMessage(category=Category.lookup, account_number="C1" if "costco" in last else "M4",
                                  summary=last)
-        if "thanks" in last:
+        if "thanks" in last or "follow up" in last or last.startswith("loved"):
             return ParsedMessage(category=Category.not_a_request, summary="thanks")
+        if "red aprons" in text:  # the check's questions: one for the customer, one that is the office's decision
+            p = ParsedMessage(category=Category.special_order, account_number="M4", summary="30 red aprons",
+                              changes=[Change(action=Action.add, item="red aprons", quantity=30)])
+            p.questions_for_driver = (["Customer offered to pick up: which day, and pick up or deliver?",
+                                       "M4 doesn't have red aprons on their account. Add 30 APRON RED BIB (5-22-04) as a one-time item on this special?"]
+                                      if "thursday" not in text else
+                                      ["M4 doesn't have red aprons on their account. Add 30 APRON RED BIB (5-22-04) as a one-time item on this special?"])
+            if "thursday" in text:
+                p.invoice_date = "Thursday"
+            return p
         qty = None if "more towels" in text and "200" not in text else 200
         p = ParsedMessage(category=Category.item_change, account_number="C1" if "costco" in last else "M4",
                           summary="towels", changes=[Change(action=Action.add, item="shop towels", quantity=qty)])
@@ -76,6 +87,11 @@ def desk(tmp_path, monkeypatch):
     monkeypatch.setattr(parser, "answer_lookup",
                         lambda c, q, facts, asker="": (seen.__setitem__("facts", facts), Answer(answer="300 per delivery", found=True))[1])
     monkeypatch.setattr(run, "fill_item_matches", lambda c, p, a, **kw: None)
+    # the customer-wording step (parser.for_customer): staff questions become "you" questions; the office's are dropped
+    monkeypatch.setattr(parser, "for_customer", lambda c, request, qs: [
+        q.replace("Customer offered to pick up: which day, and pick up or deliver?",
+                  "Which day works, and would you like to pick them up or have us deliver?") for q in qs
+        if "special delivery for" not in q])  # the model merges "what day should it go out?" into the day question
     slack = FakeSlack()
     td = sms.TextDesk(slack, None, ALLIANT, "service-desk-test", str(tmp_path), send=lambda to, body: texts.append((to, body)))
     return td, slack, texts, seen
@@ -160,6 +176,8 @@ def test_new_number_signs_up_and_the_office_approves(desk, monkeypatch):
     assert texts[2][0] == "+15551110000" and texts[2][1].startswith(sms.SET_UP.format(names="MIDAS #8 (PALMER)"))
     assert len(texts) == 3 and texts[2][1].count("Consider it done") == 1  # welcome and answer in one text
     assert [c.account for c in seen["alliant"].customers] == ["M8"]  # the held request ran, for M8 only
+    assert "add 200 more towels" in seen["text"] and "hello?" in seen["text"]  # held texts read together, answered once
+    assert len([p for p in slack.posts if p["meta"].get("kind") == "ticket"]) == 1
     assert card["meta"]["kind"] == "sms_approved" and td.office_pass() == 0
 
 
@@ -456,3 +474,29 @@ def test_holiday_schedule_is_in_what_customers_can_be_told():
     assert "Thanksgiving, Thursday, November 26: closed; this route's deliveries that week are as usual." in kenai
     assert "Friday, December 25 deliveries come Thursday, December 24 instead." in kenai and "December 23" not in kenai
     assert holiday_schedule(date(2027, 3, 1)) == ""
+
+
+def test_customer_is_only_asked_what_they_can_answer(desk):
+    # Jason Kimmel, 11/17: the office's "add it as a one-time item?" was texted to him, twice
+    td, slack, texts, seen = desk
+    td.handle("+19075551234", "can we get 30 red aprons before friday? we can pick up", "S1")
+    assert texts[-1][1] == "Happy to! Just one quick question: Which day works, and would you like to pick them up or have us deliver?"
+    assert "one-time" not in texts[-1][1] and "APRON RED BIB" not in texts[-1][1] and not slack.posts
+    td.handle("+19075551234", "thursday, we'll pick up", "S2")
+    [t] = slack.posts
+    assert t["meta"]["kind"] == "ticket" and "one-time item on this special?" in t["text"]  # the office decides
+    assert "Still unclear" not in t["text"] and texts[-1][1].startswith("Consider it done")
+    assert all("one-time" not in body for _, body in texts)
+
+
+def test_a_question_that_isnt_a_request_still_gets_an_answer(desk):
+    # Jason Kimmel, 11/17 4:44 PM: "do you need me to follow up? Or did that phone call take care of the order." got silence
+    td, slack, texts, seen = desk
+    td.handle("+19075551234", "do you need me to follow up? or did that phone call take care of the order", "S1")
+    assert texts[-1][1] == sms.CHECKING
+    [card] = slack.posts
+    assert card["meta"]["kind"] == "sms_question" and "is waiting on an answer" in json.dumps(card) and "phone call" in json.dumps(card)
+    td.handle("+19075551234", "thanks", "S2")  # a plain thank-you still gets no reply and no card
+    assert texts[-1][1] == sms.CHECKING and len(slack.posts) == 1
+    td.handle("+19075551234", 'Loved \u201cGood question!\u201d', "S3")  # a reaction is not a question
+    assert len(slack.posts) == 1 and len(texts) == 1
