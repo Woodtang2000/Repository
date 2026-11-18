@@ -382,11 +382,12 @@ class EmailDesk(TextDesk):
         from .parser import identify_customer, is_junk_email
         thread = self.state["threads"].get(key, {})
         who = thread.get("name", "")
-        try:
-            junk = is_junk_email(self.claude, f"{who} <{key}>", thread.get("subject", ""), body, thread.get("bulk", False))
-        except Exception as e:  # can't check: treat it as a customer
-            print(time.strftime("%H:%M"), "junk check failed:", e, flush=True)
-            junk = None
+        junk = None
+        if not self.known_customer(key):  # a customer's own address or company domain is never junk (11/18: Three Bears'
+            try:                          # "extra mop head weekly" and South Central Foundation's linen count vanished)
+                junk = is_junk_email(self.claude, f"{who} <{key}>", thread.get("subject", ""), body, thread.get("bulk", False))
+            except Exception as e:  # can't check: treat it as a customer
+                print(time.strftime("%H:%M"), "junk check failed:", e, flush=True)
         if junk is not None and junk.junk:
             return self.filtered(key, who, thread.get("subject", ""), body, sid, junk.kind)
         if not getattr(self, "_replaying", False):
@@ -398,6 +399,17 @@ class EmailDesk(TextDesk):
         self.send(key, "Thanks so much for your email! This is Donna. I'm getting your account confirmed with our "
                        "office, and then I'll take care of your request.")
 
+    def known_customer(self, addr: str) -> bool:
+        """Their email, or their company's email domain, is on an Alliant card or in Salesforce for one of our accounts."""
+        from . import comms, sf_directory
+        exact, same_domain = comms.card_matches(self.alliant, addr)
+        if exact or same_domain:
+            return True
+        try:
+            return bool(sf_directory.guess(self.data_dir, self.alliant, addr)[0])
+        except Exception:
+            return False
+
     # ---- junk: listed for Scott, never answered ------------------------------------------------------------------
 
     def filtered(self, key: str, who: str, subject: str, body: str, sid: str, kind: str) -> None:
@@ -408,9 +420,9 @@ class EmailDesk(TextDesk):
         for k, _ in old:
             self.state["filtered"].pop(k)
         where = self.filtered_channel()
-        if where is None:
+        if where is None:  # no #email-filtered channel (or Donna isn't in it): the office still sees it, so nothing vanishes
             print(time.strftime("%H:%M"), f"filtered ({kind}) from {key}: {subject[:80]}", flush=True)
-            return
+            where = self.desk_id
         self.slack.chat_postMessage(channel=where, unfurl_links=False, unfurl_media=False,
                                     text=f"🗑️ *{kind}* · {who + ' ' if who else ''}<mailto:{key}|{key}>\n*{subject[:150] or '(no subject)'}*"
                                          f"\n_{plain(body)[:200]}_\nNot junk? React ✅ and it goes to the office as a customer email.",
@@ -425,8 +437,8 @@ class EmailDesk(TextDesk):
 
     def rescue_pass(self) -> int:
         """✅ on a filtered email: it wasn't junk, so it goes through the normal sign-up as a customer's email."""
-        where = self.filtered_channel()
-        if where is None or not self.state.get("filtered"):
+        where = self.filtered_channel() or self.desk_id  # where filtered() put them
+        if not self.state.get("filtered"):
             return 0
         r = self.slack.conversations_history(channel=where, oldest=f"{time.time() - 14 * 86400:.6f}", limit=200,
                                              include_all_metadata=True)

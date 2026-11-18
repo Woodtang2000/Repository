@@ -322,3 +322,14 @@ def test_donna_address_and_email_answer_window(monkeypatch):
     assert email_desk.real_sender(m) == "jo@gmail.com"  # passed on by our own mailbox: the customer is the sender
     assert email_desk.EmailDesk.convo_minutes == 2880 and sms.TextDesk.convo_minutes == 60
     assert email_desk.EmailDesk.stranded_hours == 24 and sms.TextDesk.stranded_hours == 3
+
+
+def test_a_customers_company_email_is_never_treated_as_junk(tmp_path):
+    # 11/18: Three Bears' "extra mop head weekly" (manager105@threebears.store) never reached anyone
+    from types import SimpleNamespace
+    from . import email_desk
+    from .context import Alliant
+    d = SimpleNamespace(alliant=Alliant(cards={"9001-1-00105": {"email": "ap@threebears.store"}}), data_dir=str(tmp_path))
+    assert email_desk.EmailDesk.known_customer(d, "manager105@threebears.store")  # same company domain as the card
+    assert not email_desk.EmailDesk.known_customer(d, "sales@vendor.com")
+    assert not email_desk.EmailDesk.known_customer(d, "someone@gmail.com")  # free mail is never a company domain
