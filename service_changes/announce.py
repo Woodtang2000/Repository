@@ -22,6 +22,7 @@ SEND, CANCEL, RESEND = "announce_send", "announce_cancel", "announce_resend"
 # on the notice (missing) for a Resend button. Texts go through Twilio, paced the same way.
 EMAIL_GAP, TEXT_GAP = 0.6, 0.3  # seconds between messages
 RETRIES = 5
+GIVE_UP = 5  # this many emails in a row fail even after retrying: stop, the service is down (Bird 503s, 11/19)
 STOP_LINE = " Reply STOP to opt out."  # on every text we start ourselves (toll-free review, Scott 11/16); not on email
 
 
@@ -66,7 +67,7 @@ def _paced(go, kind: str, sleep=time.sleep) -> bool:
             go()
             return True
         except urllib.error.HTTPError as e:
-            if e.code != 429 or attempt == RETRIES - 1:
+            if e.code not in (429, 500, 502, 503, 504) or attempt == RETRIES - 1:  # busy or briefly down: wait and retry
                 print(time.strftime("%H:%M"), f"announce {kind} failed:", str(e)[:120], flush=True)
                 return False
             try:
@@ -306,15 +307,22 @@ class Announcer:
                 out["failed"] += 1
                 out["missing"]["phones"].append(phone)
             sleep(TEXT_GAP)
+        streak = 0
         for email, acct in emails.items():
+            if streak >= GIVE_UP:  # the email service is down: keep the rest for the Resend button instead of grinding on
+                out["failed"] += 1
+                out["missing"]["emails"].append(email)
+                continue
             company = company_for(acct)
             if _paced(lambda: bird.send(email, f"{company}: {a['subject']}", f"Hello,\n\n{msg(acct)}\n\nThank you,\n\n"
                                         + bird.signature(company), company=company,
                                         key=f"announce/{a['at']}/{email}"), "email", sleep):
                 out["emails"] += 1
+                streak = 0
             else:
                 out["failed"] += 1
                 out["missing"]["emails"].append(email)
+                streak += 1
             sleep(EMAIL_GAP)
         return out
 

@@ -99,3 +99,21 @@ def test_a_burst_that_bird_refuses_is_retried_and_misses_can_be_resent(tmp_path,
     (tmp_path / "comms_threads.json").write_text(json.dumps({"2026-11-17|a@x.com": "1.0", "2026-11-17|9075551234": "2.0",
                                                              "2026-11-16|b@x.com": "3.0"}))
     assert announce.delivered_on(str(tmp_path), ["2026-11-17"]) == {"a@x.com", "9075551234"}
+
+
+def test_when_the_email_service_is_down_she_stops_and_keeps_the_rest(tmp_path, monkeypatch):
+    # 11/19 resend: Bird answered "503 Service Unavailable" to every email
+    import urllib.error
+    from types import SimpleNamespace
+    from . import announce, bird
+    tries = []
+    def down(to, subject, text, **kw):
+        tries.append(to)
+        raise urllib.error.HTTPError("u", 503, "Service Unavailable", {}, None)
+    monkeypatch.setattr(bird, "send", down)
+    monkeypatch.setattr(bird, "signature", lambda company: "Donna")
+    a = {"at": 1.0, "message": "m", "subject": "s", "who": "all", "phones": {},
+         "emails": {f"c{i}@x.com": "1205-1-00004" for i in range(20)}}
+    out = announce.Announcer(SimpleNamespace(data_dir=str(tmp_path))).send(a, sleep=lambda s: None)
+    assert out["emails"] == 0 and len(out["missing"]["emails"]) == 20  # all kept for the resend
+    assert len(set(tries)) == announce.GIVE_UP  # five tried (each retried), then she stopped
