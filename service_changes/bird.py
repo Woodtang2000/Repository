@@ -127,7 +127,7 @@ def _html(text: str, company: str = "Snow White Linen", title: str = "") -> str:
 
 
 def send(to: str, subject: str, text: str, in_reply_to: str = "", key: str = "", company: str = "",
-         attachments: list[dict] | None = None) -> None:
+         attachments: list[dict] | None = None, log: bool = True) -> None:
     """From Donna (EMAIL_FROM, e.g. donna@mail.snowwhitelinen.com), named for the customer's company; replies go to
     EMAIL_REPLY_TO (service@), which comes back to the desk. The Laundry Group's customers: EMAIL_FROM_TLG and
     EMAIL_REPLY_TO_TLG when set (donna@mail.thelaundrygroup.com, donna@thelaundrygroup.com), else the same as above."""
@@ -148,6 +148,8 @@ def send(to: str, subject: str, text: str, in_reply_to: str = "", key: str = "",
         body["attachments"] = [{"filename": a["filename"], "content": base64.b64encode(a["content"]).decode()}
                                for a in attachments[:5]]
     _call("POST", "/v1/email/messages", body=body, key=key)
+    if not log:  # a notice to many customers: one summary line in #customer-messages instead (announce.py)
+        return
     from . import comms
     comms.log("out", "email", to, f"Subject: {subject}\n{text}" + (f"\n(attached: {', '.join(a['filename'] for a in attachments[:5])})"
                                                                    if attachments else ""))

@@ -40,7 +40,7 @@ def test_route_4_is_running_late(tmp_path, monkeypatch):
     sent = []
     import service_changes.sms as sms
     from . import bird
-    monkeypatch.setattr(sms, "send_sms", lambda to, body: sent.append(("text", to, body)))
+    monkeypatch.setattr(sms, "send_sms", lambda to, body, **kw: sent.append(("text", to, body)))
     monkeypatch.setattr(bird, "send", lambda to, subject, text, **kw: sent.append(("email", to, subject)))
     a = announce.Announcer(d)
     assert not a.propose({"ts": "1.1", "user": "UDRIVER", "text": "Donna, let route 4 customers know we're late"})
@@ -84,7 +84,7 @@ def test_a_burst_that_bird_refuses_is_retried_and_misses_can_be_resent(tmp_path,
         sent.append(to)
     monkeypatch.setattr(bird, "send", flaky)
     monkeypatch.setattr(bird, "signature", lambda company: "Donna")
-    monkeypatch.setattr(sms, "send_sms", lambda to, body: sent.append(to))
+    monkeypatch.setattr(sms, "send_sms", lambda to, body, **kw: sent.append(to))
     a = {"at": 1.0, "message": "Closed Thursday.", "subject": "Thanksgiving", "who": "all",
          "phones": {"+19075551234": "1205-1-00004"}, "emails": {"a@x.com": "1205-1-00004", "b@x.com": "1205-1-00004",
                                                                   "down@x.com": "1205-1-00004"}}
@@ -117,3 +117,22 @@ def test_when_the_email_service_is_down_she_stops_and_keeps_the_rest(tmp_path, m
     out = announce.Announcer(SimpleNamespace(data_dir=str(tmp_path))).send(a, sleep=lambda s: None)
     assert out["emails"] == 0 and len(out["missing"]["emails"]) == 20  # all kept for the resend
     assert len(set(tries)) == announce.GIVE_UP  # five tried (each retried), then she stopped
+
+
+def test_a_notice_is_one_line_in_customer_messages_not_one_per_customer(tmp_path, monkeypatch):
+    # 11/18: the Thanksgiving resend posted a line per customer, 119 in a row, in #customer-messages
+    from types import SimpleNamespace
+    from . import announce, bird, comms
+    import service_changes.sms as sms
+    logged, notes, flags = [], [], []
+    monkeypatch.setattr(comms, "log", lambda *a, **kw: logged.append(a))
+    monkeypatch.setattr(comms, "note", notes.append)
+    monkeypatch.setattr(bird, "_call", lambda *a, **kw: None)
+    monkeypatch.setattr(bird, "signature", lambda company: "Donna")
+    monkeypatch.setattr(sms, "send_sms", lambda to, body, log=True: flags.append(log))
+    a = {"at": 1.0, "message": "Closed Thursday.", "subject": "Thanksgiving", "who": "all",
+         "phones": {"+19075551234": "1205-1-00004"}, "emails": {"a@x.com": "1205-1-00004", "b@x.com": "1205-1-00004"}}
+    out = announce.Announcer(SimpleNamespace(data_dir=str(tmp_path))).send(a, sleep=lambda s: None)
+    assert out["emails"] == 2 and out["texts"] == 1
+    assert logged == [] and flags == [False]  # nothing per customer
+    assert len(notes) == 1 and "1 texts, 2 emails" in notes[0] and "Closed Thursday." in notes[0]

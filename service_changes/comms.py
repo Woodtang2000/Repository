@@ -213,6 +213,20 @@ def log(direction: str, kind: str, addr: str, text: str, name: str = "") -> None
         threading.Thread(target=_post, args=(direction, kind, addr, text, name), daemon=True).start()
 
 
+def note(text: str) -> None:
+    """One line of our own in #customer-messages (a notice sent to many customers). Same guards as log(); never raises."""
+    if _client is None and (not os.environ.get("SLACK_BOT_TOKEN") or "pytest" in sys.modules
+                            or os.environ.get("COMMS_LOG", "on").lower() == "off"):
+        return
+    try:
+        slack = _slack()
+        ch = channel_id(slack)
+        if ch:
+            slack.chat_postMessage(channel=ch, text=text, unfurl_links=False)
+    except Exception as e:
+        print(time.strftime("%H:%M"), "message log note:", e, flush=True)
+
+
 def _post(direction: str, kind: str, addr: str, text: str, name: str) -> None:
     try:
         slack = _slack()

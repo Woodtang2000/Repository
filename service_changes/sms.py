@@ -257,13 +257,15 @@ def _last_numbers() -> dict:
         return {}
 
 
-def send_sms(to: str, body: str) -> None:
+def send_sms(to: str, body: str, log: bool = True) -> None:
     """Reply from the number the customer last texted (the readback is sent by the desk, a separate process, so
     that is kept in a small file), else from the first number."""
     mine = our_numbers()
     last = phone_key(_last_numbers().get(phone_key(to), ""))
     frm = next((n for n in mine if phone_key(n) == last), mine[0])  # digits only: "+18668278398" = "(866) 827-8398"
     _twilio("POST", "Messages.json", {"From": "+1" + phone_key(frm), "To": to, "Body": plain(body)[:1500]})
+    if not log:  # a notice to many customers: one summary line instead (announce.py)
+        return
     from . import comms
     comms.log("out", "text", to, plain(body)[:1500])  # #customer-messages: everything Donna sends
 

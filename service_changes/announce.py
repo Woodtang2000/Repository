@@ -305,7 +305,7 @@ class Announcer:
         phones = {p: acct for p, acct in a["phones"].items() if only is None or p in only.get("phones", [])}
         emails = {e: acct for e, acct in a["emails"].items() if only is None or e in only.get("emails", [])}
         for phone, acct in phones.items():
-            if _paced(lambda: send_sms(phone, with_stop(f"{company_for(acct)}: {msg(acct)}")), "text", sleep):
+            if _paced(lambda: send_sms(phone, with_stop(f"{company_for(acct)}: {msg(acct)}"), log=False), "text", sleep):
                 out["texts"] += 1  # texts we start: the opt-out on each
             else:
                 out["failed"] += 1
@@ -320,7 +320,7 @@ class Announcer:
             company = company_for(acct)
             if _paced(lambda: bird.send(email, f"{company}: {a['subject']}", f"Hello,\n\n{msg(acct)}\n\nThank you,\n\n"
                                         + bird.signature(company), company=company,
-                                        key=f"announce/{a['at']}/{email}"), "email", sleep):
+                                        key=f"announce/{a['at']}/{email}", log=False), "email", sleep):
                 out["emails"] += 1
                 streak = 0
             else:
@@ -328,6 +328,11 @@ class Announcer:
                 out["missing"]["emails"].append(email)
                 streak += 1
             sleep(EMAIL_GAP)
+        if out["texts"] or out["emails"]:  # #customer-messages: one line for the whole notice, not one per customer (11/18)
+            from . import comms
+            comms.note(f"📣 Notice to {a.get('who', 'customers')}: {out['texts']} texts, {out['emails']} emails"
+                       + (f" ({out['failed']} didn't go through)" if out["failed"] else "")
+                       + f"\n> {a['message'][:300]}")
         return out
 
 

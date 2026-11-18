@@ -38,7 +38,7 @@ def test_a_week_ahead_each_customer_gets_their_own_day_after_the_office_taps_sen
     sent = []
     import service_changes.sms as sms
     from . import bird
-    monkeypatch.setattr(sms, "send_sms", lambda to, body: sent.append((to, body)))
+    monkeypatch.setattr(sms, "send_sms", lambda to, body, **kw: sent.append((to, body)))
     monkeypatch.setattr(bird, "send", lambda to, subject, text, **kw: sent.append((to, text)))
     assert d.announcer().act({"user": {"id": "UANA"}, "actions": [{"action_id": announce.SEND, "value": "holiday/2026-12-25"}],
                               "container": {"message_ts": "5.5"}}).startswith("sent")
@@ -63,7 +63,7 @@ def test_laundry_group_customers_hear_we_are_open(tmp_path, monkeypatch):
     sent = []
     import service_changes.sms as sms
     from . import bird
-    monkeypatch.setattr(sms, "send_sms", lambda to, body: sent.append((to, body)))
+    monkeypatch.setattr(sms, "send_sms", lambda to, body, **kw: sent.append((to, body)))
     monkeypatch.setattr(bird, "send", lambda to, subject, text, **kw: sent.append((to, text)))
     d.announcer().act({"user": {"id": "UANA"}, "actions": [{"action_id": announce.SEND, "value": "holiday/2027-11-25"}],
                        "container": {"message_ts": "5.5"}})
