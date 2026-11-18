@@ -69,3 +69,26 @@ def test_a_held_welcome_waits_until_the_hold_comes_off(tmp_path, monkeypatch):
     assert n.pass_()["welcome"] == 0 and not sent
     monkeypatch.setenv("WELCOME_HOLD", "")
     assert n.pass_()["welcome"] == 1 and sent[0][0] == "gm@pursuit.com"
+
+
+def test_a_welcome_is_noted_under_the_deals_new_accounts_post(tmp_path, monkeypatch):
+    # Sales, 11/18: every automatic customer email shows under the deal's #new-accounts post
+    import json
+    from . import new_accounts
+    d, sent, posts = setup(tmp_path, monkeypatch)
+    slack_posts = []
+    d.slack = SimpleNamespace(chat_postMessage=lambda **kw: slack_posts.append(kw))
+    na = new_accounts.NewAccounts(d)
+    d.new_accounts = lambda: na
+    (tmp_path / "new_accounts.json").write_text(json.dumps({"r1": {"thread": "111.222", "status": "sent",
+                                                                    "result": {"customer_number": "6000-1-00001"}}}))
+    n = notices.Notices(d)
+    n.pass_()
+    d.alliant.customers.append(Customer("6000-1-00001", "MOOSE CAFE", "5", ["Wed"]))
+    d.alliant.cards["6000-1-00001"] = {"email": "ann@moosecafe.com"}
+    assert n.pass_()["welcome"] == 1
+    assert len(slack_posts) == 1 and slack_posts[0]["thread_ts"] == "111.222"
+    assert slack_posts[0]["channel"] == new_accounts.CHANNEL
+    assert slack_posts[0]["text"].startswith("📧 Welcome email sent ") and slack_posts[0]["text"].endswith("to ann@moosecafe.com")
+    assert "$" not in slack_posts[0]["text"] and "http" not in slack_posts[0]["text"]
+    assert na.note_welcome(["9999-1-00001"], ["x@y.com"]) == 0  # no deal post for it: nothing posted

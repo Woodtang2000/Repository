@@ -162,3 +162,8 @@ class Notices:
                  "866-TAP-TEXT (866-827-8398) or reply to this email, any time, and I'll take care of it.")
         self._send(accts[0], to, "welcome", body, "welcome", "welcome email"
                    + (f" ({len(accts)} locations: {', '.join(accts)})" if len(accts) > 1 else ""))
+        try:  # and a line under the deal's #new-accounts post, where Sales and the team see it (Sales' request, 11/18)
+            if hasattr(self.desk, "new_accounts"):
+                self.desk.new_accounts().note_welcome(accts, to)
+        except Exception as e:
+            print(time.strftime("%H:%M"), "welcome note:", str(e)[:200], flush=True)

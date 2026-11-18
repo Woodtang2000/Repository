@@ -297,6 +297,36 @@ class NewAccounts:
             json.dump(data, f)
         os.replace(tmp, self.path)
 
+    def thread_for(self, cust: str) -> str:
+        """The #new-accounts thread of the deal that entered this customer number, or "" (Sales' request, 11/18)."""
+        for r in self.load().values():
+            if not isinstance(r, dict) or not r.get("thread"):
+                continue
+            if cust in ((r.get("result") or {}).get("customer_number"), (r.get("contacts") or {}).get("customer_number")):
+                return r["thread"]
+        return ""
+
+    def note_welcome(self, accts: list[str], to: list[str], when: float | None = None) -> int:
+        """Under each deal's post: "📧 Welcome email sent Wed Nov 18, 1:45 PM to jane@acme.com" (no prices, no links).
+        Sales' app ignores replies that aren't its protocol messages. Returns how many lines were posted."""
+        from .context import ALASKA
+        from datetime import datetime
+        d = datetime.fromtimestamp(when or time.time(), ALASKA)
+        stamp = f"{d:%a %b} {d.day}, {d:%-I:%M %p}"
+        posted, done = 0, set()
+        for acct in accts:
+            thread = self.thread_for(acct)
+            if not thread or thread in done:
+                continue
+            done.add(thread)
+            try:
+                self.desk.slack.chat_postMessage(channel=CHANNEL, thread_ts=thread, unfurl_links=False,
+                                                 text=f"📧 Welcome email sent {stamp} to {', '.join(to)}")
+                posted += 1
+            except Exception as e:
+                print(time.strftime("%H:%M"), "welcome note:", str(e)[:200], flush=True)
+        return posted
+
     def post(self, thread: str, line: str, payload: dict) -> None:
         self.desk.slack.chat_postMessage(channel=CHANNEL, thread_ts=thread, unfurl_links=False,
                                          text=f"{line}\n```json\n{json.dumps(payload, indent=1)}\n```")
