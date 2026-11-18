@@ -136,11 +136,6 @@
       "sku": "1-01-11"
      },
      {
-      "id": "napkin-grey-chop-house",
-      "name": "Napkins, grey chop house",
-      "sku": "1-01-23"
-     },
-     {
       "id": "napkin-white-bistro-blue",
       "name": "Napkins, white with blue bistro stripe",
       "sku": "1-01-14"
@@ -866,7 +861,6 @@
      "napkin-red",
      "napkin-sandalwood",
      "napkin-purple",
-     "napkin-grey-chop-house",
      "napkin-white-bistro-blue",
      "napkin-white-bistro-black",
      "napkin-grey-bistro-white",
