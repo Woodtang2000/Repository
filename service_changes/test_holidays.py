@@ -30,11 +30,11 @@ def test_a_week_ahead_each_customer_gets_their_own_day_after_the_office_taps_sen
     (tmp_path / "customer_phones.csv").write_text("phone,accounts,name\n(907) 555-1234,1205-1-00004,Jane\n"
                                                   "(907) 555-2222,8800-1-00001,Kenai\n")
     d.announcer = lambda a=announce.Announcer(d): a
-    assert holidays.holiday_pass(d, date(2026, 12, 15)) == []  # 10 days out: not yet
-    assert holidays.holiday_pass(d, date(2026, 12, 16)) == ["holiday/2026-12-25"]
-    assert holidays.holiday_pass(d, date(2026, 12, 16)) == []  # once
+    assert holidays.holiday_pass(d, date(2026, 12, 16)) == []  # 9 days out: not yet
+    assert holidays.holiday_pass(d, date(2026, 12, 17)) == ["holiday/2026-12-25"]  # the preview, the day before
+    assert holidays.holiday_pass(d, date(2026, 12, 17)) == []  # once
     card = d.slack.posts[-1]["text"]
-    assert "*Christmas Day, Friday December 25*: 3 customers' deliveries move" in card and "Thu → Wed 12/23: 2" in card and "1 Laundry Group customers hear we're open as usual" in card and "by *Friday December 18*" in card
+    assert "*Christmas Day, Friday December 25*: 3 customers' deliveries move" in card and "Thu → Wed 12/23: 2" in card and "1 Laundry Group customers hear we're open as usual" in card and "on its own *Friday December 18 at 9 AM*" in card
     sent = []
     import service_changes.sms as sms
     from . import bird
@@ -59,7 +59,7 @@ def test_the_laundry_group_is_open_every_holiday():
 def test_laundry_group_customers_hear_we_are_open(tmp_path, monkeypatch):
     d = desk(tmp_path)  # its TLG route 4 hospital has a texting number
     d.announcer = lambda a=announce.Announcer(d): a
-    assert holidays.holiday_pass(d, date(2027, 11, 16)) == ["holiday/2027-11-25"]  # Thanksgiving 2027
+    assert holidays.holiday_pass(d, date(2027, 11, 17)) == ["holiday/2027-11-25"]  # Thanksgiving 2027
     sent = []
     import service_changes.sms as sms
     from . import bird
@@ -76,3 +76,57 @@ def test_a_weekend_holiday_moves_nothing():
     from .context import holiday_schedule
     s = holiday_schedule(date(2027, 6, 20))
     assert "the 4th of July is Sunday, July 4, a weekend: deliveries that week are as usual." in s
+
+
+def test_a_holiday_notice_goes_out_on_its_own_unless_cancelled(tmp_path, monkeypatch):
+    # Scott, 11/18: "Holiday notices should just go out." The day-before card is a preview with Cancel.
+    from datetime import datetime
+    from .context import ALASKA
+    d = desk(tmp_path)
+    d.announcer = lambda a=announce.Announcer(d): a
+    assert holidays.holiday_pass(d, date(2027, 11, 17)) == ["holiday/2027-11-25"]
+    sent = []
+    import service_changes.sms as sms
+    from . import bird
+    monkeypatch.setattr(sms, "send_sms", lambda to, body, **kw: sent.append(to))
+    monkeypatch.setattr(bird, "send", lambda to, subject, text, **kw: sent.append(to))
+    ann = d.announcer()
+    before = datetime(2027, 11, 18, 8, 55, tzinfo=ALASKA).timestamp()
+    at = datetime(2027, 11, 18, 9, 0, tzinfo=ALASKA).timestamp()
+    assert ann.auto_pass(before) == [] and sent == []  # not yet
+    assert ann.auto_pass(at) == ["holiday/2027-11-25"] and sent  # 9 AM a week ahead: out it goes
+    assert ann.auto_pass(at + 600) == []  # once
+    assert ann._load()["holiday/2027-11-25"]["status"] == "sent"
+    assert "Sent by Donna (on schedule)" in d.slack.updates[-1]  # the preview card now says it went
+
+
+def test_a_cancelled_holiday_notice_never_goes_out(tmp_path, monkeypatch):
+    from datetime import datetime
+    from .context import ALASKA
+    d = desk(tmp_path)
+    d.announcer = lambda a=announce.Announcer(d): a
+    holidays.holiday_pass(d, date(2027, 11, 17))
+    sent = []
+    import service_changes.sms as sms
+    from . import bird
+    monkeypatch.setattr(sms, "send_sms", lambda to, body, **kw: sent.append(to))
+    monkeypatch.setattr(bird, "send", lambda to, subject, text, **kw: sent.append(to))
+    ann = d.announcer()
+    assert ann.act({"user": {"id": "UANA"}, "actions": [{"action_id": announce.CANCEL, "value": "holiday/2027-11-25"}],
+                    "container": {"message_ts": "5.5"}}) == "cancelled"
+    assert ann.auto_pass(datetime(2027, 11, 18, 9, 0, tzinfo=ALASKA).timestamp()) == [] and sent == []
+
+
+def test_without_the_preview_the_card_is_posted_at_send_time_and_goes_now(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOLIDAY_PREVIEW", "off")
+    d = desk(tmp_path)
+    d.announcer = lambda a=announce.Announcer(d): a
+    assert holidays.holiday_pass(d, date(2027, 11, 17)) == []  # no day-before card
+    assert holidays.holiday_pass(d, date(2027, 11, 18)) == ["holiday/2027-11-25"]
+    assert "sent on its own *now*" in d.slack.posts[-1]["text"]
+    import service_changes.sms as sms
+    from . import bird
+    monkeypatch.setattr(sms, "send_sms", lambda to, body, **kw: None)
+    monkeypatch.setattr(bird, "send", lambda to, subject, text, **kw: None)
+    import time as _t
+    assert d.announcer().auto_pass(_t.time() + 1) == ["holiday/2027-11-25"]

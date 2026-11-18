@@ -1211,7 +1211,7 @@ class Desk:
                     self.slack.chat_postMessage(channel=im, text=wishlist.summary(self.data_dir, 7, now)[:3900])
         except Exception as e:
             print(time.strftime("%H:%M"), "wishlist:", str(e)[:200], flush=True)
-        try:  # holiday notices: the card for the office 9 days ahead, so customers hear a week before (holidays.py)
+        try:  # holiday notices: the preview card the day before they go out a week ahead (holidays.py)
             from datetime import datetime
             from . import holidays
             today = datetime.fromtimestamp(now, ALASKA)
@@ -1221,6 +1221,27 @@ class Desk:
                     print(time.strftime("%H:%M"), "holiday notice card:", key, flush=True)
         except Exception as e:
             print(time.strftime("%H:%M"), "holiday notices:", str(e)[:200], flush=True)
+
+    def holiday_send_pass(self, now: float) -> None:
+        """Every 5 minutes: a holiday notice due now goes out on its own unless someone tapped Cancel (announce.auto_pass).
+        Sending runs on its own thread (a notice takes minutes at Bird's pace)."""
+        if now - self.__dict__.get("_hs_pass", 0) < 300:
+            return
+        self._hs_pass = now
+        from . import holidays
+        if not holidays.enabled() or self.__dict__.get("_hs_busy"):
+            return
+
+        def go():
+            self._hs_busy = True
+            try:
+                for key in self.announcer().auto_pass():
+                    print(time.strftime("%H:%M"), "holiday notice sent on schedule:", key, flush=True)
+            except Exception as e:
+                print(time.strftime("%H:%M"), "holiday send:", str(e)[:200], flush=True)
+            finally:
+                self._hs_busy = False
+        threading.Thread(target=go, daemon=True).start()
 
     def jobs(self):
         """Donna's Alliant work queue (alliant_jobs.py)."""
@@ -2584,6 +2605,7 @@ class Desk:
                     self.outreach_pass(now)
                     self.new_accounts_pass(now)
                     self.notices_pass()
+                    self.holiday_send_pass(now)
                     # Route passes share an office pass from the last few seconds: during a burst of drivers they
                     # don't queue up behind each other here. Office events (✅, "done") always get a fresh one.
                     if ch not in names or time.time() - fresh["at"] > 3:

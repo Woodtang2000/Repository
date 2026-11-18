@@ -181,17 +181,21 @@ class Announcer:
         return True
 
     def propose_holiday(self, key: str, name: str, holiday, per_account: dict, still_open: list | None = None) -> bool:
-        """A holiday notice (holidays.py): each customer whose delivery moves is told their own day. Same Send / Cancel
-        card as any announcement, posted in #service-desk by Donna herself, never sent without a tap."""
+        """A holiday notice (holidays.py): each customer whose delivery moves is told their own day. It goes out on its
+        own at 9 AM a week before (auto_pass); the card in #service-desk is the preview, with Send now / Cancel."""
         from collections import Counter
-        from .holidays import NOTICE_DAYS, notice, open_notice
-        from datetime import timedelta
+        from .holidays import NOTICE_DAYS, SEND_HOUR, notice, open_notice, preview
+        from datetime import datetime, timedelta
+        from .context import ALASKA
         still_open = [a for a in (still_open or []) if a not in per_account]
         messages = {acct: notice(name, holiday, m) for acct, m in per_account.items()}
         messages.update({acct: open_notice(name, holiday) for acct in still_open})
         phones, emails = self.contacts(list(messages))
         moved = Counter(f"{a:%a} → {b:%a %-m/%-d}" for m in per_account.values() for a, b in m)
         send_by = holiday - timedelta(days=NOTICE_DAYS)
+        auto_at = datetime(send_by.year, send_by.month, send_by.day, SEND_HOUR, tzinfo=ALASKA).timestamp()
+        if not preview():
+            auto_at = min(auto_at, time.time())  # no preview: the card is posted at send time and it goes now
         examples = [messages[a] for a in (next(iter(per_account), None), next(iter(still_open), None)) if a]
         sample = examples[0]
         with self.lock:
@@ -201,7 +205,7 @@ class Announcer:
             data[key] = {"by": "donna", "who": f"{name} notice", "message": sample, "messages": messages,
                          "subject": f"{name}: your deliveries", "phones": phones, "emails": emails,
                          "accounts": len(messages), "status": "waiting" if (phones or emails) else "nobody",
-                         "at": time.time()}
+                         "at": time.time(), "auto_at": auto_at}
             self._save(data)
         text = f"🗓️ *{name}, {holiday:%A %B} {holiday.day}*: " + "; ".join(x for x in (
             (f"{len(per_account)} customers' deliveries move (" + ", ".join(f"{k}: {v}" for k, v in sorted(moved.items()))
@@ -212,16 +216,53 @@ class Announcer:
                                              text=text + "None of them has a texting number or email on file, so I have "
                                                          "no one to tell. Please let them know another way.")
             return True
-        text += (f"Send them each their own day by *{send_by:%A %B} {send_by.day}* (a week ahead): {len(phones)} texts, "
+        when = (f"*{send_by:%A %B} {send_by.day} at {SEND_HOUR} AM*" if auto_at > time.time() else "*now*")
+        text += (f"Each gets their own day, sent on its own {when} (a week ahead): {len(phones)} texts, "
                  f"{len(emails)} emails. For example:\n" + "\n".join(f"> {m}" for m in examples)
-                 + "\nNothing goes out until you tap Send.")
+                 + "\nTap Cancel to stop it, or Send now to send it early.")
         blocks = [{"type": "section", "text": {"type": "mrkdwn", "text": text}},
                   {"type": "actions", "block_id": "announce", "elements": [
                       {"type": "button", "action_id": SEND, "value": key, "style": "primary",
-                       "text": {"type": "plain_text", "text": f"Send to {len(phones) + len(emails)}"}},
+                       "text": {"type": "plain_text", "text": f"Send now to {len(phones) + len(emails)}"}},
                       {"type": "button", "action_id": CANCEL, "value": key, "text": {"type": "plain_text", "text": "Cancel"}}]}]
-        self.desk.slack.chat_postMessage(channel=self.desk.desk_id, text=text, blocks=blocks, unfurl_links=False)
+        ts = (self.desk.slack.chat_postMessage(channel=self.desk.desk_id, text=text, blocks=blocks, unfurl_links=False)
+              or {}).get("ts")
+        with self.lock:
+            data = self._load()
+            data[key]["card_ts"] = ts
+            self._save(data)
         return True
+
+    def auto_pass(self, now: float | None = None) -> list[str]:
+        """Every few minutes: a holiday notice whose time has come and that nobody cancelled goes out (Scott, 11/18)."""
+        now = now or time.time()
+        due = []
+        with self.lock:
+            data = self._load()
+            for key, a in data.items():
+                if a.get("status") == "waiting" and a.get("auto_at") and a["auto_at"] <= now:
+                    a["status"], a["decided_by"] = "sending", "automatic"
+                    due.append(key)
+            if due:
+                self._save(data)
+        for key in due:
+            self._deliver(key, data[key], data[key].get("card_ts"), "Donna (on schedule)")
+        return due
+
+    def _deliver(self, key: str, a: dict, msg: str | None, name: str) -> dict:
+        sent = self.send(a)
+        missing = sent.pop("missing")
+        with self.lock:
+            data = self._load()
+            data[key].update(status="sent", sent=sent, missing=missing)
+            self._save(data)
+        if msg:
+            self._card(msg, key, f"✅ Sent by {name} to {a['who']}: {sent['texts']} texts, {sent['emails']} emails",
+                       missing, a["message"])
+        else:
+            self.desk.slack.chat_postMessage(channel=self.desk.desk_id, unfurl_links=False,
+                                             text=f"✅ Sent by {name} to {a['who']}: {sent['texts']} texts, {sent['emails']} emails.")
+        return sent
 
     def act(self, payload: dict) -> str:
         """Send or Cancel, office or owner only, once."""
@@ -246,14 +287,7 @@ class Announcer:
             self.desk.slack.chat_update(channel=self.desk.desk_id, ts=msg, text=f"🚫 Not sent (cancelled by {name}).",
                                         blocks=[])
             return "cancelled"
-        sent = self.send(a)
-        missing = sent.pop("missing")
-        with self.lock:
-            data = self._load()
-            data[act["value"]].update(status="sent", sent=sent, missing=missing)
-            self._save(data)
-        self._card(msg, act["value"], f"✅ Sent by {name} to {a['who']}: {sent['texts']} texts, {sent['emails']} emails",
-                   missing, a["message"])
+        sent = self._deliver(act["value"], a, msg, name)
         return f"sent {sent}"
 
     def _card(self, ts: str, key: str, line: str, missing: dict, message: str) -> None:

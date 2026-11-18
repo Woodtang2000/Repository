@@ -10,15 +10,26 @@ customers get a week ahead.
 - The Laundry Group (branch 2) works six days a week and doesn't close for holidays (Scott, 11/15): its stops never
   move, and its customers are told, in the same notice, that we're open as always (peace of mind).
 - A holiday on a weekend moves nothing (Scott, 11/15), and Snow White customers get no notice for it.
-- A week before (NOTICE_DAYS), Donna posts the notice in #service-desk with Send / Cancel (announce.py): every customer
-  whose delivery moves, by text and email, each told their own day. Nothing goes out until the office taps Send.
+- A week before (NOTICE_DAYS), at 9 AM, the notice goes out on its own (Scott, 11/18: "Holiday notices should just go
+  out"): every customer whose delivery moves, by text and email, each told their own day.
+- The day before that, Donna posts a preview in #service-desk with Send now / Cancel (HOLIDAY_PREVIEW, default on).
+  With the preview off, the card is posted at send time and the notice goes straight out.
 """
 import os
 from datetime import date, timedelta
 
 DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 NOTICE_DAYS = 7          # customers hear a week before the holiday (Scott, 11/15)
-POST_DAYS = NOTICE_DAYS + 2  # the card goes to the office two days before that, so it's sent on time
+SEND_HOUR = 9            # it goes out at 9 AM Alaska time on that day
+
+
+def preview() -> bool:
+    """The day-before preview with Cancel (Guardrail's suggestion, 11/18; Scott to decide): on unless HOLIDAY_PREVIEW=off."""
+    return os.environ.get("HOLIDAY_PREVIEW", "on").lower() not in ("off", "0", "no", "false")
+
+
+def post_days() -> int:
+    return NOTICE_DAYS + 1 if preview() else NOTICE_DAYS
 SLIDE_DAY = "Wed"
 # (branch, route) -> the day that route absorbs a holiday (Scott, 11/15: routes 5 and 12 work M T W F)
 SLIDE = {("1", "5"): "Thu", ("1", "12"): "Thu"}
@@ -124,11 +135,11 @@ def plan(alliant, holiday: date) -> dict[str, list[tuple[date, date]]]:
 
 
 def holiday_pass(desk, today: date) -> list[str]:
-    """Once a day: a holiday POST_DAYS away gets its notice card in #service-desk (once). Returns what was posted."""
+    """Once a day: a holiday post_days() away gets its notice card in #service-desk (once). Returns what was posted."""
     from .announce import Announcer  # noqa: F401  (the Send / Cancel buttons and the sending live there)
     posted = []
-    for d, name in upcoming(today, POST_DAYS):
-        if (d - today).days != POST_DAYS:
+    for d, name in upcoming(today, post_days()):
+        if (d - today).days != post_days():
             continue
         key = f"holiday/{d.isoformat()}"
         ann = desk.announcer()
