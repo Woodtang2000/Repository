@@ -232,7 +232,7 @@ class Chat:
         if blocked:
             return {"error": blocked}
         pick = lambda k, n=300: re.sub(r"\s+", " ", str(form.get(k) or "")).strip()[:n]
-        cat = catalog.load()[site]
+        cat = catalog.visible(catalog.load()[site], catalog.hidden())  # customer-specific SKUs can't be requested
         lines, problem = catalog.lines(cat, form.get("items"), catalog.pack_sizes())
         if problem:
             return {"error": problem}
@@ -542,7 +542,8 @@ def make_handler(chat: Chat, public_url: str):
                 embed = (q.get("embed") or [""])[0] == "1"  # ?embed=1: shown in an iframe on our WordPress pages
                 cfg = {"api": base, "site": site, "name": c["name"], "logo": f"{base}/logo/{site}.png",
                        "phone": QUOTE_PHONES[site], "home": QUOTE_HOMES[site], "embed": embed,
-                       "catalog": catalog.public(catalog.load()[site], lambda sku: catalog.pic_path(chat.data_dir, sku)),
+                       "catalog": catalog.public(catalog.visible(catalog.load()[site], catalog.hidden()),
+                                                 lambda sku: catalog.pic_path(chat.data_dir, sku)),
                        "picv": catalog.picture_versions(chat.data_dir, catalog.load()[site]),
                        "packs": catalog.pack_sizes()}  # {sku: pack size} from Salesforce: those items step by the pack
                 with open(QUOTE_PAGE) as f:
@@ -1059,8 +1060,8 @@ def keep_pictures(data_dir: str) -> None:
 
 
 def keep_packs() -> None:
-    """Read the catalog's pack sizes from Salesforce at start and every few minutes, so the quote page follows a change
-    made there (catalog.read_packs). A failed read keeps the last good sizes and tries again next time."""
+    """Read the catalog's pack sizes (and which SKUs are customer-specific) from Salesforce at start and every few
+    minutes, so the quote page follows a change made there (catalog.read_packs). A failed read keeps the last good sizes and tries again next time."""
     def run():
         last = ""
         while True:

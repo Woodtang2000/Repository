@@ -134,21 +134,6 @@
       "id": "napkin-purple",
       "name": "Napkins, purple",
       "sku": "1-01-11"
-     },
-     {
-      "id": "napkin-white-bistro-blue",
-      "name": "Napkins, white with blue bistro stripe",
-      "sku": "1-01-14"
-     },
-     {
-      "id": "napkin-white-bistro-black",
-      "name": "Napkins, white with black bistro stripe",
-      "sku": "1-01-12"
-     },
-     {
-      "id": "napkin-grey-bistro-white",
-      "name": "Napkins, grey with white bistro stripe",
-      "sku": "1-01-22"
      }
     ]
    },
@@ -861,9 +846,6 @@
      "napkin-red",
      "napkin-sandalwood",
      "napkin-purple",
-     "napkin-white-bistro-blue",
-     "napkin-white-bistro-black",
-     "napkin-grey-bistro-white",
      "tablecloth-white",
      "tablecloth-black",
      "tablecloth-ivory",

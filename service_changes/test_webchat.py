@@ -372,11 +372,23 @@ def test_quote_quantities_round_up_to_whole_packs(monkeypatch):
     except OSError:
         pass
     assert catalog.pack_sizes() == {"5-01-01": 20, "1-01-03": 100}
+    # a SKU marked Stock Class = Custom (one customer's item) is left off the page and can't be requested
+    recs.append({"ProductCode": "1-02-04", "Pack_Size__c": None, "Stock_Class__c": "Custom"})
+    recs.append({"ProductCode": "5-81-02", "Pack_Size__c": None, "Stock_Class__c": "Custom"})
+    monkeypatch.setattr(catalog.salesforce, "_call", lambda m, url, tok: {"records": recs})
+    monkeypatch.setattr(catalog, "_HIDDEN", set())
+    assert "1-02-04, 5-81-02" in catalog.read_packs() and catalog.hidden() == {"1-02-04", "5-81-02"}
+    shown = catalog.visible(cat, catalog.hidden())
+    assert "5-81-02" not in catalog.skus(shown) and "1-02-04" not in catalog.skus(shown) and "1-02-02" in catalog.skus(shown)
+    assert all("oven-mitt" not in i.get("suggest", []) for i in shown["industries"])
+    assert "oven-mitt" in json.dumps(cat)  # the file itself is unchanged
     chat_posted = []
     chat = webchat.Chat(FakeClaude(), lambda kind, item: chat_posted.append(item), "/tmp")
     assert chat.quote("sw", {"name": "Pat", "business": "Diner", "phone": "907-555-0101",
                              "items": [{"id": "bar-mop", "qty": 35}]}) == {"ok": True}
     assert chat_posted[0]["items"][0]["qty"] == 40
+    assert "catalog" in chat.quote("sw", {"name": "Pat", "business": "Diner", "phone": "907-555-0101",
+                                          "items": [{"id": "oven-mitt", "qty": 2}]})["error"]
 
 
 def test_quote_page_served_for_each_company():

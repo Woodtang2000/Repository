@@ -49,6 +49,9 @@ def public(site_catalog: dict, have_picture) -> dict:
 # within PACK_EVERY seconds. Until the first read (or if Salesforce is down at start) every item steps by 1.
 PACK_EVERY = 300
 _PACKS: dict[str, int] = {}
+# Customer-specific SKUs (Scott 11/18: "Customer specific SKU's shouldn't be on the site"): any catalog SKU whose
+# Salesforce Stock Class is Custom is left off the page and refused in a request, read in the same pass as the packs.
+_HIDDEN: set[str] = set()
 
 
 def pack_sizes() -> dict[str, int]:
@@ -56,28 +59,65 @@ def pack_sizes() -> dict[str, int]:
     return dict(_PACKS)
 
 
+def hidden() -> set[str]:
+    """The catalog SKUs Salesforce marks Stock Class = Custom (one customer's item): never shown on the quote page."""
+    return set(_HIDDEN)
+
+
 def read_packs() -> str:
-    """Read the catalog SKUs' pack sizes from Salesforce into memory. Keeps the last good values if it fails."""
+    """Read the catalog SKUs' pack sizes and Custom stock class from Salesforce into memory. Keeps the last good
+    values if it fails."""
     if not salesforce.configured():
         return "Salesforce isn't connected, so items step by 1"
     wanted = sorted({s for site in ("sw", "tlg") for s in skus(load()[site])})
     token, instance = salesforce._token()
-    q = ("SELECT ProductCode, Pack_Size__c FROM Product2 WHERE IsActive = true AND Pack_Size__c != null AND ProductCode IN ("
+    q = ("SELECT ProductCode, Pack_Size__c, Stock_Class__c FROM Product2 WHERE IsActive = true "
+         "AND (Pack_Size__c != null OR Stock_Class__c = 'Custom') AND ProductCode IN ("
          + ",".join(salesforce._q(s) for s in wanted) + ")")
     recs = salesforce._call("GET", f"{instance}/services/data/{salesforce.API}/query?" + urllib.parse.urlencode({"q": q}),
                             token).get("records") or []
-    packs = {}
+    packs, custom = {}, set()
     for r in recs:
+        if r.get("ProductCode") and r.get("Stock_Class__c") == "Custom":
+            custom.add(r["ProductCode"])
         try:
             n = int(float(r.get("Pack_Size__c") or 0))
         except (TypeError, ValueError):
             continue
         if n > 1 and r.get("ProductCode"):
             packs[r["ProductCode"]] = max(n, packs.get(r["ProductCode"], 0))  # two active Products, one SKU: the bigger pack
-    changed = packs != _PACKS
+    changed = packs != _PACKS or custom != _HIDDEN
     _PACKS.clear()
     _PACKS.update(packs)
-    return f"{len(packs)} catalog items come in packs" + (" (changed)" if changed else "")
+    _HIDDEN.clear()
+    _HIDDEN.update(custom)
+    return (f"{len(packs)} catalog items come in packs" + (f"; hidden as customer-specific: {', '.join(sorted(custom))}" if custom else "")
+            + (" (changed)" if changed else ""))
+
+
+def visible(site_catalog: dict, hide: set[str]) -> dict:
+    """The catalog without customer-specific SKUs: a size or color with a hidden SKU is dropped, and an item with
+    nothing left (or whose own SKU is hidden) is dropped, along with its place in the industries' suggestions."""
+    if not hide:
+        return site_catalog
+    out = json.loads(json.dumps(site_catalog))
+    for g in out["groups"]:
+        keep = []
+        for it in g["items"]:
+            if it.get("options"):
+                it["options"] = [o for o in it["options"] if o.get("sku") not in hide]
+                if not it["options"]:
+                    continue
+            elif it.get("sku") in hide:
+                continue
+            keep.append(it)
+        g["items"] = keep
+    out["groups"] = [g for g in out["groups"] if g["items"]]
+    ids = {it["id"] for g in out["groups"] for it in g["items"]}
+    for ind in out.get("industries", []):
+        if "suggest" in ind:
+            ind["suggest"] = [x for x in ind["suggest"] if x in ids]
+    return out
 
 
 def round_to_pack(qty: int, pack: int) -> int:
