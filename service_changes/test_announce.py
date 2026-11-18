@@ -91,7 +91,7 @@ def test_a_burst_that_bird_refuses_is_retried_and_misses_can_be_resent(tmp_path,
     ann = announce.Announcer(SimpleNamespace(data_dir=str(tmp_path)))
     out = ann.send(a, sleep=waits.append)
     assert out["emails"] == 2 and out["texts"] == 1 and out["missing"] == {"phones": [], "emails": ["down@x.com"]}
-    assert 3.0 in waits and set(sent) == {"+19075551234", "a@x.com", "b@x.com"}  # retried after the wait Bird asked for
+    assert 20.0 in waits and set(sent) == {"+19075551234", "a@x.com", "b@x.com"}  # retried after waiting out part of Bird's minute
     again = ann.send(a, only={"phones": [], "emails": ["b@x.com"]}, sleep=waits.append)
     assert again["emails"] == 1 and sent[-1] == "b@x.com"  # a resend goes only to the ones named
     # a notice sent before misses were kept: the message log says who got it that day

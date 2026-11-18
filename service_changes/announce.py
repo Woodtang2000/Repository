@@ -20,7 +20,8 @@ SEND, CANCEL, RESEND = "announce_send", "announce_cancel", "announce_resend"
 # Bird refuses a burst: the Thanksgiving notice (11/17) sent 10 emails and got "429 Too Many Requests" on the other 165.
 # So each message waits its turn, a 429 is retried after the wait Bird asks for, and whoever still missed it is kept
 # on the notice (missing) for a Resend button. Texts go through Twilio, paced the same way.
-EMAIL_GAP, TEXT_GAP = 0.6, 0.3  # seconds between messages
+EMAIL_GAP, TEXT_GAP = 7.5, 0.3  # seconds between messages. Bird takes 10 emails a minute for the whole account (11/18),
+# shared with Donna's replies and welcome emails: a notice sends 8 a minute and leaves room for them
 RETRIES = 5
 GIVE_UP = 5  # this many emails in a row fail even after retrying: stop, the service is down (Bird 503s, 11/19)
 STOP_LINE = " Reply STOP to opt out."  # on every text we start ourselves (toll-free review, Scott 11/16); not on email
@@ -74,7 +75,10 @@ def _paced(go, kind: str, sleep=time.sleep) -> bool:
                 wait = float(e.headers.get("Retry-After") or 0)
             except (TypeError, ValueError):
                 wait = 0
-            sleep(min(max(wait, 2 ** (attempt + 1)), 60))
+            if e.code == 429:  # Bird counts per minute: wait out a good part of the window, not a few seconds
+                sleep(min(max(wait, 20 * (attempt + 1)), 60))
+            else:
+                sleep(min(max(wait, 2 ** (attempt + 1)), 60))
         except Exception as e:
             if "429" in str(e) and attempt < RETRIES - 1:  # Twilio's client says it in words
                 sleep(2 ** (attempt + 1))
