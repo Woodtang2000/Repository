@@ -294,6 +294,9 @@ def main(data_dir, out_dir, today):
             reason = "inactive in Alliant: Scott to decide (not a route customer)"
         elif not chase_over45:
             reason = "only 2022-2024 items over 45 days: write-off candidates for Scott"
+        elif credit and sum(c["amount"] for c in credit) >= sum(i["balance"] for i in chase) - 0.005:
+            # Open credits cover everything we'd chase: a reminder would ask for money they don't owe.
+            reason = "open credits cover the past-due invoices: Sonja to apply them (or ask Scott)"
         elif not email:
             reason = "no billing email in Alliant: Sonja to call or add one"
 
@@ -311,6 +314,9 @@ def main(data_dir, out_dir, today):
         work.append(row)
         if not delivery and active:
             sonja_fix.append({"company": co, "account": acct, "name": name, "issue": "no delivery day in Alliant"})
+        if reason.startswith("open credits cover"):
+            sonja_fix.append({"company": co, "account": acct, "name": name,
+                              "issue": "open credits cover the past-due invoices: apply them in Alliant, no reminder sent"})
         if reason.startswith("no billing email"):
             sonja_fix.append({"company": co, "account": acct, "name": name,
                               "issue": f"no billing email in Alliant ({money(row['past_due'])} past due)"})
