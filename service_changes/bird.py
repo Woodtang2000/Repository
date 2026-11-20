@@ -76,19 +76,47 @@ BRANDS = {  # brand/README.md: the same logo, navy and gold as every other docum
 
 # A holiday notice gets some holiday flair (Scott, 11/19): a greeting and seasonal art in a band under the logo, in the
 # company's own navy and gold ("make the colors of the emails stay our company colors just add some holiday themed flair").
-# Thanksgiving, Christmas and New Year's also thank them (Scott, 11/19: "thank them for their support and wish them and
-# their families a happy thanksgiving and merry christmas"). Email only, never the texts.
-THEMES = {
-    "Thanksgiving": {"greeting": "Happy Thanksgiving", "art": "🍂 🦃 🍁",
-                     "wish": "Thank you for your business and support this year. From all of us, we wish you and your family a happy Thanksgiving and a merry Christmas!"},
-    "Christmas Day": {"greeting": "Merry Christmas", "art": "🎄 ❄️ 🎁",
-                      "wish": "Thank you for your business and support this year. From all of us, we wish you and your family a merry Christmas and a happy New Year!"},
-    "New Year's Day": {"greeting": "Happy New Year", "art": "✨ 🎉 ✨",
-                       "wish": "Thank you for your business and support. From all of us, we wish you and your family a happy New Year!"},
-    "Memorial Day": {"greeting": "Honoring those who served", "art": "🇺🇸"},
-    "the 4th of July": {"greeting": "Happy 4th of July", "art": "🎆 🇺🇸 🎆"},
-    "Labor Day": {"greeting": "Happy Labor Day", "art": "🇺🇸"},
+# Each also gets a few words for the holiday (Scott, 11/19): Thanksgiving and Christmas thank them for their business and
+# support; New Year's, the 4th of July and Labor Day are fun; Memorial Day is respectful. Email only, never the texts.
+THEMES = {  # each holiday's own words, a different one each year so it never reads like a form letter (Scott, 11/19)
+    "Thanksgiving": {"greeting": "Happy Thanksgiving", "art": "🍂 🦃 🍁", "closing": "Warm wishes,", "wishes": [
+        "Thank you for your business and support this year. From all of us, we wish you and your family a happy "
+        "Thanksgiving!",
+        "We're thankful for customers like you. Thank you for your business and support, and from our whole team, "
+        "happy Thanksgiving to you and your family!",
+        "This time of year we count our blessings, and you're one of them. Thank you for your business and support. "
+        "Happy Thanksgiving from all of us!"]},
+    "Christmas Day": {"greeting": "Merry Christmas", "art": "🎄 ❄️ 🎁", "closing": "Warm wishes,", "wishes": [
+        "Thank you for your business and support this year. From all of us, we wish you and your family a merry "
+        "Christmas!",
+        "From our crew to yours, thank you for a great year together. Wishing you and your family a merry Christmas!",
+        "It's been a pleasure working with you this year. Thank you for your business and support, and merry Christmas "
+        "to you and yours!"]},
+    "New Year's Day": {"greeting": "Happy New Year", "art": "✨ 🎉 ✨", "closing": "Cheers,", "wishes": [
+        "Here's to fresh towels and a fresh start! Thank you for a great year, and happy New Year from all of us!",
+        "New year, same spotless service. Thanks for being with us, and happy New Year!",
+        "We'll be ringing in the new year with a clean slate and clean linens. Thank you for your business, and happy "
+        "New Year!"]},
+    "Memorial Day": {"greeting": "Honoring those who served", "art": "🇺🇸", "closing": "With gratitude,", "wishes": [
+        "Today we remember and honor those who gave their lives serving our country. We hope you have a peaceful "
+        "Memorial Day.",
+        "We're grateful for the men and women who gave everything for our country. Wishing you a meaningful Memorial "
+        "Day."]},
+    "the 4th of July": {"greeting": "Happy 4th of July", "art": "🎆 🇺🇸 🎆", "closing": "Cheers,", "wishes": [
+        "Enjoy the fireworks, the barbecue and a day off from the laundry. Happy 4th of July from all of us!",
+        "Red, white and freshly laundered! Have a safe and happy 4th of July.",
+        "Grill something tasty and leave the laundry to us. Happy Independence Day!"]},
+    "Labor Day": {"greeting": "Happy Labor Day", "art": "🇺🇸 🏕️", "closing": "Cheers,", "wishes": [
+        "You've earned a day off, and so have we. Happy Labor Day!",
+        "Here's to the last long weekend of summer. Enjoy it, and happy Labor Day from all of us!",
+        "Kick your feet up. The work will still be here Tuesday, and so will we. Happy Labor Day!"]},
 }
+
+
+def wish(theme: str, year: int) -> str:
+    """This holiday's words for this year (they rotate, so no two years read the same)."""
+    w = THEMES.get(theme, {}).get("wishes") or []
+    return w[year % len(w)] if w else ""
 
 
 def _banner(theme: str, b: dict) -> str:
@@ -114,8 +142,8 @@ def _html(text: str, company: str = "Snow White Linen", title: str = "", theme: 
     body, _, sig = text.rpartition("\n\nDonna\n")
     if not body:
         body, sig = text, ""
-    body = re.sub(r"\n\n(?:Thank you|Warm wishes),\s*$", "", body)
-    closing = "Warm wishes," if THEMES.get(theme, {}).get("wish") else "Thank you,"  # the wish already thanks them
+    closing = THEMES.get(theme, {}).get("closing", "Thank you,")  # a holiday email's words already thank them
+    body = re.sub(r"\n\n(?:Thank you|Warm wishes|Cheers|With gratitude),\s*$", "", body)
     paras = [p for p in body.split("\n\n") if p.strip()]
 
     def block(p: str) -> str:

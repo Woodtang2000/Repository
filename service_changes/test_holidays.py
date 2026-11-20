@@ -212,6 +212,8 @@ def test_thanksgiving_and_christmas_emails_thank_them_texts_stay_short(tmp_path,
     d.announcer().act({"user": {"id": "UANA"}, "actions": [{"action_id": announce.SEND, "value": "holiday/2027-11-25"}],
                        "container": {"message_ts": "5.5"}})
     emails = [x for x in sent if x[0] == "email"]
-    assert emails and all("Thank you for your business and support this year." in t and "a happy Thanksgiving and a merry "
-                          "Christmas!" in t and "Warm wishes," in t and th == "Thanksgiving" for _, t, th in emails)
+    assert emails and all(bird.wish("Thanksgiving", 2027) in t and "Christmas" not in t and "Warm wishes," in t
+                          and th == "Thanksgiving" for _, t, th in emails)
+    assert "merry Christmas" in bird.wish("Christmas Day", 2026) and "Thanksgiving" not in bird.wish("Christmas Day", 2026)
+    assert len({bird.wish("Thanksgiving", y) for y in (2026, 2027, 2028)}) == 3  # new words each year
     assert all("grateful" not in x[1] for x in sent if x[0] == "text")
