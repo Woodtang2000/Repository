@@ -115,9 +115,11 @@ def notice(name: str, holiday: date, account_moves: list[tuple[date, date]]) -> 
 
 
 def usual_notice(name: str, holiday: date) -> str:
-    """Everyone whose days don't move: we're closed, nothing changes for them."""
-    return (f"We're closed {_day(holiday)} for {name}. Your deliveries that week come on their usual days."
-            f"{_friday(holiday)} Questions? Just reply.")
+    """Everyone whose days don't move: we're closed, which stops move that week (Scott, 11/19: "should also say that the
+    Thursday stops will be delivered on Wednesday"), and theirs don't."""
+    moved = " and ".join(f"{a:%A} deliveries come {_day(b)}" for a, b in sorted(moves(holiday).items()))
+    return (f"We're closed {_day(holiday)} for {name}" + (f", so {moved} this week" if moved else "") + ". "
+            f"Your deliveries come on their usual days.{_friday(holiday)} Questions? Just reply.")
 
 
 def usual_accounts(alliant, holiday: date, moved) -> list[str]:

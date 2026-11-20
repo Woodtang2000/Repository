@@ -150,9 +150,9 @@ def test_every_customer_hears_and_the_alliant_card_email_always_does(tmp_path):
     a = d.announcer()._load()["holiday/2027-11-25"]
     assert {"linked@midas.com", "ap@midas.com", "owner@midas.com", "mon@cafe.com"} <= set(a["emails"])
     assert "+19075557777" not in a["phones"] and "+19075551234" in a["phones"]  # texts only where the day moves
-    assert a["messages"]["1500-1-00001"] == ("We're closed Thursday, November 25 for Thanksgiving. Your deliveries that week "
-                                             "come on their usual days. We're delivering as usual on Friday, November 26. "
-                                             "Questions? Just reply.")
+    assert a["messages"]["1500-1-00001"] == ("We're closed Thursday, November 25 for Thanksgiving, so Thursday deliveries "
+                                             "come Wednesday, November 24 this week. Your deliveries come on their usual "
+                                             "days. We're delivering as usual on Friday, November 26. Questions? Just reply.")
     assert "your Thursday delivery comes Wednesday, November 24 instead. We're delivering as usual on Friday" in \
         a["messages"]["1205-1-00004"]
     assert "1 more hear their days don't change" in d.slack.posts[-1]["text"]
