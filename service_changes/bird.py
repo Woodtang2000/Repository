@@ -74,7 +74,38 @@ BRANDS = {  # brand/README.md: the same logo, navy and gold as every other docum
 }
 
 
-def _html(text: str, company: str = "Snow White Linen", title: str = "") -> str:
+# A holiday notice dresses for its holiday (Scott, 11/19: "they should match the holiday we are notifying for"): a
+# seasonal banner and stripe under the logo. The logo, Donna's card and the navy footer stay the brand's.
+THEMES = {
+    "Thanksgiving": {"greeting": "Happy Thanksgiving", "art": "🍂 🦃 🍁", "bg": "#8a3b12",
+                     "stripe": ["#c0541b", "#e3902b", "#f2b84b", "#7a4a1e"], "tint": "#fbf1e6"},
+    "Christmas Day": {"greeting": "Merry Christmas", "art": "🎄 ❄️ 🎁", "bg": "#1f5e3a",
+                      "stripe": ["#b3202a", "#ffffff", "#1f5e3a", "#c9a227"], "tint": "#f3f8f4"},
+    "New Year's Day": {"greeting": "Happy New Year", "art": "✨ 🎉 ✨", "bg": "#0f2a44",
+                       "stripe": ["#c9a227", "#f4e3a1", "#c9a227", "#0f2a44"], "tint": "#f5f2e6"},
+    "Memorial Day": {"greeting": "Honoring those who served", "art": "🇺🇸", "bg": "#1d3461",
+                     "stripe": ["#b22234", "#ffffff", "#1d3461", "#ffffff"], "tint": "#eef1f7"},
+    "the 4th of July": {"greeting": "Happy 4th of July", "art": "🎆 🇺🇸 🎆", "bg": "#1d3461",
+                        "stripe": ["#b22234", "#ffffff", "#1d3461", "#ffffff"], "tint": "#eef1f7"},
+    "Labor Day": {"greeting": "Happy Labor Day", "art": "🇺🇸", "bg": "#1d3461",
+                  "stripe": ["#b22234", "#ffffff", "#1d3461", "#ffffff"], "tint": "#eef1f7"},
+}
+
+
+def _banner(theme: str) -> str:
+    t = THEMES.get(theme)
+    if not t:
+        return ""
+    import html
+    cells = "".join(f'<td style="height:6px;background:{c};font-size:0;line-height:0">&nbsp;</td>' for c in t["stripe"])
+    return (f'<tr><td style="padding:22px 28px;background:{t["bg"]};color:#ffffff;text-align:center;'
+            f'font:bold 24px/1.3 Georgia,serif">{html.escape(t["greeting"])}'
+            f'<div style="font-size:26px;line-height:1.4;margin-top:6px">{t["art"]}</div></td></tr>'
+            f'<tr><td style="padding:0"><table role="presentation" width="100%" style="border-collapse:collapse"><tr>{cells}'
+            f'</tr></table></td></tr>')
+
+
+def _html(text: str, company: str = "Snow White Linen", title: str = "", theme: str = "") -> str:
     """The plain text as a branded email, like the company's other materials: its logo, a gold rule, a navy heading,
     Donna's sign-off card with her picture, and a navy footer. Tables and inline styles only (what mail apps keep);
     the plain text stays the fallback."""
@@ -118,8 +149,8 @@ def _html(text: str, company: str = "Snow White Linen", title: str = "") -> str:
             f'border-collapse:collapse;font:15px/1.55 Arial,sans-serif;color:#1c2226">'
             f'<tr><td style="padding:20px 28px 14px"><img src="{base}/logo/{b["logo"]}.png" height="44" alt="{html.escape(b["name"])}" '
             f'style="display:block;height:44px;border:0"></td></tr>'
-            f'<tr><td style="height:3px;background:{b["gold"]};font-size:0;line-height:0">&nbsp;</td></tr>'
-            f'<tr><td style="padding:24px 28px 8px">{heading}{content}<p style="margin:0 0 6px">Thank you,</p>{card}</td></tr>'
+            + (_banner(theme) or f'<tr><td style="height:3px;background:{b["gold"]};font-size:0;line-height:0">&nbsp;</td></tr>')
+            + f'<tr><td style="padding:24px 28px 8px">{heading}{content}<p style="margin:0 0 6px">Thank you,</p>{card}</td></tr>'
             f'<tr><td style="padding:16px 28px;background:{b["navy"]};color:#ffffff;font:12px/1.5 Arial,sans-serif">'
             f'<b>{html.escape(b["name"])}</b> · {html.escape(b["addr"])}<br>'
             f'Text us any time: <span style="color:{b["gold"]}">866-TAP-TEXT (866-827-8398)</span> · Office {office_phone(company)}'
@@ -127,7 +158,7 @@ def _html(text: str, company: str = "Snow White Linen", title: str = "") -> str:
 
 
 def send(to: str, subject: str, text: str, in_reply_to: str = "", key: str = "", company: str = "",
-         attachments: list[dict] | None = None, log: bool = True) -> None:
+         attachments: list[dict] | None = None, log: bool = True, theme: str = "") -> None:
     """From Donna (EMAIL_FROM, e.g. donna@mail.snowwhitelinen.com), named for the customer's company; replies go to
     EMAIL_REPLY_TO (service@), which comes back to the desk. The Laundry Group's customers: EMAIL_FROM_TLG and
     EMAIL_REPLY_TO_TLG when set (donna@mail.thelaundrygroup.com, donna@thelaundrygroup.com), else the same as above."""
@@ -138,7 +169,7 @@ def send(to: str, subject: str, text: str, in_reply_to: str = "", key: str = "",
     body = {"from": {"email": sender, "name": f"Donna \u2013 {company}"},
             "to": [to], "subject": subject, "text": text, "category": "transactional",
             "html": _html(text, company, re.sub(r"^(?:Re:\s*)?(?:Snow White Linen|The Laundry Group):\s*", "", subject).strip()
-                          if not subject.lower().startswith("re:") else "")}
+                          if not subject.lower().startswith("re:") else "", theme=theme)}
     if reply_to:
         body["reply_to"] = [reply_to]
     if in_reply_to:

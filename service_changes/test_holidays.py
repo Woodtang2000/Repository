@@ -187,3 +187,14 @@ def test_a_notice_already_sent_is_topped_up_to_everyone_once(tmp_path, monkeypat
     sent.clear()
     announce.top_up(ann, "holiday/2027-11-25", True, said.append)
     assert sent == []  # once
+
+
+def test_a_holiday_notice_is_dressed_for_its_holiday():
+    # Scott, 11/19: "they should match the holiday we are notifying for"
+    from . import bird
+    t = bird._html("Hello,\n\nClosed Thursday.\n\nThank you,\n\nDonna\nSnow White Linen", "Snow White Linen", "Thanksgiving",
+                   theme="Thanksgiving")
+    assert "Happy Thanksgiving" in t and "#8a3b12" in t and "logo/sw.png" in t  # the brand's logo stays
+    assert "Merry Christmas" in bird._html("Hi", theme="Christmas Day")
+    plain = bird._html("Hi")
+    assert "Happy" not in plain and "#f9af10" in plain  # every other email: the usual gold rule

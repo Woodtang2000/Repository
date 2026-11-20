@@ -213,7 +213,7 @@ class Announcer:
             data[key] = {"by": "donna", "who": f"{name} notice", "message": sample, "messages": messages,
                          "subject": f"{name}: your deliveries", "phones": phones, "emails": emails,
                          "accounts": len(messages), "status": "waiting" if (phones or emails) else "nobody",
-                         "at": time.time(), "auto_at": auto_at}
+                         "at": time.time(), "auto_at": auto_at, "theme": name}
             self._save(data)
         text = f"🗓️ *{name}, {holiday:%A %B} {holiday.day}*: " + "; ".join(x for x in (
             (f"{len(per_account)} customers' deliveries move (" + ", ".join(f"{k}: {v}" for k, v in sorted(moved.items()))
@@ -363,7 +363,8 @@ class Announcer:
             company = company_for(acct)
             if _paced(lambda: bird.send(email, f"{company}: {a['subject']}", f"Hello,\n\n{msg(acct)}\n\nThank you,\n\n"
                                         + bird.signature(company), company=company,
-                                        key=f"announce/{a['at']}/{email}", log=False), "email", sleep):
+                                        key=f"announce/{a['at']}/{email}", log=False, theme=a.get("theme", "")),
+                       "email", sleep):
                 out["emails"] += 1
                 streak = 0
             else:
@@ -414,6 +415,7 @@ def top_up(ann: "Announcer", key: str, yes: bool, out=print) -> dict:
     if not yes:
         out("Nothing sent. Add --yes to send them.")
         return {"texts": 0, "emails": 0}
+    a.setdefault("theme", name)  # dressed for the holiday (Scott, 11/19)
     a.setdefault("messages", {})
     for x in accts:
         a["messages"].setdefault(x, messages[x])  # anyone already told keeps what they were told
