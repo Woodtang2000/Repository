@@ -333,3 +333,23 @@ def test_a_customers_company_email_is_never_treated_as_junk(tmp_path):
     assert email_desk.EmailDesk.known_customer(d, "manager105@threebears.store")  # same company domain as the card
     assert not email_desk.EmailDesk.known_customer(d, "sales@vendor.com")
     assert not email_desk.EmailDesk.known_customer(d, "someone@gmail.com")  # free mail is never a company domain
+
+
+def test_billing_emails_go_to_accounting_and_robots_are_ignored(desk):
+    # 11/19: Assets Inc's autopay question was told "I'll take care of your request"; alerts@ipayables.com got a reply
+    ed, slack, sent, inbox, seen = desk
+    inbox.append(mail(1, "ap@assets.org", "Our autopay card stopped going through and invoices show unpaid. Can you help?",
+                      subject="Payment for invoices", name="Kayla"))
+    inbox.append(mail(2, "alerts@ipayables.com", "Your message was received.", subject="Re: Thanksgiving"))
+    n = len(sent)
+    ed.run_once()
+    assert [to for to, _ in sent[n:]] == ["ap@assets.org"] and "accounting team" in sent[-1][1]
+    assert "take care of your request" not in sent[-1][1]
+    assert not [p for p in slack.posts if p["meta"].get("kind") == "email_signup"]  # not a sign-up
+    [card] = [p for p in slack.posts if (p["meta"] or {}).get("accounting")]
+    assert "<@U4KLRNUG5>" in str(card) and "ap@assets.org" in str(card)
+    # a linked customer asking about a balance: accounting too, not a lookup answer
+    inbox.append(mail(3, "jane@acme.com", "How many invoices are past due on our account?"))
+    ed.run_once()
+    assert sent[-1] == ("jane@acme.com", sms.ACCOUNTING)
+    assert not sms.MONEY.search("Bill, please send someone to pull the mats") and sms.MONEY.search("card on file")

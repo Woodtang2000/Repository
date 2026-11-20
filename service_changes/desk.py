@@ -2147,8 +2147,8 @@ class Desk:
             self.post(p["src_channel"], msg, {"kind": "readback", "src_ts": p["src_ts"], "driver_id": p.get("driver_id"),
                                               "msgs": p.get("msgs", [])})
         try:
-            if "Special invoice (S)" not in todo_bar.body(t):  # a special's customer email carries its PDF (specials.py)
-                self.change_email(p, customer)
+            if "Special invoice (S)" not in todo_bar.body(t) and p.get("readback"):  # a special's email carries its PDF
+                self.change_email(p, customer)  # (specials.py); a question card changes nothing (11/19: "Ana took care of it.")
         except Exception as e:  # the email is extra: never hold up the ticket over it
             print(time.strftime("%H:%M"), "change email not sent:", e, flush=True)
         self.slack.chat_update(channel=self.desk_id, ts=t["ts"], text="",

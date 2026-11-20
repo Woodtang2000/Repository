@@ -35,7 +35,8 @@ REMOVE_EMAIL = re.compile(rf"^\s*(?:remove|delete)\s+<?(?:mailto:)?{EMAIL}(?:\|[
 # Our own staff's domains (both companies): mail from them is staff forwarding a customer's email.
 OWN_DOMAINS = tuple("@" + d.strip().lower() for d in os.environ.get("EMAIL_OWN_DOMAIN", "snowwhitelinen.com,thelaundrygroup.com").split(",")
                     if d.strip())
-AUTO = re.compile(r"^(mailer-daemon|postmaster|no-?reply|do-?not-?reply|bounce)", re.I)
+AUTO = re.compile(r"^(mailer-daemon|postmaster|no-?reply|do-?not-?reply|bounce|alerts?@|notifications?@|notify@|"
+                  r"automated@|auto-?confirm@)", re.I)  # 11/18: alerts@ipayables.com's auto-reply got a "who are you"
 AUTO_SUBJECT = re.compile(r"^(automatic reply|auto(matic)?[- ]?reply|out of (the )?office|undeliverable|delivery status|"
                           r"returned mail|read:|accepted:|declined:)", re.I)
 FILTERED = os.environ.get("EMAIL_FILTERED_CHANNEL", "email-filtered")  # where junk mail is listed, for Scott to watch
@@ -392,6 +393,9 @@ class EmailDesk(TextDesk):
             return self.filtered(key, who, thread.get("subject", ""), body, sid, junk.kind)
         if not getattr(self, "_replaying", False):
             TextDesk.log_in(self, key, body)  # a real person: now it goes in #customer-messages
+        from .sms import MONEY
+        if MONEY.search(body):  # payments, invoices, autopay: accounting answers it, not a sign-up (11/19: Assets Inc)
+            return self.to_accounting(key, who or key, body, f"`{key}` (not linked to an account yet)")
         found = identify_customer(self.claude, f"From: {who} <{key}>\n{body}", self.alliant.customers)
         self.state["pending"][key] = {"phone": key, "stage": "waiting", "held": [[body, sid]], "at": time.time(),
                                       "name": found.person_name or who}

@@ -72,6 +72,11 @@ OFFICE_ONLY = re.compile(r"one-time item|credit only uses|what should the invent
 # that phone call take care of the order"): never left without a reply.
 WANTS_ANSWER = re.compile(r"\?|\b(follow(?:ing)?[ -]up|any update|status|did (?:you|that|the|it)|when (?:will|is|are|can)|"
                           r"still (?:coming|waiting|on)|haven'?t heard|is (?:that|it) (?:done|set|coming))\b", re.I)
+# Payments, invoices, autopay, balances: accounting's to answer (11/19: Assets Inc's autopay email was told "I'll take
+# care of your request"). Not "bill" (Bill is a person here) and not "credit" alone (missing-item credits are Scott's/Bill's).
+MONEY = re.compile(r"\b(invoices?|statements?|payments?|paying|paid|pay (?:my|our|the|this|that|it)|auto-?pay|past due|"
+                   r"overdue|balance|billing|billed|card on file|credit card|refund|remittance|W-?9)\b", re.I)
+ACCOUNTING = ("Thanks for reaching out! I've passed this to our accounting team, and they'll get back to you directly.")
 TAPBACK = re.compile(r"^\s*(?:Loved|Liked|Disliked|Laughed at|Emphasized|Questioned|Reacted \S+ to)\s+[“\"]")
 DONE_REACTIONS = {"white_check_mark", "heavy_check_mark", "ballot_box_with_check"}
 PHONE = r"(\+?1?[\s.-]*\(?\d{3}\)?[\s.-]*\d{3}[\s.-]*\d{4})"
@@ -674,6 +679,18 @@ class TextDesk:
             json.dump(self.state, f)
         os.replace(tmp, self.state_path)
 
+    def to_accounting(self, addr: str, name: str, body: str, where: str) -> None:
+        """A billing or payment question: Donna says accounting will get back to them (never "I'll take care of it"),
+        and the card in #service-desk names the accounting person (ACCOUNTING_SLACK_ID, default Sonja)."""
+        self.send(addr, ACCOUNTING)
+        who = " ".join(f"<@{x.strip()}>" for x in os.environ.get("ACCOUNTING_SLACK_ID", "U4KLRNUG5").split(",") if x.strip())
+        reach = addr if "@" in addr else self.masked(addr)
+        self.office("\n".join([f"💵 {who} *For accounting* · {where}: {name} {reach if reach != name else ''} by {self.word}".rstrip(),
+                                f"_{body[:600]}_",
+                                "I told them accounting will get back to them directly. Please reply to them."]),
+                    {"kind": "sms_question", "account": "", "accounting": True}, todo="button")
+        self.log(addr, "billing question: to accounting")
+
     def office(self, text: str, payload: dict, todo: str | None = None) -> None:
         """A message in the office channel. todo: "own" (a ✅ ticket) or "button" puts it in a gold to-do bar (todo.py)."""
         bar = {"text": "", "attachments": attachment(text, button=todo == "button")} if todo else {"text": text}
@@ -753,6 +770,10 @@ class TextDesk:
         acct = parsed.account_number
 
         self.log(phone, f"{parsed.category.value} for {acct or 'no account yet'}")
+        if parsed.category in (Category.not_a_request, Category.lookup) and MONEY.search(body):
+            self.state["convos"].pop(self.key(phone), None)
+            where = f"*{acct}* {self.name(mine, acct)}" if acct else " / ".join(f"*{a}*" for a in accounts)
+            return self.to_accounting(phone, who["name"] or "customer", body, where)
         if parsed.category == Category.not_a_request:
             earlier = self.state["convos"].pop(self.key(phone), None)
             if WANTS_ANSWER.search(body) and not TAPBACK.match(body):  # a question or follow-up: never left unanswered

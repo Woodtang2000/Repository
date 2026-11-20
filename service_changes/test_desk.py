@@ -1173,3 +1173,18 @@ def test_stockroom_screen_checks_go_to_her_alliant_queue():
                  "Donna, in Alliant open the Garment inquiry for 5251819 and read me its service codes"):
         assert desk.SCREEN_TASK.search(text), text
     assert not desk.SCREEN_TASK.search("Donna, what's the stockroom saying about Chili's?")
+
+
+def test_a_driver_question_card_sends_no_change_email(setup, monkeypatch):
+    # 11/19: Anchorage Tank got "a change to your service... Ana took care of it." for a driver's question
+    slack, d = setup
+    emailed = []
+    monkeypatch.setattr(d, "change_email", lambda p, customer: emailed.append(p.get("readback")) or [])
+    for rb in ("", "➕ 50 shop towels added"):
+        t = {"ts": f"9.{len(rb)}", "text": "", "attachments": [{"text": "*2022-1-00000*  ANCHORAGE TANK"}],
+             "metadata": {"event_type": desk.KIND, "event_payload": {
+                 "kind": "ticket", "src_channel": "C123", "src_ts": "1.1", "readback": rb, "account": "2022-1-00000"}}}
+        slack.msgs.setdefault("D1", []).append(t)
+        slack.msgs.setdefault("C123", [])
+        d.send_readback(t, "UANA", [])
+    assert emailed == ["➕ 50 shop towels added"]  # only the real change
