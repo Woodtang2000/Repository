@@ -76,10 +76,15 @@ BRANDS = {  # brand/README.md: the same logo, navy and gold as every other docum
 
 # A holiday notice gets some holiday flair (Scott, 11/19): a greeting and seasonal art in a band under the logo, in the
 # company's own navy and gold ("make the colors of the emails stay our company colors just add some holiday themed flair").
+# Thanksgiving, Christmas and New Year's also thank them (Scott, 11/19: "thank them for their support and wish them and
+# their families a happy thanksgiving and merry christmas"). Email only, never the texts.
 THEMES = {
-    "Thanksgiving": {"greeting": "Happy Thanksgiving", "art": "🍂 🦃 🍁"},
-    "Christmas Day": {"greeting": "Merry Christmas", "art": "🎄 ❄️ 🎁"},
-    "New Year's Day": {"greeting": "Happy New Year", "art": "✨ 🎉 ✨"},
+    "Thanksgiving": {"greeting": "Happy Thanksgiving", "art": "🍂 🦃 🍁",
+                     "wish": "Thank you for your business and support this year. From all of us, we wish you and your family a happy Thanksgiving and a merry Christmas!"},
+    "Christmas Day": {"greeting": "Merry Christmas", "art": "🎄 ❄️ 🎁",
+                      "wish": "Thank you for your business and support this year. From all of us, we wish you and your family a merry Christmas and a happy New Year!"},
+    "New Year's Day": {"greeting": "Happy New Year", "art": "✨ 🎉 ✨",
+                       "wish": "Thank you for your business and support. From all of us, we wish you and your family a happy New Year!"},
     "Memorial Day": {"greeting": "Honoring those who served", "art": "🇺🇸"},
     "the 4th of July": {"greeting": "Happy 4th of July", "art": "🎆 🇺🇸 🎆"},
     "Labor Day": {"greeting": "Happy Labor Day", "art": "🇺🇸"},
@@ -109,7 +114,8 @@ def _html(text: str, company: str = "Snow White Linen", title: str = "", theme: 
     body, _, sig = text.rpartition("\n\nDonna\n")
     if not body:
         body, sig = text, ""
-    body = re.sub(r"\n\nThank you,\s*$", "", body)
+    body = re.sub(r"\n\n(?:Thank you|Warm wishes),\s*$", "", body)
+    closing = "Warm wishes," if THEMES.get(theme, {}).get("wish") else "Thank you,"  # the wish already thanks them
     paras = [p for p in body.split("\n\n") if p.strip()]
 
     def block(p: str) -> str:
@@ -143,7 +149,7 @@ def _html(text: str, company: str = "Snow White Linen", title: str = "", theme: 
             f'<tr><td style="padding:20px 28px 14px"><img src="{base}/logo/{b["logo"]}.png" height="44" alt="{html.escape(b["name"])}" '
             f'style="display:block;height:44px;border:0"></td></tr>'
             + (_banner(theme, b) or f'<tr><td style="height:3px;background:{b["gold"]};font-size:0;line-height:0">&nbsp;</td></tr>')
-            + f'<tr><td style="padding:24px 28px 8px">{heading}{content}<p style="margin:0 0 6px">Thank you,</p>{card}</td></tr>'
+            + f'<tr><td style="padding:24px 28px 8px">{heading}{content}<p style="margin:0 0 6px">{closing}</p>{card}</td></tr>'
             f'<tr><td style="padding:16px 28px;background:{b["navy"]};color:#ffffff;font:12px/1.5 Arial,sans-serif">'
             f'<b>{html.escape(b["name"])}</b> · {html.escape(b["addr"])}<br>'
             f'Text us any time: <span style="color:{b["gold"]}">866-TAP-TEXT (866-827-8398)</span> · Office {office_phone(company)}'

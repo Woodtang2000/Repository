@@ -361,7 +361,9 @@ class Announcer:
                 out["missing"]["emails"].append(email)
                 continue
             company = company_for(acct)
-            if _paced(lambda: bird.send(email, f"{company}: {a['subject']}", f"Hello,\n\n{msg(acct)}\n\nThank you,\n\n"
+            wish = bird.THEMES.get(a.get("theme", ""), {}).get("wish")
+            if _paced(lambda: bird.send(email, f"{company}: {a['subject']}", f"Hello,\n\n{msg(acct)}\n\n"
+                                        + (f"{wish}\n\nWarm wishes,\n\n" if wish else "Thank you,\n\n")
                                         + bird.signature(company), company=company,
                                         key=f"announce/{a['at']}/{email}", log=False, theme=a.get("theme", "")),
                        "email", sleep):

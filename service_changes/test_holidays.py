@@ -199,3 +199,19 @@ def test_a_holiday_notice_is_dressed_for_its_holiday():
     assert "Merry Christmas" in bird._html("Hi", theme="Christmas Day")
     plain = bird._html("Hi")
     assert "Happy" not in plain and "#f9af10" in plain  # every other email: the usual gold rule
+
+
+def test_thanksgiving_and_christmas_emails_thank_them_texts_stay_short(tmp_path, monkeypatch):
+    d = _everyone(tmp_path)
+    holidays.holiday_pass(d, date(2027, 11, 17))
+    sent = []
+    import service_changes.sms as sms
+    from . import bird
+    monkeypatch.setattr(sms, "send_sms", lambda to, body, **kw: sent.append(("text", body)))
+    monkeypatch.setattr(bird, "send", lambda to, subject, text, **kw: sent.append(("email", text, kw.get("theme"))))
+    d.announcer().act({"user": {"id": "UANA"}, "actions": [{"action_id": announce.SEND, "value": "holiday/2027-11-25"}],
+                       "container": {"message_ts": "5.5"}})
+    emails = [x for x in sent if x[0] == "email"]
+    assert emails and all("Thank you for your business and support this year." in t and "a happy Thanksgiving and a merry "
+                          "Christmas!" in t and "Warm wishes," in t and th == "Thanksgiving" for _, t, th in emails)
+    assert all("grateful" not in x[1] for x in sent if x[0] == "text")
