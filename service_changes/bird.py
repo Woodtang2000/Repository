@@ -74,35 +74,28 @@ BRANDS = {  # brand/README.md: the same logo, navy and gold as every other docum
 }
 
 
-# A holiday notice dresses for its holiday (Scott, 11/19: "they should match the holiday we are notifying for"): a
-# seasonal banner and stripe under the logo. The logo, Donna's card and the navy footer stay the brand's.
+# A holiday notice gets some holiday flair (Scott, 11/19): a greeting and seasonal art in a band under the logo, in the
+# company's own navy and gold ("make the colors of the emails stay our company colors just add some holiday themed flair").
 THEMES = {
-    "Thanksgiving": {"greeting": "Happy Thanksgiving", "art": "🍂 🦃 🍁", "bg": "#8a3b12",
-                     "stripe": ["#c0541b", "#e3902b", "#f2b84b", "#7a4a1e"], "tint": "#fbf1e6"},
-    "Christmas Day": {"greeting": "Merry Christmas", "art": "🎄 ❄️ 🎁", "bg": "#1f5e3a",
-                      "stripe": ["#b3202a", "#ffffff", "#1f5e3a", "#c9a227"], "tint": "#f3f8f4"},
-    "New Year's Day": {"greeting": "Happy New Year", "art": "✨ 🎉 ✨", "bg": "#0f2a44",
-                       "stripe": ["#c9a227", "#f4e3a1", "#c9a227", "#0f2a44"], "tint": "#f5f2e6"},
-    "Memorial Day": {"greeting": "Honoring those who served", "art": "🇺🇸", "bg": "#1d3461",
-                     "stripe": ["#b22234", "#ffffff", "#1d3461", "#ffffff"], "tint": "#eef1f7"},
-    "the 4th of July": {"greeting": "Happy 4th of July", "art": "🎆 🇺🇸 🎆", "bg": "#1d3461",
-                        "stripe": ["#b22234", "#ffffff", "#1d3461", "#ffffff"], "tint": "#eef1f7"},
-    "Labor Day": {"greeting": "Happy Labor Day", "art": "🇺🇸", "bg": "#1d3461",
-                  "stripe": ["#b22234", "#ffffff", "#1d3461", "#ffffff"], "tint": "#eef1f7"},
+    "Thanksgiving": {"greeting": "Happy Thanksgiving", "art": "🍂 🦃 🍁"},
+    "Christmas Day": {"greeting": "Merry Christmas", "art": "🎄 ❄️ 🎁"},
+    "New Year's Day": {"greeting": "Happy New Year", "art": "✨ 🎉 ✨"},
+    "Memorial Day": {"greeting": "Honoring those who served", "art": "🇺🇸"},
+    "the 4th of July": {"greeting": "Happy 4th of July", "art": "🎆 🇺🇸 🎆"},
+    "Labor Day": {"greeting": "Happy Labor Day", "art": "🇺🇸"},
 }
 
 
-def _banner(theme: str) -> str:
+def _banner(theme: str, b: dict) -> str:
     t = THEMES.get(theme)
     if not t:
         return ""
     import html
-    cells = "".join(f'<td style="height:6px;background:{c};font-size:0;line-height:0">&nbsp;</td>' for c in t["stripe"])
-    return (f'<tr><td style="padding:22px 28px;background:{t["bg"]};color:#ffffff;text-align:center;'
+    return (f'<tr><td style="height:3px;background:{b["gold"]};font-size:0;line-height:0">&nbsp;</td></tr>'
+            f'<tr><td style="padding:20px 28px;background:{b["navy"]};color:#ffffff;text-align:center;'
             f'font:bold 24px/1.3 Georgia,serif">{html.escape(t["greeting"])}'
             f'<div style="font-size:26px;line-height:1.4;margin-top:6px">{t["art"]}</div></td></tr>'
-            f'<tr><td style="padding:0"><table role="presentation" width="100%" style="border-collapse:collapse"><tr>{cells}'
-            f'</tr></table></td></tr>')
+            f'<tr><td style="height:3px;background:{b["gold"]};font-size:0;line-height:0">&nbsp;</td></tr>')
 
 
 def _html(text: str, company: str = "Snow White Linen", title: str = "", theme: str = "") -> str:
@@ -149,7 +142,7 @@ def _html(text: str, company: str = "Snow White Linen", title: str = "", theme: 
             f'border-collapse:collapse;font:15px/1.55 Arial,sans-serif;color:#1c2226">'
             f'<tr><td style="padding:20px 28px 14px"><img src="{base}/logo/{b["logo"]}.png" height="44" alt="{html.escape(b["name"])}" '
             f'style="display:block;height:44px;border:0"></td></tr>'
-            + (_banner(theme) or f'<tr><td style="height:3px;background:{b["gold"]};font-size:0;line-height:0">&nbsp;</td></tr>')
+            + (_banner(theme, b) or f'<tr><td style="height:3px;background:{b["gold"]};font-size:0;line-height:0">&nbsp;</td></tr>')
             + f'<tr><td style="padding:24px 28px 8px">{heading}{content}<p style="margin:0 0 6px">Thank you,</p>{card}</td></tr>'
             f'<tr><td style="padding:16px 28px;background:{b["navy"]};color:#ffffff;font:12px/1.5 Arial,sans-serif">'
             f'<b>{html.escape(b["name"])}</b> · {html.escape(b["addr"])}<br>'

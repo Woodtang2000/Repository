@@ -194,7 +194,8 @@ def test_a_holiday_notice_is_dressed_for_its_holiday():
     from . import bird
     t = bird._html("Hello,\n\nClosed Thursday.\n\nThank you,\n\nDonna\nSnow White Linen", "Snow White Linen", "Thanksgiving",
                    theme="Thanksgiving")
-    assert "Happy Thanksgiving" in t and "#8a3b12" in t and "logo/sw.png" in t  # the brand's logo stays
+    assert "Happy Thanksgiving" in t and "🦃" in t and "logo/sw.png" in t  # the brand's logo stays
+    assert "#003746" in t and "#f9af10" in t and "#8a3b12" not in t  # the company's navy and gold, no seasonal colors
     assert "Merry Christmas" in bird._html("Hi", theme="Christmas Day")
     plain = bird._html("Hi")
     assert "Happy" not in plain and "#f9af10" in plain  # every other email: the usual gold rule
