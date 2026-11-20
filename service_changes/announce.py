@@ -120,8 +120,9 @@ class Announcer:
             accts.append(r.get("account", ""))
         return list(dict.fromkeys(x for x in accts if x))
 
-    def contacts(self, accounts: list[str]) -> tuple[dict[str, str], dict[str, str]]:
-        """{phone: account} for approved texting numbers, {email: account} from the Alliant cards; each once."""
+    def contacts(self, accounts: list[str], card: bool = False) -> tuple[dict[str, str], dict[str, str]]:
+        """{phone: account} for approved texting numbers, {email: account} from the Alliant cards; each once.
+        card=True (holiday notices, Scott 11/19): the Alliant card's email always, as well as the linked contacts."""
         from .sms import load_phones
         mine = set(accounts)
         phones = {}
@@ -130,9 +131,10 @@ class Announcer:
             if hit:
                 phones["+1" + num] = hit
         emails = {}
-        from .context import customer_emails  # a sub-account (Costco, Safeway): its own linked contacts only
+        from .context import card_emails, customer_emails  # a sub-account (Costco, Safeway): its linked contacts only
         for acct in accounts:
-            for e in customer_emails(self.desk.alliant, acct, self.desk.data_dir):
+            extra = card_emails(self.desk.alliant, acct) if card else []
+            for e in customer_emails(self.desk.alliant, acct, self.desk.data_dir) + extra:
                 if e not in emails:
                     emails[e] = acct
         return phones, emails
@@ -180,23 +182,29 @@ class Announcer:
                                          unfurl_links=False)
         return True
 
-    def propose_holiday(self, key: str, name: str, holiday, per_account: dict, still_open: list | None = None) -> bool:
+    def propose_holiday(self, key: str, name: str, holiday, per_account: dict, still_open: list | None = None,
+                        usual: list | None = None) -> bool:
         """A holiday notice (holidays.py): each customer whose delivery moves is told their own day. It goes out on its
         own at 9 AM a week before (auto_pass); the card in #service-desk is the preview, with Send now / Cancel."""
         from collections import Counter
-        from .holidays import NOTICE_DAYS, SEND_HOUR, notice, open_notice, preview
+        from .holidays import NOTICE_DAYS, SEND_HOUR, notice, open_notice, preview, usual_notice
         from datetime import datetime, timedelta
         from .context import ALASKA
         still_open = [a for a in (still_open or []) if a not in per_account]
         messages = {acct: notice(name, holiday, m) for acct, m in per_account.items()}
         messages.update({acct: open_notice(name, holiday) for acct in still_open})
-        phones, emails = self.contacts(list(messages))
+        usual = [a for a in (usual or []) if a not in messages]
+        texted = list(messages)  # texts only to those whose day moves (and TLG); everyone gets the email
+        messages.update({acct: usual_notice(name, holiday) for acct in usual})
+        phones, _ = self.contacts(texted)
+        _, emails = self.contacts(list(messages), card=True)
         moved = Counter(f"{a:%a} → {b:%a %-m/%-d}" for m in per_account.values() for a, b in m)
         send_by = holiday - timedelta(days=NOTICE_DAYS)
         auto_at = datetime(send_by.year, send_by.month, send_by.day, SEND_HOUR, tzinfo=ALASKA).timestamp()
         if not preview():
             auto_at = min(auto_at, time.time())  # no preview: the card is posted at send time and it goes now
-        examples = [messages[a] for a in (next(iter(per_account), None), next(iter(still_open), None)) if a]
+        examples = [messages[a] for a in (next(iter(per_account), None), next(iter(still_open), None),
+                                          next(iter(usual), None)) if a]
         sample = examples[0]
         with self.lock:
             data = self._load()
@@ -210,7 +218,8 @@ class Announcer:
         text = f"🗓️ *{name}, {holiday:%A %B} {holiday.day}*: " + "; ".join(x for x in (
             (f"{len(per_account)} customers' deliveries move (" + ", ".join(f"{k}: {v}" for k, v in sorted(moved.items()))
              + ")") if per_account else "",
-            f"{len(still_open)} Laundry Group customers hear we're open as usual" if still_open else "") if x) + ".\n"
+            f"{len(still_open)} Laundry Group customers hear we're open as usual" if still_open else "",
+            f"{len(usual)} more hear their days don't change" if usual else "") if x) + ".\n"
         if not (phones or emails):
             self.desk.slack.chat_postMessage(channel=self.desk.desk_id, unfurl_links=False,
                                              text=text + "None of them has a texting number or email on file, so I have "
@@ -380,18 +389,72 @@ def delivered_on(data_dir: str, days: list[str]) -> set[str]:
     return {k.split("|", 1)[1] for k in threads if "|" in k and k.split("|", 1)[0] in days}
 
 
+def top_up(ann: "Announcer", key: str, yes: bool, out=print) -> dict:
+    """A sent holiday notice, widened to today's rules: every customer, every Alliant card email. Sends only to the
+    texts and emails it hasn't gone to yet; customers already told keep their message."""
+    from datetime import date
+    from .holidays import all_notices, holidays
+    data = ann._load()
+    a = data.get(key)
+    if not key.startswith("holiday/") or not a or a.get("status") != "sent":
+        raise SystemExit(f"No sent holiday notice {key}.")
+    day = date.fromisoformat(key.split("/", 1)[1])
+    name = next((n for d, n in holidays(day.year) if d == day), a.get("who", "").replace(" notice", ""))
+    messages, texted = all_notices(ann.desk.alliant, name, day)
+    phones, _ = ann.contacts([x for x in messages if x in texted])
+    _, emails = ann.contacts(list(messages), card=True)
+    new = {"phones": {p: x for p, x in phones.items() if p not in a["phones"]},
+           "emails": {e: x for e, x in emails.items() if e not in a["emails"]}}
+    accts = {x for d in new.values() for x in d.values()}
+    out(f"{key}: {len(new['phones'])} more texts and {len(new['emails'])} more emails ({len(accts)} accounts) "
+        f"beyond the {len(a['phones'])} texts and {len(a['emails'])} emails already sent.")
+    sample = next((messages[x] for x in accts if x not in texted), None) or next((messages[x] for x in accts), None)
+    if sample:
+        out("For example: " + sample)
+    if not yes:
+        out("Nothing sent. Add --yes to send them.")
+        return {"texts": 0, "emails": 0}
+    a.setdefault("messages", {})
+    for x in accts:
+        a["messages"].setdefault(x, messages[x])  # anyone already told keeps what they were told
+    a["phones"].update(new["phones"])
+    a["emails"].update(new["emails"])
+    data[key] = a
+    ann._save(data)
+    sent = ann.send(a, only={"phones": list(new["phones"]), "emails": list(new["emails"])})
+    still = sent.pop("missing")
+    total = a.get("sent") or {}
+    a.update(sent={"texts": total.get("texts", 0) + sent["texts"], "emails": total.get("emails", 0) + sent["emails"],
+                   "failed": len(still["phones"]) + len(still["emails"])}, missing=still)
+    data = ann._load()
+    data[key] = a
+    ann._save(data)
+    out(f"Sent: {sent['texts']} texts, {sent['emails']} emails. Didn't go through: "
+        f"{len(still['phones'])} texts, {len(still['emails'])} emails (--resend {key} --yes tries them again).")
+    return sent
+
+
 def main() -> None:
     """python -m service_changes.announce --data service_changes/data --resend holiday/2026-11-26 [--yes]
-    Resends a sent notice to whoever didn't get it. Without --yes it only lists them."""
+    Resends a sent notice to whoever didn't get it. Without --yes it only lists them.
+    --top-up holiday/2026-11-26: a holiday notice sent before 11/19 reaches every customer now (each Alliant card email,
+    and an email to those whose days don't change), only the ones it hasn't reached yet."""
     import argparse
     from datetime import datetime, timedelta
     from types import SimpleNamespace
     from .context import ALASKA
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", default="service_changes/data")
-    ap.add_argument("--resend", required=True, help="the notice's key, e.g. holiday/2026-11-26")
+    ap.add_argument("--resend", help="the notice's key, e.g. holiday/2026-11-26")
+    ap.add_argument("--top-up", dest="top_up", help="a holiday notice's key: send to every customer it hasn't reached")
     ap.add_argument("--yes", action="store_true", help="send (otherwise only list who would get it)")
     args = ap.parse_args()
+    if args.top_up:
+        from .context import Alliant
+        return top_up(Announcer(SimpleNamespace(data_dir=args.data, alliant=Alliant.from_dir(args.data))), args.top_up,
+                      args.yes)
+    if not args.resend:
+        raise SystemExit("Give --resend KEY or --top-up KEY.")
     ann = Announcer(SimpleNamespace(data_dir=args.data))
     data = ann._load()
     a = data.get(args.resend)

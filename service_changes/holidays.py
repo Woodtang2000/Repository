@@ -10,6 +10,10 @@ customers get a week ahead.
 - The Laundry Group (branch 2) works six days a week and doesn't close for holidays (Scott, 11/15): its stops never
   move, and its customers are told, in the same notice, that we're open as always (peace of mind).
 - A holiday on a weekend moves nothing (Scott, 11/15), and Snow White customers get no notice for it.
+- Every customer hears (Scott, 11/19: "Every customer should see the email. It is good customer service even if it
+  doesn't affect them"): those whose day moves get their new day by text and email; everyone else gets an email that
+  their days don't change. Each account's Alliant card email is always included, with its linked contacts. A Thursday
+  holiday (Thanksgiving) also says we're delivering as usual on Friday.
 - A week before (NOTICE_DAYS), at 9 AM, the notice goes out on its own (Scott, 11/18: "Holiday notices should just go
   out"): every customer whose delivery moves, by text and email, each told their own day.
 - The day before that, Donna posts a preview in #service-desk with Send now / Cancel (HOLIDAY_PREVIEW, default on).
@@ -99,10 +103,39 @@ def schedule_text(today: date, branch: str = "1", route: str = "", days: int = 6
     return out
 
 
+def _friday(holiday: date) -> str:
+    """Thanksgiving (any Thursday holiday): Friday's stops don't move, and customers like to hear it (Scott, 11/19)."""
+    return f" We're delivering as usual on {_day(holiday + timedelta(days=1))}." if holiday.weekday() == 3 else ""
+
+
 def notice(name: str, holiday: date, account_moves: list[tuple[date, date]]) -> str:
     """What one customer reads: their own day or days."""
     moved = " and ".join(f"your {a:%A} delivery comes {_day(b)}" for a, b in sorted(account_moves))
-    return f"We're closed {_day(holiday)} for {name}, so {moved} instead. Questions? Just reply."
+    return f"We're closed {_day(holiday)} for {name}, so {moved} instead.{_friday(holiday)} Questions? Just reply."
+
+
+def usual_notice(name: str, holiday: date) -> str:
+    """Everyone whose days don't move: we're closed, nothing changes for them."""
+    return (f"We're closed {_day(holiday)} for {name}. Your deliveries that week come on their usual days."
+            f"{_friday(holiday)} Questions? Just reply.")
+
+
+def usual_accounts(alliant, holiday: date, moved) -> list[str]:
+    """Snow White customers with a route stop whose day doesn't move (none for a weekend holiday: no notice then)."""
+    if holiday.weekday() >= 5:
+        return []
+    return list(dict.fromkeys(r["account"] for r in getattr(alliant, "stops", [])
+                              if r.get("account") and r["account"] not in moved and not open_on_holidays(r.get("branch", "1"))))
+
+
+def all_notices(alliant, name: str, holiday: date) -> tuple[dict[str, str], set[str]]:
+    """{account: its message} for every customer, and the accounts that also get a text (their day moves, or TLG)."""
+    per_account = plan(alliant, holiday)
+    still_open = [a for a in open_accounts(alliant, holiday) if a not in per_account]
+    messages = {acct: notice(name, holiday, m) for acct, m in per_account.items()}
+    messages.update({acct: open_notice(name, holiday) for acct in still_open})
+    messages.update({acct: usual_notice(name, holiday) for acct in usual_accounts(alliant, holiday, messages)})
+    return messages, set(per_account) | set(still_open)
 
 
 def open_notice(name: str, holiday: date) -> str:
@@ -146,7 +179,8 @@ def holiday_pass(desk, today: date) -> list[str]:
         if key in ann._load():
             continue
         per_account, still_open = plan(desk.alliant, d), open_accounts(desk.alliant, d)
-        if (per_account or still_open) and ann.propose_holiday(key, name, d, per_account, still_open):
+        usual = usual_accounts(desk.alliant, d, set(per_account) | set(still_open))
+        if (per_account or still_open) and ann.propose_holiday(key, name, d, per_account, still_open, usual):
             posted.append(key)
     return posted
 

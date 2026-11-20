@@ -130,3 +130,60 @@ def test_without_the_preview_the_card_is_posted_at_send_time_and_goes_now(tmp_pa
     monkeypatch.setattr(bird, "send", lambda to, subject, text, **kw: None)
     import time as _t
     assert d.announcer().auto_pass(_t.time() + 1) == ["holiday/2027-11-25"]
+
+
+def _everyone(tmp_path):
+    d = desk(tmp_path)
+    d.alliant.stops.append({"branch": "1", "route": "7", "day": "Mon", "account": "1500-1-00001"})
+    d.alliant.cards["1500-1-00001"] = {"email": "mon@cafe.com"}
+    (tmp_path / "customer_phones.csv").write_text((tmp_path / "customer_phones.csv").read_text()
+                                                  + "(907) 555-7777,1500-1-00001,Monday Cafe\n")
+    (tmp_path / "customer_emails.csv").write_text("email,accounts,name\nlinked@midas.com,1205-1-00004,Store manager\n")
+    d.announcer = lambda a=announce.Announcer(d): a
+    return d
+
+
+def test_every_customer_hears_and_the_alliant_card_email_always_does(tmp_path):
+    # Scott, 11/19: "always include the Alliant card email too... Every customer should see the email"
+    d = _everyone(tmp_path)
+    assert holidays.holiday_pass(d, date(2027, 11, 17)) == ["holiday/2027-11-25"]
+    a = d.announcer()._load()["holiday/2027-11-25"]
+    assert {"linked@midas.com", "ap@midas.com", "owner@midas.com", "mon@cafe.com"} <= set(a["emails"])
+    assert "+19075557777" not in a["phones"] and "+19075551234" in a["phones"]  # texts only where the day moves
+    assert a["messages"]["1500-1-00001"] == ("We're closed Thursday, November 25 for Thanksgiving. Your deliveries that week "
+                                             "come on their usual days. We're delivering as usual on Friday, November 26. "
+                                             "Questions? Just reply.")
+    assert "your Thursday delivery comes Wednesday, November 24 instead. We're delivering as usual on Friday" in \
+        a["messages"]["1205-1-00004"]
+    assert "1 more hear their days don't change" in d.slack.posts[-1]["text"]
+    assert "delivering as usual" not in holidays.usual_notice("Christmas Day", date(2026, 12, 25))  # Thursday holidays only
+    assert holidays.usual_accounts(d.alliant, date(2027, 7, 4), set()) == []  # a weekend: no notice
+
+
+def test_a_notice_already_sent_is_topped_up_to_everyone_once(tmp_path, monkeypatch):
+    d = _everyone(tmp_path)
+    ann = d.announcer()
+    data = {"holiday/2027-11-25": {"status": "sent", "who": "Thanksgiving notice", "message": "old", "subject": "Thanksgiving",
+                                   "messages": {"1205-1-00004": "old Midas"}, "phones": {"+19075551234": "1205-1-00004"},
+                                   "emails": {"linked@midas.com": "1205-1-00004"}, "at": 1.0, "sent": {"texts": 1, "emails": 1}}}
+    ann._save(data)
+    sent = []
+    import service_changes.sms as sms
+    from . import bird
+    monkeypatch.setattr(sms, "send_sms", lambda to, body, **kw: sent.append(to))
+    monkeypatch.setattr(bird, "send", lambda to, subject, text, **kw: sent.append((to, text)))
+    monkeypatch.setattr(announce, "EMAIL_GAP", 0)
+    said = []
+    assert announce.top_up(ann, "holiday/2027-11-25", False, said.append) == {"texts": 0, "emails": 0} and not sent
+    assert "1 more texts and 4 more emails" in said[0]  # the TLG hospital's text; Midas' 2 card emails, Costco's, Monday's
+    announce.top_up(ann, "holiday/2027-11-25", True, said.append)
+    to = {x[0] for x in sent if isinstance(x, tuple)}
+    assert to == {"ap@midas.com", "owner@midas.com", "deli@costco.com", "mon@cafe.com"}
+    assert "linked@midas.com" not in to  # already told
+    mails = [x for x in sent if isinstance(x, tuple)]
+    midas = [t for e, t in mails if e == "ap@midas.com"][0]
+    assert "old Midas" in midas  # they keep what Midas was told
+    assert "usual days" in [t for e, t in mails if e == "mon@cafe.com"][0]
+    sent.clear()
+    announce.top_up(ann, "holiday/2027-11-25", True, said.append)
+    assert sent == []  # once

@@ -117,6 +117,13 @@ def customer_emails(alliant, account: str, data_dir: str | None = None) -> list[
     linked = [e for e, r in load_emails(path).items() if account in r["accounts"]]
     if linked or sub_account(account):
         return linked
+    return card_emails(alliant, account)
+
+
+def card_emails(alliant, account: str) -> list[str]:
+    """The email address(es) on the account's Alliant card (who pays the bills). Never a sub-account's billing company."""
+    if sub_account(account):
+        return []
     card = (getattr(alliant, "cards", {}) or {}).get(account, {})
     return list(dict.fromkeys(e.strip().lower() for e in re.split(r"[;,\s]+", card.get("email") or "")
                               if re.fullmatch(r"[^@\s]+@[^@\s]+\.\w+", e.strip())))
