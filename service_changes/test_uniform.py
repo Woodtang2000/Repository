@@ -240,3 +240,23 @@ def test_a_request_donna_could_not_enter_can_be_sent_back(u, monkeypatch):
     d.jobs().result(again["id"], "entered", "1 garment got BR")
     assert d.uniform().load()["requests"][ref]["status"] == "entered"
     assert d.uniform().retry_failed("U2") == []
+
+
+def test_the_laundry_groups_repairs_are_barcode_only(u, monkeypatch):
+    # Scott, 11/20: TLG garments are pooled (barcodes for wash counts, not assigned to wearers): skip the wearer name
+    slack, d = u
+    tlg = {**ROW, "barcode": "000005550001", "cust_code": "7000-2-00001", "wearer": "9", "item": "SCRUB TOP CEIL"}
+    d.alliant.by_barcode[tlg["barcode"]] = tlg
+    d.alliant.customers.append(SimpleNamespace(account="7000-2-00001", name="ANTHC", route="4", service_days=["Mon"]))
+    d.alliant.wearers["7000-2-00001"] = [SimpleNamespace(employee="9", first="Pool", last="Rack", name="Pool Rack")]
+    out = uniform.lookup(d.alliant, "5550001")
+    assert out["found"] and out["wearer"] == "" and out["pooled"] and out["barcode"] == "000005550001"
+    assert uniform.unsign(out["garment_ref"])["w"] == ""
+    r = d.uniform().new({"source": "qr", "brand": "TLG", "garments": [{"garment_ref": out["garment_ref"], "problem": "fit_big"}]})
+    assert r["suggested"] == {"code": "SZ", "scope": "garment"}  # too big: this garment, not "the wearer"
+    rec = d.uniform().load()["requests"][r["ref"]]
+    card = "\n".join(d.uniform().lines(rec))
+    assert "barcode 000005550001" in card and "Pool Rack" not in card and rec["wearers"] == []
+    assert "Whole wearer" not in json.dumps(d.uniform().buttons(rec))
+    assert "no wearers" in d.uniform().act(tap("uniform_scope", r["ref"], scope="wearer"))
+    assert uniform.lookup(d.alliant, "000004729628")["wearer"] == "Mike Example"  # Snow White unchanged

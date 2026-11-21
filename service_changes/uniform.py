@@ -7,6 +7,8 @@ an approved Alliant service code, and the loop is closed with the customer. Spec
 - Donna suggests the code and scope, posts a card in #uniform-requests (wearer names on the card, Scott 11/14; never on the public page), the office approves
   with one tap, and her Alliant workstation enters the code (kind "service_code"). Then she watches Alliant until the
   plant clears the code and tells the requester, the driver and the customer.
+- The Laundry Group (Scott, 11/20): its garments are pooled, tracked by barcode for wash counts and not assigned to
+  wearers, so its repairs are barcode only: no wearer name on the page or the card, never a "whole wearer" scope.
 - UNIFORM_TEST (on until Scott switches it off): cards go to #uniform-requests-test, nothing is entered in Alliant and
   every text or email goes to Scott instead of the customer.
 """
@@ -99,6 +101,12 @@ def unsign(ref: str) -> dict | None:
         return None
 
 
+def pooled(account: str) -> bool:
+    """The Laundry Group's garments: pooled, barcode only, no wearers (Scott, 11/20)."""
+    from .context import company_for
+    return bool(account) and company_for(account) == "The Laundry Group"
+
+
 def nice(name: str) -> str:
     """Alliant's capitals, readable on a phone: "SHIRT MIMIX LS SHIRT NAVY" -> "Shirt Mimix LS Shirt Navy",
     "THREE BEARS BIG LAKE C STORE #27" -> "Three Bears Big Lake C Store #27". Short codes (LS, FR, XL, AK) stay capitals."""
@@ -129,6 +137,10 @@ def lookup(alliant, barcode: str) -> dict:
         return {"found": False}
     item, size = describe(row)
     acct = row.get("cust_code", "")
+    if pooled(acct):  # TLG: barcode only, no wearer (Scott, 11/20)
+        return {"found": True, "garment": item, "size": size, "wearer": "", "barcode": row.get("barcode") or b,
+                "pooled": True, "account": acct,
+                "garment_ref": sign({"b": row.get("barcode") or b, "a": acct, "w": "", "s": row.get("sku", "")})}
     w = next((w for w in getattr(alliant, "wearers", {}).get(acct, []) if w.employee == row.get("wearer")), None)
     # the wearer's name is printed on the garment's own tag (Scott, 11/14), so the page may show it to confirm
     return {"found": True, "garment": item, "size": size, "wearer": nice(w.name) if w else "", "account": acct,
@@ -237,6 +249,8 @@ class Uniform:
         garments of one wearer now, suggests the whole wearer; "garments look old" is an account audit."""
         problem = (garments[0].get("problem") if garments else "other") or "other"
         code, scope, _ = PROBLEMS.get(problem, PROBLEMS["other"])
+        if pooled(account):  # TLG: no wearers, so "too big" is this garment, and nothing groups by wearer
+            return code, "customer" if scope == "customer" else "garment", ""
         if scope != "garment":
             return code, scope, ""
         wearers = [w for w in (g.get("_wearer") for g in garments) if w]
@@ -263,6 +277,10 @@ class Uniform:
                              "_wearer": (row or {}).get("wearer") or ref.get("w", ""),
                              "_account": (row or {}).get("cust_code") or ref.get("a", "")})
         account = str(body.get("account") or next((g["_account"] for g in garments if g["_account"]), "") or "")
+        if pooled(account):  # TLG: barcode only, never a wearer (Scott, 11/20)
+            for g in garments:
+                g["_wearer"] = ""
+            body = {**body, "wearers": [], "scope": "customer" if body.get("scope") == "customer" else None}
         with self.lock:
             data = self.load()
             data["seq"] = int(data.get("seq", 1000)) + 1
@@ -307,7 +325,8 @@ class Uniform:
         out = [f"🧵 *{rec['ref']}{' · TEST' if test_mode() else ''} · {self.acct_name(rec['account'])}*"]
         for g in rec["garments"]:
             what = " ".join(x for x in (g["item"] or "Garment", g["size"]) if x)
-            who = self.wearer_name(rec["account"], g.get("_wearer", ""))
+            who = (f"barcode {g['barcode']}" if g.get("barcode") else "") if pooled(rec["account"]) \
+                else self.wearer_name(rec["account"], g.get("_wearer", ""))
             out.append(f"{what}" + (f" · {who}" if who else "") + f" · *{PROBLEMS[g['problem']][2].capitalize()}*"
                        + (f" · _{g['note']}_" if g["note"] else ""))
         if rec["scope"] == "wearer" and rec.get("wearers") and not any(g.get("_wearer") for g in rec["garments"]):
@@ -334,7 +353,8 @@ class Uniform:
                 "options": [{"text": {"type": "plain_text", "text": f"{c} {d}"[:75]}, "value": v(code=c)} for c, d in CODES.items()]},
                {"type": "static_select", "action_id": "uniform_scope", "placeholder": {"type": "plain_text", "text": "Scope…"},
                 "options": [{"text": {"type": "plain_text", "text": t}, "value": v(scope=s)} for s, t in
-                            (("garment", "This garment"), ("wearer", "Whole wearer"), ("customer", "Whole account"))]},
+                            (("garment", "This garment"), ("wearer", "Whole wearer"), ("customer", "Whole account"))
+                            if not (s == "wearer" and pooled(rec["account"]))]},  # TLG: no wearers
                {"type": "button", "action_id": "uniform_reject", "value": v(),
                 "text": {"type": "plain_text", "text": "Reject"}}]
         return {"type": "actions", "block_id": "uniform", "elements": els}
@@ -413,6 +433,8 @@ class Uniform:
             self.card(rec)
             return f"{ref} code {value['code']}"
         if aid == "uniform_scope":
+            if value.get("scope") == "wearer" and pooled((self.load()["requests"].get(ref) or {}).get("account", "")):
+                return f"{ref}: The Laundry Group's garments have no wearers"
             rec = self.update(ref, scope=value["scope"])
             self.card(rec)
             return f"{ref} scope {value['scope']}"
