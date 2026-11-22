@@ -74,7 +74,7 @@ def test_live_it_queues_the_count_station_job_and_reports_under_the_card(inv, mo
     monkeypatch.setenv("INVENTORY_TEST", "off")
     out = d.inventory().new({"account": "1003-1-00002", "who": "Kirk", "barcodes": ["4729628", "4729629"]})
     [job] = d.jobs().load()["jobs"].values()
-    assert job["kind"] == "inventory" and "Count Station: scan type V (INVENTORY)" in job["ticket"]
+    assert job["kind"] == "inventory" and "user name DONNA" in job["ticket"] and "count type V (INVENTORY), lot day:" in job["ticket"]
     assert "- 000004729628" in job["ticket"] and "- 000004729629" in job["ticket"] and "9999999" not in job["ticket"]
     job["status"] = "working"
     data = d.jobs().load()
