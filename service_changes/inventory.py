@@ -1,5 +1,5 @@
 """Garment inventory scans (Scott, 11/22): an employee scans a customer's garments with a phone, and Donna enters each
-barcode at Alliant's Count Station with the status scan "Inventory". It changes nothing about a garment (no wash count,
+barcode at Alliant's Count Station with scan type V (INVENTORY). It changes nothing about a garment (no wash count,
 no service dates): it only records that the garment was seen. Employees only, no approval (Scott: "simpler than that").
 
 - Employees: chat.snowwhitelinen.com/inventory/<INVENTORY_KEY>/ (TLG: chat.thelaundrygroup.com/...): pick any account,
@@ -241,7 +241,7 @@ class Inventory:
         return "\n".join([
             f"INVENTORY SCAN {rec['ref']} from the inventory page (by {rec['who']}). Follow your rules section \"Inventory scans\".",
             f"Account: {self.name(rec['account'])}",
-            f"Count Station: status scan \"Inventory\", day: {FULL.get(rec['day'], rec['day'])}.",
+            f"Count Station: scan type V (INVENTORY), day: {FULL.get(rec['day'], rec['day'])}.",
             f"Barcodes ({len(rec['enter'])}), one at a time, Enter after each:"] + [f"- {b}" for b in rec["enter"]] + [
             "A warning (not in service, a pull code, a service code, or anything else): continue past it and note the barcode "
             "and what it said. Change nothing else. Report entered with how many went in and the list of warnings."])

@@ -193,15 +193,15 @@ An `inventory` job comes from the employees' inventory page (Scott, 11/22): some
 each barcode gets the status scan **Inventory** at the **Count Station**. It changes nothing about a garment (no wash
 count, no service dates); it only records that the garment was seen.
 
-- Open the **Count Station**. Set the status scan to **Inventory** and select the **day** the job gives (the account's
-  delivery day). Check both before the first barcode.
+- Open the **Count Station**. In the **type** selection pick scan type **V** (INVENTORY; Scott, 11/22), and select the
+  **day** the job gives (the account's delivery day). Check both before the first barcode: never any other type.
 - In the box where a scanner would enter a barcode, type the first barcode from the job and press **Enter**. Then the
   next one, and so on to the end of the list. One barcode at a time, exactly as written.
 - A warning (the garment is not in service, has a pull code, has a service code, or anything else): **continue past it**
   the way the screen offers, and write down the barcode and what the warning said. Never change the garment to get
   past a warning, and never answer a question that would change it (a pull, a code, a status other than Inventory):
   if continuing would change anything, skip that barcode and note it.
-- If the Count Station won't take the account or the day, or Inventory isn't a status you can pick: `needs_person`
+- If the Count Station won't take the account or the day, or type V (INVENTORY) isn't there to pick: `needs_person`
   with what you saw, and how many barcodes went in before it stopped.
 - Report `entered` with how many barcodes went in and one line per warning: `barcode: what Alliant said`.
 
