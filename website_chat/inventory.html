@@ -57,23 +57,32 @@
   .done .big { font-size: 44px; }
   .hidden { display: none !important; }
   .err { color: var(--bad); font-size: 14px; margin-top: 8px; }
+  html.embed header { display: none; }
+  html.embed body { background: #fff; }
+  .customer .staff-only, .staff .customer-only { display: none !important; }
 </style>
 </head>
 <body>
 <header><img id="logo" alt=""><b>Garment inventory</b></header>
 <main>
   <section class="card" id="step-who">
-    <h2>1. Who's scanning, and for which customer?</h2>
+    <h2 class="staff-only">1. Who's scanning, and for which customer?</h2>
+    <h2 class="customer-only">Count your garments</h2>
+    <p class="customer-only muted" style="margin-top:-4px">Scan the barcode label on each garment you have on hand. It
+      doesn't change anything about your garments; it just tells us which ones you have, so we can help keep your
+      count right.</p>
     <label for="who">Your name</label>
     <input id="who" autocomplete="name" placeholder="First and last name">
-    <label for="q">Customer</label>
-    <input id="q" placeholder="Account number or name" autocomplete="off" inputmode="search">
-    <div class="results" id="results"></div>
+    <div class="staff-only">
+      <label for="q">Customer</label>
+      <input id="q" placeholder="Account number or name" autocomplete="off" inputmode="search">
+      <div class="results" id="results"></div>
+    </div>
     <div class="picked hidden" id="picked"></div>
   </section>
 
   <section class="card hidden" id="step-scan">
-    <h2>2. Scan each garment</h2>
+    <h2><span class="staff-only">2. </span>Scan each garment</h2>
     <div id="video-wrap"><video id="video" playsinline muted></video><div class="aim"></div><div id="flash"></div></div>
     <div class="row" style="margin-top:10px">
       <button class="gold" id="cam" style="flex:1">📷 Start camera</button>
@@ -98,6 +107,7 @@
 <script>
 const CFG = __CONFIG__;
 document.documentElement.classList.toggle("tlg", CFG.site === "tlg");
+document.body.classList.add(CFG.staff ? "staff" : "customer");
 document.getElementById("logo").src = CFG.logo;
 document.getElementById("logo").alt = CFG.name;
 const $ = id => document.getElementById(id);
@@ -152,6 +162,21 @@ function pick(a) {
   scans = store.get("inv-scans-" + a.account) || [];  // a refresh never loses what was scanned
   render();
 }
+// A customer: no search. The first garment we know names their account; after that, others' garments aren't counted.
+const KEY = () => CFG.staff ? (account && "inv-scans-" + account.account) : "inv-scans-public";
+if (!CFG.staff) {
+  const saved = store.get("inv-public") || {};
+  account = saved.account || null; scans = saved.scans || [];
+  $("step-scan").classList.remove("hidden");
+  showMine();
+}
+function showMine() {
+  if (CFG.staff || !account) { $("picked").classList.add("hidden"); return; }
+  $("picked").classList.remove("hidden");
+  $("picked").innerHTML = "Counting for <b></b> · <a href='#' id='restart'>start over</a>";
+  $("picked").querySelector("b").textContent = account.name || "your account";
+  $("restart").onclick = e => { e.preventDefault(); account = null; scans = []; save(); showMine(); render(); };
+}
 
 function render() {
   $("n").textContent = scans.length;
@@ -166,10 +191,15 @@ function render() {
     li.querySelector("button").onclick = () => { scans = scans.filter(x => x.barcode !== s.barcode); save(); render(); };
     $("list").appendChild(li);
   });
-  $("send").disabled = !account || !scans.length || busy;
-  $("send").textContent = scans.length ? `Send ${scans.length} to Donna` : "Send to Donna";
+  const good = CFG.staff ? scans.length : scans.filter(s => !s.cls || s.cls === "warn").length;
+  $("send").disabled = !account || !good || busy;
+  $("send").textContent = CFG.staff ? (scans.length ? `Send ${scans.length} to Donna` : "Send to Donna")
+                                    : (good ? `Send ${good} garments` : "Send");
 }
-function save() { if (account) store.set("inv-scans-" + account.account, scans); }
+function save() {
+  if (!CFG.staff) store.set("inv-public", { account, scans });
+  else if (account) store.set("inv-scans-" + account.account, scans);
+}
 
 function beep(good) {
   try {
@@ -190,7 +220,15 @@ async function add(raw) {
   const s = { barcode: b };
   scans.push(s); save(); render(); beep(true);
   try {
-    const g = await api("garment", { barcode: b, account: account.account });
+    const g = await api("garment", { barcode: b, account: account ? account.account : "" });
+    if (!CFG.staff) {
+      if (g.found && g.here) {
+        if (!account) { account = { account: g.account, name: g.name }; showMine(); }
+        s.barcode = g.barcode; s.what = [g.garment, g.size].filter(Boolean).join(" ");
+      } else if (g.found) { s.what = "Not on your account"; s.cls = "bad"; s.note = "It won't be counted"; beep(false); }
+      else { s.what = "We don't have this one in service"; s.cls = "bad"; s.note = "It won't be counted. Our office can help."; beep(false); }
+      save(); render(); return;
+    }
     if (g.found) {
       s.barcode = g.barcode;
       s.what = [g.garment, g.size].filter(Boolean).join(" ") + (g.wearer ? ` · ${g.wearer}` : "");
@@ -233,21 +271,30 @@ $("send").onclick = async () => {
   if (!$("who").value.trim()) { err("Put your name in first."); $("who").focus(); return; }
   busy = true; render(); err("");
   try {
+    const send = CFG.staff ? scans : scans.filter(s => !s.cls || s.cls === "warn");
     const out = await api("submit", { account: account.account, who: $("who").value.trim(),
-                                      barcodes: scans.map(s => s.barcode) });
+                                      barcodes: send.map(s => s.barcode) });
     if (!out.ok) throw new Error(out.error || "Didn't go through.");
     stopCam();
-    store.set("inv-scans-" + account.account, []);
-    $("done-title").textContent = `${out.ref} sent`;
-    $("done-text").textContent = `${out.on_account} of the ${out.in_service} garments in service on this account were scanned`
-      + (out.missing ? `; ${out.missing} weren't. The office will see which.` : ". That's all of them!")
-      + ` Donna enters them in Alliant` + (out.day ? ` (${out.day})` : "") + ".";
+    scans = []; save();
+    if (CFG.staff) {
+      $("done-title").textContent = `${out.ref} sent`;
+      $("done-text").textContent = `${out.on_account} of the ${out.in_service} garments in service on this account were scanned`
+        + (out.missing ? `; ${out.missing} weren't. The office will see which.` : ". That's all of them!")
+        + ` Donna enters them in Alliant` + (out.day ? ` (${out.day})` : "") + ".";
+    } else {
+      $("done-title").textContent = "Thank you!";
+      $("done-text").textContent = `We got your count of ${out.on_account} garments (${out.ref}). We'll update your account, `
+        + `usually within a business day; then your garments-in-service report shows what you have on hand. `
+        + `Questions? Call us at ${CFG.phone} or reply to any of our emails.`;
+    }
     ["step-who", "step-scan"].forEach(id => $(id).classList.add("hidden"));
     $("step-done").classList.remove("hidden"); $("bar").classList.add("hidden");
   } catch (e) { err(e.message); }
   busy = false; render();
 };
-$("again").onclick = () => location.reload();
+$("again").onclick = () => { if (!CFG.staff) store.set("inv-public", {}); location.reload(); };
+if (!CFG.staff) $("again").textContent = "Start a new count";
 </script>
 </body>
 </html>

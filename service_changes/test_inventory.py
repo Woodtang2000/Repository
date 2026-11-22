@@ -90,3 +90,23 @@ def test_nothing_without_an_account_or_barcodes(inv):
     slack, d = inv
     assert not d.inventory().new({"account": "nope", "barcodes": ["4729628"]})["ok"]
     assert not d.inventory().new({"account": "1003-1-00002", "barcodes": []})["ok"]
+
+
+def test_a_customer_sees_only_their_own_garments_and_no_names(inv):
+    # Scott, 11/22: customers can count their own garments; they only ever see their own account
+    slack, d = inv
+    first = inventory.lookup(d.alliant, "4729628", "", public=True)
+    assert first["here"] and first["name"] == "Bob's Service's" and first["garment"] == "Coverall Navy"
+    assert "wearer" not in first and "code" not in first
+    mine = inventory.lookup(d.alliant, "4729629", "1003-1-00002", public=True)
+    assert mine["here"] and "name" not in mine and "code" not in mine
+    other = inventory.lookup(d.alliant, "9999999", "1003-1-00002", public=True)
+    assert other == {"found": True, "barcode": "9999999", "here": False}  # nothing about someone else's garment
+    # the account is the one their garments belong to, whatever the page claims
+    out = d.inventory().new({"account": "2000-1-00001", "who": "Sue", "barcodes": ["4729628", "4729629", "9999999"]},
+                            public=True)
+    assert out["ok"] and out["on_account"] == 2 and "account" not in out
+    rec = d.inventory().load()["scans"][out["ref"]]
+    assert rec["account"] == "1003-1-00002" and rec["who"] == "Sue (customer)" and "000009999999" not in rec["enter"]
+    assert "Sue (customer)" in slack.msgs["CSTOCK"][-1]["text"]
+    assert not d.inventory().new({"barcodes": ["12345678"]}, public=True)["ok"]

@@ -2,8 +2,12 @@
 barcode at Alliant's Count Station with the status scan "Inventory". It changes nothing about a garment (no wash count,
 no service dates): it only records that the garment was seen. Employees only, no approval (Scott: "simpler than that").
 
-- The page: chat.snowwhitelinen.com/inventory/<INVENTORY_KEY>/ (TLG: chat.thelaundrygroup.com/...), employees only,
-  with the key in the link. Pick the account, scan, send.
+- Employees: chat.snowwhitelinen.com/inventory/<INVENTORY_KEY>/ (TLG: chat.thelaundrygroup.com/...): pick any account,
+  scan, send.
+- Customers (Scott, 11/22: "I want customers to be able to use it. It really can't screw anything up"): the public page
+  chat.snowwhitelinen.com/inventory (on the websites at /inventory). No account search: the garments they scan decide
+  the account, and a garment from another account is only "not on your account", nothing about it. They see the
+  garment and size (on the tag in their hands), never a wearer name, a code or another customer.
 - Donna posts a card in #stockroom: how many were scanned, against how many Alliant has in service on that account,
   and which in-service garments weren't scanned; then her workstation enters them (kind "inventory"; rules
   "Inventory scans") and reports any warnings (out of service, a pull code or a service code) under the card.
@@ -77,8 +81,9 @@ def in_service(alliant, account: str) -> list[dict]:
     return [row for (acct, _), rows in getattr(alliant, "in_service", {}).items() if acct == account for row in rows]
 
 
-def lookup(alliant, barcode: str, account: str = "") -> dict:
-    """One scan, for the page: what it is, and whether it's on the account being counted. Employees only."""
+def lookup(alliant, barcode: str, account: str = "", public: bool = False) -> dict:
+    """One scan, for the page: what it is, and whether it's on the account being counted. public (a customer): the
+    first scan names their account; after that only their own garments say anything."""
     b = _bc(barcode)
     if not BARCODE.fullmatch(b):
         return {"found": False, "barcode": b, "why": "not a garment barcode"}
@@ -87,6 +92,12 @@ def lookup(alliant, barcode: str, account: str = "") -> dict:
         return {"found": False, "barcode": b, "why": "not in service in Alliant's last file"}
     item, size = describe(row)
     acct = row.get("cust_code", "")
+    if public:
+        if account and acct != account:
+            return {"found": True, "barcode": b, "here": False}  # someone else's garment: nothing about it
+        c = next((c for c in alliant.customers if c.account == acct), None)
+        return {"found": True, "barcode": row.get("barcode") or b, "garment": item, "size": size, "here": True,
+                "account": acct, **({"name": nice(c.name) if c else ""} if not account else {})}
     w = None if pooled(acct) else next((w for w in alliant.wearers.get(acct, []) if w.employee == row.get("wearer")), None)
     return {"found": True, "barcode": row.get("barcode") or b, "garment": item, "size": size,
             "wearer": nice(w.name) if w else "", "account": acct, "here": not account or acct == account,
@@ -121,16 +132,26 @@ class Inventory:
         c = next((c for c in self.desk.alliant.customers if c.account == account), None)
         return f"{account} {nice(c.name)}" if c else account
 
-    def new(self, body: dict) -> dict:
-        """The page's scans: {account, barcodes, who}. Card in #stockroom, then the Alliant job (unless test mode)."""
+    def new(self, body: dict, public: bool = False) -> dict:
+        """The page's scans: {account, barcodes, who}. Card in #stockroom, then the Alliant job (unless test mode).
+        public (a customer): the account is the one most of their garments belong to, whatever the page says, and only
+        that account's garments are entered."""
         alliant = self.desk.alliant
         account = str(body.get("account") or "").strip()
+        if public:
+            from collections import Counter
+            owners = Counter((alliant.garment(_bc(b)) or {}).get("cust_code", "") for b in (body.get("barcodes") or [])[:MAX_SCANS])
+            owners.pop("", None)
+            account = owners.most_common(1)[0][0] if owners else ""
+            if not account:
+                return {"ok": False, "error": "None of those barcodes are garments we have in service. Check with our office."}
         if not any(c.account == account for c in alliant.customers):
             return {"ok": False, "error": "Pick the account first."}
         scanned = list(dict.fromkeys(b for b in (_bc(x) for x in (body.get("barcodes") or [])[:MAX_SCANS]) if b))
         if not scanned:
             return {"ok": False, "error": "No barcodes scanned."}
-        who = str(body.get("who") or "").strip()[:60] or "an employee"
+        who = (str(body.get("who") or "").strip()[:60] or ("a customer" if public else "an employee")) + \
+            (" (customer)" if public else "")
         here, elsewhere, unknown = [], [], []
         for b in scanned:
             row = alliant.garment(b)
@@ -140,6 +161,10 @@ class Inventory:
                 here.append(row.get("barcode") or b)
             else:
                 elsewhere.append((row.get("barcode") or b, row.get("cust_code", "")))
+        if public:  # a customer (or a bot): only garments we have in service on their account, never a guess
+            unknown = []
+            if not here:
+                return {"ok": False, "error": "None of those barcodes are garments we have in service. Check with our office."}
         seen = {b.zfill(12) for b in scanned}
         missing = [r for r in in_service(alliant, account) if (r.get("barcode") or "").zfill(12) not in seen]
         day = count_day(alliant, account)
@@ -161,7 +186,8 @@ class Inventory:
             jid = self.desk.jobs().custom_job("inventory", self.job_text(rec), {"account": account, "request_id": ref})
             self.update(ref, job=jid)
         return {"ok": True, "ref": ref, "scanned": len(scanned), "on_account": len(here), "elsewhere": len(elsewhere),
-                "unknown": len(unknown), "in_service": rec["in_service"], "missing": len(rec["missing"]), "day": FULL.get(day, "")}
+                "unknown": len(unknown), "in_service": rec["in_service"], "missing": len(rec["missing"]), "day": FULL.get(day, ""),
+                **({} if public else {"account": account})}
 
     def update(self, ref: str, **kw) -> dict:
         with self.lock:
@@ -186,7 +212,10 @@ class Inventory:
                 lines.append(f"• {r.get('barcode', '')} · {' '.join(x for x in (item, size) if x)}" + (f" · {nice(w)}" if w else ""))
             if len(missing) > 40:
                 lines.append(f"…and {len(missing) - 40} more.")
-        if rec["elsewhere"]:
+        if rec["elsewhere"] and "(customer)" in rec["who"]:
+            lines.append(f"Scanned but on another account, not entered ({len(rec['elsewhere'])}): "
+                         + ", ".join(f"{b} ({a})" for b, a in rec["elsewhere"][:15]))
+        elif rec["elsewhere"]:
             lines.append(f"On another account, not entered ({len(rec['elsewhere'])}): "
                          + ", ".join(f"{b} ({a})" for b, a in rec["elsewhere"][:15]))
         if rec["unknown"]:

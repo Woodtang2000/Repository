@@ -489,7 +489,7 @@ def test_the_inventory_page_is_only_at_its_link(monkeypatch):
         assert "Garment inventory" in page and '"site": "tlg"' in page and f"/api/inventory/{'k' * 20}" in page
         assert 'apple-mobile-web-app-title" content="Inventory"' in page and "__CONFIG__" not in page
         assert get("/inventory-icon.png").read()[:8] == b"\x89PNG\r\n\x1a\n"
-        for bad in (f"/inventory/{'x' * 20}/", "/inventory/"):
+        for bad in (f"/inventory/{'x' * 20}/",):
             try:
                 get(bad)
                 assert False, bad
@@ -504,3 +504,80 @@ def test_the_inventory_page_is_only_at_its_link(monkeypatch):
             assert e.code == 401
     finally:
         srv.shutdown()
+
+
+def test_the_customers_inventory_page_is_public_but_never_searches_accounts(monkeypatch):
+    import threading
+    import urllib.error
+    import urllib.request
+    from . import webchat
+    monkeypatch.setenv("INVENTORY_KEY", "k" * 20)
+    srv = webchat.ThreadingHTTPServer(("127.0.0.1", 0), webchat.make_handler(
+        webchat.Chat(FakeClaude(), lambda *a: None, "/tmp"), "https://chat.snowwhitelinen.com"))
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        r = urllib.request.urlopen(urllib.request.Request(f"http://127.0.0.1:{srv.server_port}/inventory?embed=1",
+                                                          headers={"Host": "chat.snowwhitelinen.com"}))
+        page = r.read().decode()
+        assert '"staff": false' in page and "/api/inventory/public" in page and 'class="embed"' in page
+        assert "k" * 20 not in page  # the employees' key never reaches a customer
+        assert "frame-ancestors" in r.headers.get("Content-Security-Policy", "")
+        req = urllib.request.Request(f"http://127.0.0.1:{srv.server_port}/api/inventory/public/accounts", data=b"{}",
+                                     method="POST")
+        try:
+            urllib.request.urlopen(req)
+            assert False
+        except urllib.error.HTTPError as e:
+            assert e.code == 403
+    finally:
+        srv.shutdown()
+
+
+def test_random_numbers_on_the_customers_page_get_stopped(monkeypatch):
+    # Scott, 11/22: "some random person or bot goes on the page and starts entering random numbers"
+    import json as _json
+    import threading
+    import urllib.error
+    import urllib.request
+    from http.server import BaseHTTPRequestHandler
+    from . import webchat
+    seen = []
+
+    class FakeDesk(BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass
+
+        def do_POST(self):
+            body = _json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            seen.append(body)
+            out = {"found": False} if body.get("barcode") != "1" else {"found": True, "here": True, "account": "A"}
+            data = _json.dumps(out).encode()
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+    desk = webchat.ThreadingHTTPServer(("127.0.0.1", 0), FakeDesk)
+    threading.Thread(target=desk.serve_forever, daemon=True).start()
+    monkeypatch.setenv("DESK_VOICE_PORT", str(desk.server_port))
+    webchat.INVENTORY_HITS.clear()
+    srv = webchat.ThreadingHTTPServer(("127.0.0.1", 0), webchat.make_handler(
+        webchat.Chat(FakeClaude(), lambda *a: None, "/tmp"), "https://chat.snowwhitelinen.com"))
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+
+    def scan(b, ip="9.9.9.9"):
+        req = urllib.request.Request(f"http://127.0.0.1:{srv.server_port}/api/inventory/public/garment", method="POST",
+                                     data=_json.dumps({"barcode": b, "public": False}).encode(),
+                                     headers={"X-Forwarded-For": ip, "Content-Type": "application/json"})
+        try:
+            return urllib.request.urlopen(req).status
+        except urllib.error.HTTPError as e:
+            return e.code
+    try:
+        assert scan("1") == 200 and seen[-1]["public"] is True  # the page can't claim to be staff
+        assert all(scan(str(1000 + i)) == 200 for i in range(webchat.INVENTORY_MISSES))
+        assert scan("1") == 429  # 20 misses: stopped for the hour, even for a real one
+        assert scan("1", ip="8.8.8.8") == 200  # someone else isn't
+    finally:
+        srv.shutdown()
+        desk.shutdown()
+        webchat.INVENTORY_HITS.clear()

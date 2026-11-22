@@ -418,6 +418,11 @@ DONNA_PAGE = os.path.join(REPO, "website_chat", "donna.html")  # Scott's talk-to
 LOGOS = {"sw": os.path.join(REPO, "brand", "logo_sw.png"), "tlg": os.path.join(REPO, "brand", "logo_tlg.png")}
 
 
+INVENTORY_HITS: dict = {}  # (what, ip) -> recent times: the customers' inventory page's limits
+# Someone (or a bot) typing random numbers on the customers' page (Scott, 11/22): an address that misses 20 times, or
+# finds garments on more than 2 accounts, in an hour is stopped for that hour; and the page sends at most 40 counts a
+# day in all. Real customers scan labels: they almost never miss, and they're one account.
+INVENTORY_MISSES, INVENTORY_ACCOUNTS, INVENTORY_DAY_MAX = 20, 2, int(os.environ.get("INVENTORY_PUBLIC_DAY_MAX", "40"))
 TLG_HOST = os.environ.get("WEBCHAT_TLG_HOST", "chat.thelaundrygroup.com")  # TLG's own chat address, same server
 
 
@@ -539,19 +544,26 @@ def make_handler(chat: Chat, public_url: str):
                 with open(path, "rb") as f:
                     data = f.read()
                 return self._send(200, data, catalog.image_type(data) or "application/octet-stream", cache=86400)
-            m = re.fullmatch(r"/inventory/([\w-]{16,})/?", u.path)
-            if m:  # the employees' inventory scanner (inventory.py), at a link only employees are given
+            m = re.fullmatch(r"/inventory(?:/([\w-]{16,}))?/?", u.path)
+            if m:  # the inventory scanner (inventory.py): customers at /inventory, employees at the link with the key
                 import hmac
                 key = os.environ.get("INVENTORY_KEY", "")
-                if len(key) < 16 or not hmac.compare_digest(m.group(1).encode(), key.encode()):
+                staff = bool(m.group(1))
+                if staff and (len(key) < 16 or not hmac.compare_digest(m.group(1).encode(), key.encode())):
                     return self._send(404, b"not found", "text/plain")
                 site = "tlg" if base.endswith(TLG_HOST) else "sw"
-                cfg = {"api": f"{base}/api/inventory/{key}", "site": site, "name": COMPANIES[site]["name"],
-                       "logo": f"{base}/logo/{site}.png", "icon": f"{base}/inventory-icon.png"}
+                embed = (q.get("embed") or [""])[0] == "1"  # ?embed=1: inside the websites' /inventory page
+                cfg = {"api": f"{base}/api/inventory/{key if staff else 'public'}", "site": site, "staff": staff,
+                       "name": COMPANIES[site]["name"], "logo": f"{base}/logo/{site}.png", "embed": embed,
+                       "phone": QUOTE_PHONES[site]}
                 with open(INVENTORY_PAGE) as f:
                     page = f.read().replace("__CONFIG__", json.dumps(cfg).replace("</", "<\\/")).replace(
                         "__TITLE__", COMPANIES[site]["name"])
-                return self._send(200, page.encode(), "text/html; charset=utf-8", headers={"Referrer-Policy": "no-referrer"})
+                if embed:
+                    page = page.replace('<html lang="en">', '<html lang="en" class="embed">', 1)
+                return self._send(200, page.encode(), "text/html; charset=utf-8",
+                                  headers={"Referrer-Policy": "no-referrer",
+                                           "Content-Security-Policy": "frame-ancestors " + " ".join(QUOTE_FRAME_ANCESTORS)})
             if u.path == "/quote":  # the quote builder; the sites' "Get a Quote" buttons link here
                 default = "tlg" if base.endswith(TLG_HOST) else "sw"
                 site = (q.get("site") or [default])[0] if (q.get("site") or [default])[0] in COMPANIES else default
@@ -595,7 +607,7 @@ def make_handler(chat: Chat, public_url: str):
             m = re.fullmatch(r"/api/phone/(tool|[\w-]{24,})/(\w+)", path.split("?")[0])
             if m:  # the phone lines' ElevenLabs agents (phone_agent.py): the key in the path, a ?key= or X-Donna-Key
                 return self._phone_tool(m.group(2), m.group(1) if m.group(1) != "tool" else "")
-            m = re.fullmatch(r"/api/inventory/([\w-]{16,})/(accounts|garment|submit)", path)
+            m = re.fullmatch(r"/api/inventory/(public|[\w-]{16,})/(accounts|garment|submit)", path)
             if m:  # the employees' inventory page: the key in its link, then the desk
                 return self._inventory(m.group(1), m.group(2))
             m = re.fullmatch(r"/api/uniform/(garment|match|request|stops)", path)
@@ -695,18 +707,58 @@ def make_handler(chat: Chat, public_url: str):
             self.wfile.write(out)
 
         def _inventory(self, given: str, what: str):
+            """Employees (the key in their link): any account. Customers ("public"): their own garments only (the desk
+            decides that), a few hundred scans and a few sends an hour from one address."""
             import hmac
             key = os.environ.get("INVENTORY_KEY", "")
-            if len(key) < 16 or not hmac.compare_digest(given.encode(), key.encode()):
+            public = given == "public"
+            if not public and (len(key) < 16 or not hmac.compare_digest(given.encode(), key.encode())):
                 time.sleep(1)
                 return self._send(401, b'{"error":"bad link"}', "application/json")
+            if public:
+                if what == "accounts":
+                    return self._send(403, b'{"error":"staff only"}', "application/json")
+                ip = (self.headers.get("X-Forwarded-For") or self.client_address[0]).split(",")[0].strip()
+                now = time.time()
+                recent = lambda k, secs=3600: [x for x in INVENTORY_HITS.get(k, []) if now - (x[0] if isinstance(x, tuple) else x) < secs]
+                for k in list(INVENTORY_HITS):
+                    INVENTORY_HITS[k] = recent(k, 86400 if k[0] == "day" else 3600)
+                misses, accts = recent(("miss", ip)), {a for _, a in recent(("acct", ip))}
+                too_many = len(recent((what, ip))) >= {"garment": 600, "submit": 6}[what]
+                if too_many or len(misses) >= INVENTORY_MISSES or len(accts) > INVENTORY_ACCOUNTS \
+                        or (what == "submit" and len(recent(("day", "all"), 86400)) >= INVENTORY_DAY_MAX):
+                    if len(misses) == INVENTORY_MISSES or len(accts) == INVENTORY_ACCOUNTS + 1:
+                        print(time.strftime("%H:%M"), f"inventory: stopped {ip} ({len(misses)} misses, {len(accts)} accounts)",
+                              flush=True)
+                    return self._send(429, b'{"error":"Too many for now. Please try again in an hour, or call our office."}',
+                                      "application/json")
+                INVENTORY_HITS.setdefault((what, ip), []).append(now)
             n = min(int(self.headers.get("Content-Length") or 0), 60000)
-            raw = self.rfile.read(n) or b"{}"
+            try:
+                body = json.loads(self.rfile.read(n) or b"{}")
+                if not isinstance(body, dict):
+                    raise ValueError
+            except ValueError:
+                return self._send(400, b'{"error":"bad json"}', "application/json")
+            body["public"] = public  # only this server says who's asking
+            raw = json.dumps(body).encode()
             req = urllib.request.Request(f"http://127.0.0.1:{os.environ.get('DESK_VOICE_PORT', '8091')}/inventory/{what}",
                                          data=raw, method="POST", headers={"Content-Type": "application/json"})
             try:
                 with urllib.request.urlopen(req, timeout=20) as r:
-                    return self._send(r.status, r.read(), "application/json")
+                    out, status = r.read(), r.status
+                if public:  # what a guess looks like: a miss, or a garment on yet another account
+                    try:
+                        o = json.loads(out)
+                    except ValueError:
+                        o = {}
+                    if what == "garment" and not o.get("found"):
+                        INVENTORY_HITS.setdefault(("miss", ip), []).append(now)
+                    elif what == "garment" and o.get("account"):
+                        INVENTORY_HITS.setdefault(("acct", ip), []).append((now, o["account"]))
+                    elif what == "submit" and o.get("ok"):
+                        INVENTORY_HITS.setdefault(("day", "all"), []).append(now)
+                return self._send(status, out, "application/json")
             except Exception as e:
                 print(time.strftime("%H:%M"), "inventory: desk didn't answer:", str(e)[:120], flush=True)
                 return self._send(503, b'{"error":"try again"}', "application/json")

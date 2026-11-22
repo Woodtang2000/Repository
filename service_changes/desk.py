@@ -1765,12 +1765,14 @@ class Desk:
                     from . import inventory
                     try:
                         body = json.loads(self.rfile.read(min(int(self.headers.get("Content-Length") or 0), 60000)) or b"{}")
+                        public = body.get("public") is True  # set by webchat.py for the customers' page, never by them
                         if v.group(1) == "accounts":
-                            out = {"accounts": inventory.accounts(desk.alliant, str(body.get("q") or ""))}
+                            out = {"accounts": [] if public else inventory.accounts(desk.alliant, str(body.get("q") or ""))}
                         elif v.group(1) == "garment":
-                            out = inventory.lookup(desk.alliant, str(body.get("barcode") or ""), str(body.get("account") or ""))
+                            out = inventory.lookup(desk.alliant, str(body.get("barcode") or ""), str(body.get("account") or ""),
+                                                   public)
                         else:
-                            out = desk.inventory().new(body)
+                            out = desk.inventory().new(body, public)
                             print(time.strftime("%H:%M"), "inventory scan:", out.get("ref"), out.get("scanned"), flush=True)
                     except Exception as e:
                         print(time.strftime("%H:%M"), "inventory error:", e, flush=True)
