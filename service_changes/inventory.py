@@ -244,8 +244,8 @@ class Inventory:
             f"Stockroom > Count Station: user name DONNA (Enter), count type V (INVENTORY), lot day: "
             f"{FULL.get(rec['day'], rec['day'])} (the customer's delivery day).",
             f"Barcodes ({len(rec['enter'])}), one at a time, Enter after each:"] + [f"- {b}" for b in rec["enter"]] + [
-            "A warning (not in service, a pull code, a service code, or anything else): continue past it and note the barcode "
-            "and what it said. Change nothing else. Report entered with how many went in and the list of warnings."])
+            "A warning on a garment (not in service, a pull code, a service code, or anything else): note the barcode and what "
+            "it said, click the warning to close it, and go on with the next barcode. Change nothing else. Report entered with how many went in and the list of warnings."])
 
     def job_done(self, job: dict, question: str = "") -> str:
         ref = job.get("request_id", "")

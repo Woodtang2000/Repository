@@ -200,8 +200,9 @@ count, no service dates); it only records that the garment was seen.
   other type.
 - In the box where a scanner would enter a barcode, type the first barcode from the job and press **Enter**. Then the
   next one, and so on to the end of the list. One barcode at a time, exactly as written.
-- A warning (the garment is not in service, has a pull code, has a service code, or anything else): **continue past it**
-  the way the screen offers, and write down the barcode and what the warning said. Never change the garment to get
+- A warning (the garment is not in service, has a pull code, has a service code, or anything else) pops up on the
+  garment: write down the barcode and what the warning said, then **click the warning to close it** (Scott, 11/22)
+  and go on with the next barcode in the box. Never change the garment to get
   past a warning, and never answer a question that would change it (a pull, a code, a status other than Inventory):
   if continuing would change anything, skip that barcode and note it.
 - "Wrong day" on a barcode of this job's account: check the lot day matches the job's day; if it does, note the barcode
