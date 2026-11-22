@@ -471,3 +471,36 @@ def test_website_chat_knows_what_items_are_for():
     sw, tlg = chat.system("sw"), chat.system("tlg")
     assert "ABOUT OUR ITEMS" in sw and "3x10, often called a runner" in sw and "yellow for restaurants" in sw
     assert "medical microfiber" in tlg and "120-inch round" in tlg  # hotels, events and clinics: The Laundry Group too
+
+
+def test_the_inventory_page_is_only_at_its_link(monkeypatch):
+    import threading
+    import urllib.error
+    import urllib.request
+    from . import webchat
+    monkeypatch.setenv("INVENTORY_KEY", "k" * 20)
+    srv = webchat.ThreadingHTTPServer(("127.0.0.1", 0), webchat.make_handler(
+        webchat.Chat(FakeClaude(), lambda *a: None, "/tmp"), "https://chat.snowwhitelinen.com"))
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    get = lambda path, host="chat.snowwhitelinen.com": urllib.request.urlopen(urllib.request.Request(
+        f"http://127.0.0.1:{srv.server_port}{path}", headers={"Host": host}))
+    try:
+        page = get(f"/inventory/{'k' * 20}/", "chat.thelaundrygroup.com").read().decode()
+        assert "Garment inventory" in page and '"site": "tlg"' in page and f"/api/inventory/{'k' * 20}" in page
+        assert 'apple-mobile-web-app-title" content="Inventory"' in page and "__CONFIG__" not in page
+        assert get("/inventory-icon.png").read()[:8] == b"\x89PNG\r\n\x1a\n"
+        for bad in (f"/inventory/{'x' * 20}/", "/inventory/"):
+            try:
+                get(bad)
+                assert False, bad
+            except urllib.error.HTTPError as e:
+                assert e.code == 404
+        req = urllib.request.Request(f"http://127.0.0.1:{srv.server_port}/api/inventory/{'x' * 20}/accounts", data=b"{}",
+                                     method="POST")
+        try:
+            urllib.request.urlopen(req)
+            assert False
+        except urllib.error.HTTPError as e:
+            assert e.code == 401
+    finally:
+        srv.shutdown()

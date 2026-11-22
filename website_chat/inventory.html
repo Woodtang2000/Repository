@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>Inventory · __TITLE__</title>
+<meta name="apple-mobile-web-app-title" content="Inventory">
+<meta name="application-name" content="Inventory">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#003746">
+<link rel="apple-touch-icon" href="/inventory-icon.png">
+<link rel="icon" type="image/png" href="/inventory-icon.png">
+<style>
+  :root { --navy: #003746; --gold: #f9af10; --tint: #eaf0f1; --ink: #1c2226; --muted: #5d6a70; --line: #dfe5e8;
+          --bad: #b3261e; --badbg: #fdecea; --warn: #8a5a00; --warnbg: #fff4dc; --ok: #1e6b3a; }
+  html.tlg { --navy: #003f50; --gold: #ffb807; --tint: #eaf0f2; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 16px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; color: var(--ink);
+         background: #f3f5f6; padding-bottom: 96px; }
+  header { background: #fff; padding: 12px 16px; display: flex; align-items: center; gap: 12px; border-bottom: 3px solid var(--gold); }
+  header img { height: 34px; }
+  header b { margin-left: auto; color: var(--navy); font-size: 15px; }
+  main { max-width: 560px; margin: 0 auto; padding: 16px; }
+  .card { background: #fff; border-radius: 12px; padding: 16px; margin-bottom: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+  h2 { margin: 0 0 10px; font-size: 17px; color: var(--navy); }
+  label { display: block; font-size: 13px; color: var(--muted); margin: 8px 0 4px; }
+  input { width: 100%; font: inherit; padding: 11px 12px; border: 1px solid var(--line); border-radius: 9px; background: #fff; }
+  input:focus { outline: 2px solid var(--gold); border-color: var(--gold); }
+  button { font: inherit; font-weight: 600; border: 0; border-radius: 10px; padding: 12px 16px; cursor: pointer; }
+  .primary { background: var(--navy); color: #fff; width: 100%; }
+  .gold { background: var(--gold); color: var(--navy); }
+  .ghost { background: var(--tint); color: var(--navy); }
+  .row { display: flex; gap: 8px; align-items: center; }
+  .row input { flex: 1; }
+  .results div { padding: 10px 4px; border-bottom: 1px solid var(--line); cursor: pointer; }
+  .results div small, .muted { color: var(--muted); font-size: 13px; }
+  .picked { background: var(--tint); border-left: 4px solid var(--gold); padding: 10px 12px; border-radius: 8px; }
+  #video-wrap { position: relative; border-radius: 10px; overflow: hidden; background: #000; aspect-ratio: 4/3; display: none; }
+  #video-wrap video { width: 100%; height: 100%; object-fit: cover; }
+  #video-wrap .aim { position: absolute; left: 10%; right: 10%; top: 42%; height: 16%; border: 3px solid var(--gold); border-radius: 8px; }
+  #flash { position: absolute; inset: 0; background: rgba(249,175,16,.35); opacity: 0; transition: opacity .25s; }
+  .count { font-size: 28px; font-weight: 700; color: var(--navy); }
+  ul { list-style: none; margin: 0; padding: 0; }
+  li { display: flex; gap: 10px; align-items: center; padding: 9px 2px; border-bottom: 1px solid var(--line); }
+  li .what { flex: 1; min-width: 0; }
+  li .bc { font-family: ui-monospace, Menlo, monospace; font-size: 13px; color: var(--muted); }
+  li.bad { background: var(--badbg); } li.warn { background: var(--warnbg); }
+  li .tag { font-size: 12px; font-weight: 600; }
+  li.bad .tag { color: var(--bad); } li.warn .tag { color: var(--warn); }
+  li button { background: none; color: var(--muted); padding: 4px 8px; font-size: 20px; }
+  .bar { position: fixed; left: 0; right: 0; bottom: 0; background: #fff; border-top: 1px solid var(--line);
+         padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); }
+  .bar .primary { max-width: 528px; display: block; margin: 0 auto; }
+  .bar .primary:disabled { opacity: .45; }
+  .done { text-align: center; }
+  .done .big { font-size: 44px; }
+  .hidden { display: none !important; }
+  .err { color: var(--bad); font-size: 14px; margin-top: 8px; }
+</style>
+</head>
+<body>
+<header><img id="logo" alt=""><b>Garment inventory</b></header>
+<main>
+  <section class="card" id="step-who">
+    <h2>1. Who's scanning, and for which customer?</h2>
+    <label for="who">Your name</label>
+    <input id="who" autocomplete="name" placeholder="First and last name">
+    <label for="q">Customer</label>
+    <input id="q" placeholder="Account number or name" autocomplete="off" inputmode="search">
+    <div class="results" id="results"></div>
+    <div class="picked hidden" id="picked"></div>
+  </section>
+
+  <section class="card hidden" id="step-scan">
+    <h2>2. Scan each garment</h2>
+    <div id="video-wrap"><video id="video" playsinline muted></video><div class="aim"></div><div id="flash"></div></div>
+    <div class="row" style="margin-top:10px">
+      <button class="gold" id="cam" style="flex:1">📷 Start camera</button>
+    </div>
+    <label for="typed">Or type a barcode</label>
+    <div class="row"><input id="typed" inputmode="numeric" placeholder="Barcode number"><button class="ghost" id="add">Add</button></div>
+    <p class="muted" style="margin:12px 0 4px"><span class="count" id="n">0</span> scanned</p>
+    <ul id="list"></ul>
+  </section>
+
+  <section class="card hidden done" id="step-done">
+    <div class="big">✅</div>
+    <h2 id="done-title">Sent</h2>
+    <p id="done-text"></p>
+    <button class="ghost" id="again">Scan another customer</button>
+  </section>
+  <p class="err" id="err"></p>
+</main>
+<div class="bar" id="bar"><button class="primary" id="send" disabled>Send to Donna</button></div>
+
+<script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
+<script>
+const CFG = __CONFIG__;
+document.documentElement.classList.toggle("tlg", CFG.site === "tlg");
+document.getElementById("logo").src = CFG.logo;
+document.getElementById("logo").alt = CFG.name;
+const $ = id => document.getElementById(id);
+const store = { get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } },
+                set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} } };
+let account = null, scans = [], reader = null, last = {}, busy = false;
+
+async function api(what, body) {
+  const r = await fetch(`${CFG.api}/${what}`, { method: "POST", headers: { "Content-Type": "application/json" },
+                                                 body: JSON.stringify(body) });
+  if (!r.ok) throw new Error(r.status === 401 ? "This link isn't valid any more. Ask the office for the new one."
+                                               : "Couldn't reach Donna. Check your signal and try again.");
+  return r.json();
+}
+function err(t) { $("err").textContent = t || ""; }
+
+$("who").value = store.get("inv-who") || "";
+$("who").addEventListener("change", () => store.set("inv-who", $("who").value.trim()));
+
+let timer;
+$("q").addEventListener("input", () => {
+  clearTimeout(timer);
+  timer = setTimeout(async () => {
+    const q = $("q").value.trim();
+    if (q.length < 2) { $("results").innerHTML = ""; return; }
+    try {
+      const out = await api("accounts", { q });
+      $("results").innerHTML = "";
+      out.accounts.forEach(a => {
+        const d = document.createElement("div");
+        d.innerHTML = `<b></b><br><small></small>`;
+        d.querySelector("b").textContent = a.name;
+        d.querySelector("small").textContent = `${a.account}${a.days.length ? " · " + a.days.join(", ") : ""}`;
+        d.onclick = () => pick(a);
+        $("results").appendChild(d);
+      });
+      if (!out.accounts.length) $("results").innerHTML = '<div class="muted">No match.</div>';
+      err("");
+    } catch (e) { err(e.message); }
+  }, 250);
+});
+
+function pick(a) {
+  account = a;
+  $("results").innerHTML = ""; $("q").value = "";
+  $("picked").classList.remove("hidden");
+  $("picked").innerHTML = "<b></b><br><small class='muted'></small> · <a href='#' id='change'>change</a>";
+  $("picked").querySelector("b").textContent = a.name;
+  $("picked").querySelector("small").textContent = a.account;
+  $("change").onclick = e => { e.preventDefault(); account = null; $("picked").classList.add("hidden"); $("step-scan").classList.add("hidden"); stopCam(); render(); };
+  $("step-scan").classList.remove("hidden");
+  scans = store.get("inv-scans-" + a.account) || [];  // a refresh never loses what was scanned
+  render();
+}
+
+function render() {
+  $("n").textContent = scans.length;
+  $("list").innerHTML = "";
+  scans.slice().reverse().forEach(s => {
+    const li = document.createElement("li");
+    li.className = s.cls || "";
+    li.innerHTML = `<div class="what"><div class="t"></div><div class="bc"></div><div class="tag"></div></div><button aria-label="Remove">×</button>`;
+    li.querySelector(".t").textContent = s.what || "Checking…";
+    li.querySelector(".bc").textContent = s.barcode;
+    li.querySelector(".tag").textContent = s.note || "";
+    li.querySelector("button").onclick = () => { scans = scans.filter(x => x.barcode !== s.barcode); save(); render(); };
+    $("list").appendChild(li);
+  });
+  $("send").disabled = !account || !scans.length || busy;
+  $("send").textContent = scans.length ? `Send ${scans.length} to Donna` : "Send to Donna";
+}
+function save() { if (account) store.set("inv-scans-" + account.account, scans); }
+
+function beep(good) {
+  try {
+    const c = beep.ctx || (beep.ctx = new (window.AudioContext || window.webkitAudioContext)());
+    const o = c.createOscillator(), g = c.createGain();
+    o.frequency.value = good ? 1320 : 330; g.gain.value = 0.15;
+    o.connect(g); g.connect(c.destination); o.start(); o.stop(c.currentTime + (good ? 0.08 : 0.25));
+  } catch (e) {}
+  if (navigator.vibrate) navigator.vibrate(good ? 40 : [80, 60, 80]);
+  $("flash").style.opacity = 1; setTimeout(() => $("flash").style.opacity = 0, 150);
+}
+
+async function add(raw) {
+  const b = String(raw || "").replace(/\D/g, "");
+  if (b.length < 5) return;
+  const key = b.replace(/^0+/, "");
+  if (scans.some(s => s.barcode.replace(/^0+/, "") === key)) { return; }
+  const s = { barcode: b };
+  scans.push(s); save(); render(); beep(true);
+  try {
+    const g = await api("garment", { barcode: b, account: account.account });
+    if (g.found) {
+      s.barcode = g.barcode;
+      s.what = [g.garment, g.size].filter(Boolean).join(" ") + (g.wearer ? ` · ${g.wearer}` : "");
+      if (!g.here) { s.cls = "bad"; s.note = `On another account (${g.account}): won't be entered`; beep(false); }
+      else if (g.code) { s.cls = "warn"; s.note = `Has service code ${g.code}`; }
+    } else { s.what = "Not in Alliant's file"; s.cls = "warn"; s.note = "Donna will still try it and note what Alliant says"; }
+  } catch (e) { s.what = "Couldn't check (no signal?)"; }
+  save(); render();
+}
+$("add").onclick = () => { add($("typed").value); $("typed").value = ""; $("typed").focus(); };
+$("typed").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); $("add").click(); } });
+
+async function startCam() {
+  if (!window.ZXing) { err("The camera reader didn't load. Type the barcodes instead."); return; }
+  const hints = new Map();
+  hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.ITF,
+                                                    ZXing.BarcodeFormat.CODE_39]);
+  hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+  reader = new ZXing.BrowserMultiFormatReader(hints, 250);
+  $("video-wrap").style.display = "block";
+  $("cam").textContent = "Stop camera";
+  try {
+    await reader.decodeFromConstraints({ video: { facingMode: "environment" } }, "video", (result) => {
+      if (!result) return;
+      const t = result.getText(), now = Date.now();
+      if (last[t] && now - last[t] < 2500) return;  // the same label held in view isn't a second garment
+      last[t] = now;
+      add(t);
+    });
+  } catch (e) { err("Couldn't open the camera. Allow camera access, or type the barcodes."); stopCam(); }
+}
+function stopCam() {
+  if (reader) { try { reader.reset(); } catch (e) {} reader = null; }
+  $("video-wrap").style.display = "none";
+  $("cam").textContent = "📷 Start camera";
+}
+$("cam").onclick = () => reader ? stopCam() : startCam();
+
+$("send").onclick = async () => {
+  if (!$("who").value.trim()) { err("Put your name in first."); $("who").focus(); return; }
+  busy = true; render(); err("");
+  try {
+    const out = await api("submit", { account: account.account, who: $("who").value.trim(),
+                                      barcodes: scans.map(s => s.barcode) });
+    if (!out.ok) throw new Error(out.error || "Didn't go through.");
+    stopCam();
+    store.set("inv-scans-" + account.account, []);
+    $("done-title").textContent = `${out.ref} sent`;
+    $("done-text").textContent = `${out.on_account} of the ${out.in_service} garments in service on this account were scanned`
+      + (out.missing ? `; ${out.missing} weren't. The office will see which.` : ". That's all of them!")
+      + ` Donna enters them in Alliant` + (out.day ? ` (${out.day})` : "") + ".";
+    ["step-who", "step-scan"].forEach(id => $(id).classList.add("hidden"));
+    $("step-done").classList.remove("hidden"); $("bar").classList.add("hidden");
+  } catch (e) { err(e.message); }
+  busy = false; render();
+};
+$("again").onclick = () => location.reload();
+</script>
+</body>
+</html>

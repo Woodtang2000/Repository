@@ -207,12 +207,14 @@ class Jobs:
             if not job or job["status"] != "working":
                 return "unknown job"
             job.update(status=status if status in ("entered", "needs_person", "ask") else "needs_person",
-                       note=note[:3800 if job.get("kind") in ("screen_task", "new_account", "new_wearers") else 1500], finished=time.time())
+                       note=note[:3800 if job.get("kind") in ("screen_task", "new_account", "new_wearers", "inventory") else 1500], finished=time.time())
             if job["status"] == "ask" and not question.strip():
                 job["status"] = "needs_person"
             data["jobs"] = {k: v for k, v in data["jobs"].items() if v["status"] in ("queued", "working")
                             or time.time() - v.get("finished", 0) < 14 * 86400}
             self.save(data)
+        if job.get("kind") == "inventory":  # #stockroom (inventory.py): the Count Station's warnings under the card
+            return self.desk.inventory().job_done(job, question)
         if job.get("kind") == "service_code":  # #uniform-requests (uniform.py)
             return self.desk.uniform().job_done(job, question)
         if job.get("kind") in ("new_account", "new_wearers", "garment_fix"):  # #new-accounts / #stockroom (new_accounts.py)

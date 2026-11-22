@@ -1146,6 +1146,13 @@ class Desk:
             self._uniform = Uniform(self)
         return self._uniform
 
+    def inventory(self):
+        """Garment inventory scans from the employees' page, entered at Alliant's Count Station (inventory.py)."""
+        if "_inventory" not in self.__dict__:
+            from .inventory import Inventory
+            self._inventory = Inventory(self)
+        return self._inventory
+
     def new_accounts(self):
         """New accounts and locations from the Sales Handoff app in #new-accounts (new_accounts.py)."""
         if "_new_accounts" not in self.__dict__:
@@ -1753,6 +1760,22 @@ class Desk:
                         return self.reply(500, b"{}")
                     print(time.strftime("%H:%M"), "alliant jobs file:", f.group(1), out, flush=True)
                     return self.reply(200, json.dumps({"ok": out}).encode())
+                v = re.fullmatch(r"/inventory/(accounts|garment|submit)", self.path)
+                if v:  # the employees' inventory page, through webchat.py (its key checked there)
+                    from . import inventory
+                    try:
+                        body = json.loads(self.rfile.read(min(int(self.headers.get("Content-Length") or 0), 60000)) or b"{}")
+                        if v.group(1) == "accounts":
+                            out = {"accounts": inventory.accounts(desk.alliant, str(body.get("q") or ""))}
+                        elif v.group(1) == "garment":
+                            out = inventory.lookup(desk.alliant, str(body.get("barcode") or ""), str(body.get("account") or ""))
+                        else:
+                            out = desk.inventory().new(body)
+                            print(time.strftime("%H:%M"), "inventory scan:", out.get("ref"), out.get("scanned"), flush=True)
+                    except Exception as e:
+                        print(time.strftime("%H:%M"), "inventory error:", e, flush=True)
+                        return self.reply(500, b'{"error":"server"}')
+                    return self.reply(200, json.dumps(out).encode())
                 u = re.fullmatch(r"/uniform/(garment|match|request|stops)", self.path)
                 if u:  # the uniform request page, through webchat.py (key and rate limit checked there)
                     from . import uniform
