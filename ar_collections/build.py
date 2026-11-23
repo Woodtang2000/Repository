@@ -292,6 +292,11 @@ def main(data_dir, out_dir, today):
             reason = "receipt at bank not yet applied: " + "; ".join(pending[(co, acct)])
         elif not active:
             reason = "inactive in Alliant: Scott to decide (not a route customer)"
+        elif not chase_over45 and any(age(i) > 45 and i["date"] >= WRITE_OFF_BEFORE for i in items):
+            # NetSuite still shows recent over-45 invoices, but Alliant has closed them (paid, credited or
+            # written off there): nothing to chase, and the books don't match.
+            reason = ("over-45 invoices are closed in Alliant but still open in NetSuite: Scott/CFO to check "
+                      "(no reminder)")
         elif not chase_over45:
             reason = "only 2022-2024 items over 45 days: write-off candidates for Scott"
         elif credit and sum(c["amount"] for c in credit) >= sum(i["balance"] for i in chase) - 0.005:
