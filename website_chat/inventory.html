@@ -83,6 +83,8 @@
 
   <section class="card hidden" id="step-scan">
     <h2><span class="staff-only">2. </span>Scan each garment</h2>
+    <p class="muted" style="margin:-4px 0 10px">Hold the label flat inside the gold box, about 4 to 8 inches away, in good
+      light. It beeps when it reads one.</p>
     <div id="video-wrap"><video id="video" playsinline muted></video><div class="aim"></div><div id="flash"></div></div>
     <div class="row" style="margin-top:10px">
       <button class="gold" id="cam" style="flex:1">📷 Start camera</button>
@@ -241,31 +243,90 @@ async function add(raw) {
 $("add").onclick = () => { add($("typed").value); $("typed").value = ""; $("typed").focus(); };
 $("typed").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); $("add").click(); } });
 
+// Camera reading (11/23: the route supervisor's camera showed the box but read nothing). The phone's own barcode reader
+// where it has one (Android Chrome), else ZXing; every common 1D barcode type, not just three; and a sharp, high
+// resolution picture with continuous focus, since garment labels are small.
+const FORMATS = ["code_128", "code_39", "code_93", "codabar", "itf", "ean_13", "ean_8", "upc_a", "upc_e"];
+let stream = null, native = null, loop = null;
+function found(t) {
+  t = String(t || "").trim();
+  const now = Date.now();
+  if (!t || (last[t] && now - last[t] < 2500)) return;  // the same label held in view isn't a second garment
+  last[t] = now;
+  add(t);
+}
+async function openCamera() {
+  const s = await navigator.mediaDevices.getUserMedia({ audio: false, video: {
+    facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } } });
+  const track = s.getVideoTracks()[0];
+  try {  // continuous autofocus where the phone allows it
+    const caps = track.getCapabilities ? track.getCapabilities() : {};
+    if (caps.focusMode && caps.focusMode.includes("continuous")) await track.applyConstraints({ advanced: [{ focusMode: "continuous" }] });
+  } catch (e) {}
+  return s;
+}
 async function startCam() {
-  if (!window.ZXing) { err("The camera reader didn't load. Type the barcodes instead."); return; }
-  const hints = new Map();
-  hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.ITF,
-                                                    ZXing.BarcodeFormat.CODE_39]);
-  hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-  reader = new ZXing.BrowserMultiFormatReader(hints, 250);
+  err("");
   $("video-wrap").style.display = "block";
   $("cam").textContent = "Stop camera";
   try {
-    await reader.decodeFromConstraints({ video: { facingMode: "environment" } }, "video", (result) => {
-      if (!result) return;
-      const t = result.getText(), now = Date.now();
-      if (last[t] && now - last[t] < 2500) return;  // the same label held in view isn't a second garment
-      last[t] = now;
-      add(t);
-    });
-  } catch (e) { err("Couldn't open the camera. Allow camera access, or type the barcodes."); stopCam(); }
+    stream = await openCamera();
+  } catch (e) { err("Couldn't open the camera. Allow camera access for this page, or type the barcodes."); stopCam(); return; }
+  const v = $("video");
+  if ("BarcodeDetector" in window) {
+    try {
+      const ok = await BarcodeDetector.getSupportedFormats();
+      native = new BarcodeDetector({ formats: FORMATS.filter(f => ok.includes(f)) });
+      v.srcObject = stream;
+      await v.play().catch(() => {});
+      loop = setInterval(async () => {
+        if (!native || v.readyState < 2) return;
+        try { (await native.detect(v)).forEach(b => found(b.rawValue)); } catch (e) {}
+      }, 200);
+      return;
+    } catch (e) { native = null; v.srcObject = null; }
+  }
+  if (!window.ZXing) { err("The camera reader didn't load. Type the barcodes instead."); return; }
+  // Our own frame loop: every 150 ms, the gold box's part of the picture (and then the whole picture) goes to ZXing.
+  // ZXing's own video helpers read nothing on 11/23 (the route supervisor's phone, and the repair page too).
+  v.srcObject = stream;
+  v.setAttribute("playsinline", ""); v.muted = true;
+  await v.play().catch(() => {});
+  const hints = new Map();
+  hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.CODE_39,
+    ZXing.BarcodeFormat.CODE_93, ZXing.BarcodeFormat.CODABAR, ZXing.BarcodeFormat.ITF, ZXing.BarcodeFormat.EAN_13,
+    ZXing.BarcodeFormat.EAN_8, ZXing.BarcodeFormat.UPC_A, ZXing.BarcodeFormat.UPC_E]);
+  hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+  reader = new ZXing.MultiFormatReader();
+  reader.setHints(hints);
+  const canvas = document.createElement("canvas"), ctx = canvas.getContext("2d", { willReadFrequently: true });
+  const tryRead = (sx, sy, sw, sh) => {
+    const scale = Math.min(1, 1280 / sw);
+    canvas.width = Math.round(sw * scale); canvas.height = Math.round(sh * scale);
+    ctx.drawImage(v, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+    try {
+      const bmp = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(new ZXing.HTMLCanvasElementLuminanceSource(canvas)));
+      return reader.decodeWithState(bmp).getText();
+    } catch (e) { return null; } finally { try { reader.reset(); } catch (e) {} }
+  };
+  let turn = 0;
+  loop = setInterval(() => {
+    if (!reader || v.readyState < 2 || !v.videoWidth) return;
+    const W = v.videoWidth, H = v.videoHeight;
+    // the gold box (the middle band) most of the time; the whole picture every third try
+    const t = (turn++ % 3 === 2) ? tryRead(0, 0, W, H) : tryRead(0, Math.round(H * 0.3), W, Math.round(H * 0.4));
+    if (t) found(t);
+  }, 150);
 }
 function stopCam() {
+  if (loop) { clearInterval(loop); loop = null; }
+  native = null;
   if (reader) { try { reader.reset(); } catch (e) {} reader = null; }
+  if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
   $("video-wrap").style.display = "none";
   $("cam").textContent = "📷 Start camera";
 }
-$("cam").onclick = () => reader ? stopCam() : startCam();
+$("cam").onclick = () => stream ? stopCam() : startCam();
 
 $("send").onclick = async () => {
   if (!$("who").value.trim()) { err("Put your name in first."); $("who").focus(); return; }
