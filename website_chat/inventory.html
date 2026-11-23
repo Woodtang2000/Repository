@@ -248,6 +248,60 @@ $("typed").addEventListener("keydown", e => { if (e.key === "Enter") { e.prevent
 // resolution picture with continuous focus, since garment labels are small.
 const FORMATS = ["code_128", "code_39", "code_93", "codabar", "itf", "ean_13", "ean_8", "upc_a", "upc_e"];
 let stream = null, native = null, loop = null;
+
+// Our garment labels (11/23, Scott's photo of 000005379268): Interleaved 2 of 5, 12 digits, with the label's "4" printed
+// right against the bars (no quiet zone) and often faint end bars, both of which make ZXing give up. This reads the
+// bars straight off a line of the picture: the start (4 narrow), then digit pairs, where each 5 widths hold exactly
+// 2 wide. A read only counts when two lines (or two moments) agree.
+const ITF = { "NNWWN": 0, "WNNNW": 1, "NWNNW": 2, "WWNNN": 3, "NNWNW": 4, "WNWNN": 5, "NWWNN": 6, "NNNWW": 7, "WNNWN": 8, "NWNWN": 9 };
+function itfFromRuns(runs) {  // runs: widths alternating bar, space, bar... starting with a bar
+  for (let i = 0; i + 4 + 20 < runs.length; i += 2) {
+    const st = runs.slice(i, i + 4), n = st.reduce((a, b) => a + b, 0) / 4;
+    if (n < 1.2 || Math.max(...st) > 1.6 * n || Math.min(...st) < 0.5 * n) continue;  // start: 4 narrow
+    if (i > 0 && runs[i - 1] < 2.5 * n) continue;  // a little white before it (the "4" may be close)
+    let out = "", j = i + 4;
+    while (j + 10 <= runs.length) {
+      const bars = [], spaces = [];
+      for (let k = 0; k < 10; k++) (k % 2 ? spaces : bars).push(runs[j + k]);
+      const d = [bars, spaces].map(w => {
+        const sorted = [...w].sort((a, b) => b - a);
+        if (sorted[1] < 1.4 * sorted[2] || sorted[0] > 4.5 * n || sorted[4] < 0.4 * n) return null;  // exactly 2 wide
+        return ITF[w.map(x => x >= sorted[1] ? "W" : "N").join("")];
+      });
+      if (d[0] === undefined || d[1] === undefined || d[0] === null || d[1] === null) break;
+      out += d[0] + "" + d[1];
+      j += 10;
+    }
+    if (out.length >= 12) return out.slice(0, 12);  // Alliant garment barcodes are 12 digits: never a partial read
+  }
+  return null;
+}
+function itfFromCanvas(ctx, w, h) {
+  const votes = {};
+  for (let r = 0; r < 40; r++) {
+    const y = Math.round(h * (0.05 + 0.9 * r / 39));
+    const px = ctx.getImageData(0, y, w, 1).data, lum = [];
+    for (let x = 0; x < w; x++) lum.push(0.3 * px[4 * x] + 0.59 * px[4 * x + 1] + 0.11 * px[4 * x + 2]);
+    const lo = Math.min(...lum), hi = Math.max(...lum);
+    if (hi - lo < 40) continue;
+    // dark or light against its own surroundings (faint end bars, dark fabric around the label)
+    const R = Math.max(12, Math.round(w / 60)), pre = [0];
+    for (const v of lum) pre.push(pre[pre.length - 1] + v);
+    const runs = [];  // widths from the first dark pixel on: bar, space, bar...
+    let dark = null, len = 0;
+    for (let x = 0; x < w; x++) {
+      const a = Math.max(0, x - R), b = Math.min(w, x + R + 1);
+      const d = lum[x] < (pre[b] - pre[a]) / (b - a) - 4;
+      if (dark === null) { if (d) { dark = true; len = 1; } continue; }
+      if (d === dark) len++; else { runs.push(len); dark = d; len = 1; }
+    }
+    if (dark) runs.push(len);
+    const t = itfFromRuns(runs);
+    if (t) votes[t] = (votes[t] || 0) + 1;
+  }
+  const best = Object.entries(votes).sort((a, b) => b[1] - a[1])[0];
+  return best && best[1] >= 2 ? best[0] : null;
+}
 function found(t) {
   t = String(t || "").trim();
   const now = Date.now();
@@ -277,33 +331,27 @@ async function startCam() {
     try {
       const ok = await BarcodeDetector.getSupportedFormats();
       native = new BarcodeDetector({ formats: FORMATS.filter(f => ok.includes(f)) });
-      v.srcObject = stream;
-      await v.play().catch(() => {});
-      loop = setInterval(async () => {
-        if (!native || v.readyState < 2) return;
-        try { (await native.detect(v)).forEach(b => found(b.rawValue)); } catch (e) {}
-      }, 200);
-      return;
-    } catch (e) { native = null; v.srcObject = null; }
+    } catch (e) { native = null; }
   }
-  if (!window.ZXing) { err("The camera reader didn't load. Type the barcodes instead."); return; }
   // Our own frame loop: every 150 ms, the gold box's part of the picture (and then the whole picture) goes to ZXing.
   // ZXing's own video helpers read nothing on 11/23 (the route supervisor's phone, and the repair page too).
   v.srcObject = stream;
   v.setAttribute("playsinline", ""); v.muted = true;
   await v.play().catch(() => {});
   const hints = new Map();
-  hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.CODE_39,
+  if (window.ZXing) hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.CODE_39,
     ZXing.BarcodeFormat.CODE_93, ZXing.BarcodeFormat.CODABAR, ZXing.BarcodeFormat.ITF, ZXing.BarcodeFormat.EAN_13,
     ZXing.BarcodeFormat.EAN_8, ZXing.BarcodeFormat.UPC_A, ZXing.BarcodeFormat.UPC_E]);
-  hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-  reader = new ZXing.MultiFormatReader();
-  reader.setHints(hints);
+  if (window.ZXing) hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+  reader = window.ZXing ? new ZXing.MultiFormatReader() : { reset() {} };
+  if (window.ZXing) reader.setHints(hints);
   const canvas = document.createElement("canvas"), ctx = canvas.getContext("2d", { willReadFrequently: true });
   const tryRead = (sx, sy, sw, sh) => {
     const scale = Math.min(1, 1280 / sw);
     canvas.width = Math.round(sw * scale); canvas.height = Math.round(sh * scale);
     ctx.drawImage(v, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+    const own = itfFromCanvas(ctx, canvas.width, canvas.height);  // our labels first
+    if (own || !window.ZXing) return own;
     try {
       const bmp = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(new ZXing.HTMLCanvasElementLuminanceSource(canvas)));
       return reader.decodeWithState(bmp).getText();
@@ -316,6 +364,7 @@ async function startCam() {
     // the gold box (the middle band) most of the time; the whole picture every third try
     const t = (turn++ % 3 === 2) ? tryRead(0, 0, W, H) : tryRead(0, Math.round(H * 0.3), W, Math.round(H * 0.4));
     if (t) found(t);
+    if (native && turn % 2 === 0) native.detect(v).then(bs => bs.forEach(b => found(b.rawValue))).catch(() => {});
   }, 150);
 }
 function stopCam() {
