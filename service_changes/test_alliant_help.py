@@ -59,7 +59,7 @@ def test_a_question_gets_an_answer_in_the_thread(tmp_path):
     assert h.handle(ev) == "answered"
     [post] = h.slack.posts
     assert post["thread_ts"] == "100.1" and '"Transfer"' in post["text"] and "USCOTT" not in post["text"]
-    assert claude.calls[0]["system"][1]["cache_control"] == {"type": "ephemeral"}
+    assert claude.calls[0]["raw"]["system"][1]["cache_control"] == {"type": "ephemeral"}
     assert 'click \\"Transfer' in json.dumps(claude.calls[2]["messages"])
 
 

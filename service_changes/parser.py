@@ -214,8 +214,10 @@ def owner_chat(client: anthropic.Anthropic, turns: list[dict], briefing: str, sp
                   "NNNN-2-NNNNN The Laundry Group. Don't bring up that you're an AI, but if asked, say so honestly."
                   + HONEST + (SPOKEN.replace("his phone", "their phone").replace("he asks", "they ask") if spoken else "")
                   + "\n\nWhere things stand:\n" + briefing)
+        from .caching import mark_last, note, system_blocks  # the briefing and the conversation so far, cached
         response = client.messages.create(model=os.environ.get("VOICE_MODEL", "claude-sonnet-5-5") if spoken else MODEL,
-                                          max_tokens=2000, system=system, messages=turns)
+                                          max_tokens=2000, system=system_blocks(system), messages=mark_last(turns))
+        note("owner_chat", response)
         return "".join(b.text for b in response.content if b.type == "text").strip()
     system = (OWNER_VOICE + " He's here to kick some ass and you're here to help him do it: think with him about "
               "customers, routes, service, sales and the team, push back when he's wrong, and offer the next move. "
@@ -223,12 +225,14 @@ def owner_chat(client: anthropic.Anthropic, turns: list[dict], briefing: str, sp
               "mats does Safeway 1807 get?\") and you'll pull it from Alliant; never make numbers up. Don't bring up "
               "that you're an AI, but if he asks, say so honestly." + HONEST
               + (SPOKEN if spoken else "") + "\n\nWhere things stand:\n" + briefing)
+    from .caching import mark_last, note, system_blocks  # the briefing and the conversation so far, cached
     response = client.messages.create(
         model=os.environ.get("VOICE_MODEL", "claude-sonnet-5-5") if spoken else MODEL,
         max_tokens=2000,
-        system=system,
-        messages=turns,
+        system=system_blocks(system),
+        messages=mark_last(turns),
     )
+    note("owner_chat", response)
     return "".join(b.text for b in response.content if b.type == "text").strip()
 
 
@@ -299,6 +303,8 @@ def parse_message(client: anthropic.Anthropic, text: str, channel: str, ts: str,
         betas=["server-side-fallback-2026-07-01"],
         fallbacks="default",
     )
+    from .caching import note
+    note("parse_message", response)
     if response.stop_reason == "refusal" or response.parsed_output is None:
         raise RuntimeError(f"Could not parse message (stop_reason={response.stop_reason})")
     return response.parsed_output
@@ -363,18 +369,21 @@ def is_junk_email(client: anthropic.Anthropic, sender: str, subject: str, body: 
 def identify_customer(client: anthropic.Anthropic, text: str, customers: list) -> Identified:
     """Which customer account(s) someone means by "Jane, Midas in Fairbanks". Only the office sees the result:
     it is a suggestion for a person to approve, never access by itself."""
+    from .caching import CACHED, note
     listing = "\n".join(f"{c.account} | {c.name}" for c in customers)
-    prompt = (f"Customer accounts (account | name):\n{listing}\n\nSomeone texting us wrote:\n{text}\n\n"
-              "Which account(s) could their business be? Use only account numbers from the list.")
     response = client.beta.messages.parse(
         model=MODEL,
         max_tokens=2000,
-        messages=[{"role": "user", "content": prompt}],
+        messages=[{"role": "user", "content": [  # the customer list is the same every time: cached
+            {"type": "text", "text": f"Customer accounts (account | name):\n{listing}", "cache_control": CACHED},
+            {"type": "text", "text": f"Someone texting us wrote:\n{text}\n\n"
+                                     "Which account(s) could their business be? Use only account numbers from the list."}]}],
         output_format=Identified,
         output_config={"effort": "low"},
         betas=["server-side-fallback-2026-07-01"],
         fallbacks="default",
     )
+    note("identify", response)
     found = response.parsed_output or Identified()
     known = {c.account for c in customers}
     found.accounts = [a for a in found.accounts if a in known][:3]

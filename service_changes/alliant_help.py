@@ -195,6 +195,8 @@ class Helper:
         msgs, said, missed = list(turns), [], False
         for _ in range(6):
             r = self.claude.messages.create(model=MODEL, max_tokens=1500, system=system, tools=TOOLS, messages=msgs)
+            from .caching import note
+            note("alliant_help", r)
             text = "".join(b.text for b in r.content if b.type == "text").strip()
             uses = [b for b in r.content if b.type == "tool_use"]
             if not uses:

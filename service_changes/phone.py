@@ -376,9 +376,11 @@ class Phone:
         turns = [t for t in call["turns"]]
         if turns and turns[0]["role"] == "assistant":
             turns = [{"role": "user", "content": "(The call connects.)"}] + turns
-        r = self.claude.beta.messages.parse(model=MODEL, max_tokens=800, system=self.system(call), messages=turns,
-                                            output_format=Turn, betas=["server-side-fallback-2026-07-01"],
-                                            fallbacks="default")
+        from .caching import mark_last, note, system_blocks  # the call's rules and caller facts, cached for the call
+        r = self.claude.beta.messages.parse(model=MODEL, max_tokens=800, system=system_blocks(self.system(call)),
+                                            messages=mark_last(turns), output_format=Turn,
+                                            betas=["server-side-fallback-2026-07-01"], fallbacks="default")
+        note("phone", r)
         turn = r.parsed_output or Turn(say="Sorry, could you say that again?", action="listen")
         if turn.action == "change":
             if call["line"] != "employees" or not call["who"]:

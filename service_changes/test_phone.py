@@ -37,7 +37,8 @@ class Claude:
         self.beta = SimpleNamespace(messages=SimpleNamespace(parse=self.parse))
 
     def parse(self, system, messages, **kw):
-        self.systems.append(system)
+        from .caching import flat
+        self.systems.append(flat(system))  # cached blocks (caching.py) read back as plain text
         return SimpleNamespace(parsed_output=self.turns.pop(0))
 
 

@@ -194,8 +194,10 @@ class Chat:
     def _run(self, s: dict, events: list) -> str:
         site, msgs, said = s["site"], list(s["turns"]), []
         for _ in range(4):  # a tool call or two, then the answer
-            r = self.claude.messages.create(model=MODEL, max_tokens=700, system=self.system(site), tools=TOOLS,
-                                            messages=msgs)
+            from .caching import mark_last, note, system_blocks  # the facts sheet and the chat so far, cached
+            r = self.claude.messages.create(model=MODEL, max_tokens=700, system=system_blocks(self.system(site)), tools=TOOLS,
+                                            messages=mark_last(msgs))
+            note("webchat", r)
             text = "".join(b.text for b in r.content if b.type == "text").strip()
             if text:
                 said.append(text)

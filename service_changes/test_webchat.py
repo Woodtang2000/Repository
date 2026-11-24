@@ -30,7 +30,12 @@ class FakeClaude:
         self.messages = self
 
     def create(self, **kw):
-        self.calls.append(kw)
+        from .caching import flat
+        # cached blocks (caching.py) read back as plain text, as the tests were written
+        self.calls.append({**kw, "raw": kw, "system": flat(kw.get("system")),
+                           "messages": [{**m, "content": flat(m["content"]) if isinstance(m.get("content"), list)
+                                         and all(b.get("type") == "text" for b in m["content"]) else m.get("content")}
+                                        for m in kw.get("messages", [])]})
         return SimpleNamespace(content=self.answers.pop(0))
 
 
@@ -42,6 +47,15 @@ def posted():
 def make(posted, *answers):
     claude = FakeClaude(*answers)
     return webchat.Chat(claude, lambda kind, item: posted.append((kind, item)), "/tmp"), claude
+
+
+def test_the_facts_sheet_and_the_chat_so_far_are_cached(posted):
+    # Guardrail's prompt caching request (Scott OK 11/20): the same facts sheet goes with every turn of every chat
+    chat, claude = make(posted, [text("Hi! How can I help?")])
+    chat.message("sw", "", "Do you rent mats?", ip="1.1.1.1")
+    raw = claude.calls[0]["raw"]
+    assert raw["system"][0]["cache_control"] == {"type": "ephemeral"} and "FACTS" in raw["system"][0]["text"]
+    assert raw["messages"][-1]["content"][-1]["cache_control"] == {"type": "ephemeral"}
 
 
 def test_a_new_business_lead_goes_to_sales(posted):
