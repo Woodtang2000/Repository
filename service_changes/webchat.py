@@ -415,7 +415,8 @@ QUOTE_PHONES = {"sw": "(907) 222-7738", "tlg": "(907) 519-0761"}  # the header's
 QUOTE_FRAME_ANCESTORS = os.environ.get("QUOTE_FRAME_ANCESTORS", "https://snowwhitelinen.com https://www.snowwhitelinen.com "
                                        "https://thelaundrygroup.com https://www.thelaundrygroup.com").split()
 QUOTE_HOMES = {"sw": "https://snowwhitelinen.com/", "tlg": "https://thelaundrygroup.com/"}  # the logo goes back to the site
-INVENTORY_PAGE = os.path.join(REPO, "website_chat", "inventory.html")  # the employees' garment inventory scanner
+INVENTORY_PAGE = os.path.join(REPO, "website_chat", "inventory.html")
+PAR_PAGE = os.path.join(REPO, "website_chat", "par.html")  # the hospital techs' par counting (par_counts.py)  # the employees' garment inventory scanner
 DONNA_PAGE = os.path.join(REPO, "website_chat", "donna.html")  # Scott's talk-to-Donna page (no key in it)
 LOGOS = {"sw": os.path.join(REPO, "brand", "logo_sw.png"), "tlg": os.path.join(REPO, "brand", "logo_tlg.png")}
 
@@ -546,6 +547,18 @@ def make_handler(chat: Chat, public_url: str):
                 with open(path, "rb") as f:
                     data = f.read()
                 return self._send(200, data, catalog.image_type(data) or "application/octet-stream", cache=86400)
+            m = re.fullmatch(r"/par/([\w-]{16,})/?", u.path)
+            if m:  # the hospital techs' par counting page, at a link only they are given (PAR_KEY)
+                import hmac
+                key = os.environ.get("PAR_KEY", "")
+                if len(key) < 16 or not hmac.compare_digest(m.group(1).encode(), key.encode()):
+                    return self._send(404, b"not found", "text/plain")
+                site = "tlg" if base.endswith(TLG_HOST) else "sw"
+                cfg = {"api": f"{base}/api/par/{key}", "site": site, "name": COMPANIES[site]["name"],
+                       "logo": f"{base}/logo/{site}.png"}
+                with open(PAR_PAGE) as f:
+                    page = f.read().replace("__CONFIG__", json.dumps(cfg).replace("</", "<\\/"))
+                return self._send(200, page.encode(), "text/html; charset=utf-8", headers={"Referrer-Policy": "no-referrer"})
             m = re.fullmatch(r"/inventory(?:/([\w-]{16,}))?/?", u.path)
             if m:  # the inventory scanner (inventory.py): customers at /inventory, employees at the link with the key
                 import hmac
@@ -609,6 +622,9 @@ def make_handler(chat: Chat, public_url: str):
             m = re.fullmatch(r"/api/phone/(tool|[\w-]{24,})/(\w+)", path.split("?")[0])
             if m:  # the phone lines' ElevenLabs agents (phone_agent.py): the key in the path, a ?key= or X-Donna-Key
                 return self._phone_tool(m.group(2), m.group(1) if m.group(1) != "tool" else "")
+            m = re.fullmatch(r"/api/par/([\w-]{16,})/(config|save|finish)", path)
+            if m:  # the par counting page: its key, then the desk
+                return self._par(m.group(1), m.group(2))
             m = re.fullmatch(r"/api/inventory/(public|[\w-]{16,})/(accounts|garment|submit)", path)
             if m:  # the employees' inventory page: the key in its link, then the desk
                 return self._inventory(m.group(1), m.group(2))
@@ -707,6 +723,22 @@ def make_handler(chat: Chat, public_url: str):
             self.send_header("Content-Length", str(len(out)))
             self.end_headers()
             self.wfile.write(out)
+
+        def _par(self, given: str, what: str):
+            import hmac
+            key = os.environ.get("PAR_KEY", "")
+            if len(key) < 16 or not hmac.compare_digest(given.encode(), key.encode()):
+                time.sleep(1)
+                return self._send(401, b'{"error":"bad link"}', "application/json")
+            raw = self.rfile.read(min(int(self.headers.get("Content-Length") or 0), 200000)) or b"{}"
+            req = urllib.request.Request(f"http://127.0.0.1:{os.environ.get('DESK_VOICE_PORT', '8091')}/par/{what}",
+                                         data=raw, method="POST", headers={"Content-Type": "application/json"})
+            try:
+                with urllib.request.urlopen(req, timeout=20) as r:
+                    return self._send(r.status, r.read(), "application/json")
+            except Exception as e:
+                print(time.strftime("%H:%M"), "par: desk didn't answer:", str(e)[:120], flush=True)
+                return self._send(503, b'{"error":"try again"}', "application/json")
 
         def _inventory(self, given: str, what: str):
             """Employees (the key in their link): any account. Customers ("public"): their own garments only (the desk

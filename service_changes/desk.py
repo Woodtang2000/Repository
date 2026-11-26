@@ -1146,6 +1146,13 @@ class Desk:
             self._uniform = Uniform(self)
         return self._uniform
 
+    def pars(self):
+        """Par counting for the hospitals, replacing Linen Helper (par_counts.py)."""
+        if "_pars" not in self.__dict__:
+            from .par_counts import Pars
+            self._pars = Pars(self)
+        return self._pars
+
     def inventory(self):
         """Garment inventory scans from the employees' page, entered at Alliant's Count Station (inventory.py)."""
         if "_inventory" not in self.__dict__:
@@ -1760,6 +1767,16 @@ class Desk:
                         return self.reply(500, b"{}")
                     print(time.strftime("%H:%M"), "alliant jobs file:", f.group(1), out, flush=True)
                     return self.reply(200, json.dumps({"ok": out}).encode())
+                pc = re.fullmatch(r"/par/(config|save|finish)", self.path)
+                if pc:  # the hospital techs' par counting page, through webchat.py (its key checked there)
+                    try:
+                        body = json.loads(self.rfile.read(min(int(self.headers.get("Content-Length") or 0), 200000)) or b"{}")
+                        out = {"config": lambda: desk.pars().config(), "save": lambda: desk.pars().save(body),
+                               "finish": lambda: desk.pars().finish(body)}[pc.group(1)]()
+                    except Exception as e:
+                        print(time.strftime("%H:%M"), "par counts error:", e, flush=True)
+                        return self.reply(500, b'{"error":"server"}')
+                    return self.reply(200, json.dumps(out).encode())
                 v = re.fullmatch(r"/inventory/(accounts|garment|submit)", self.path)
                 if v:  # the employees' inventory page, through webchat.py (its key checked there)
                     from . import inventory

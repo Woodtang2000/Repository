@@ -214,6 +214,8 @@ class Jobs:
             data["jobs"] = {k: v for k, v in data["jobs"].items() if v["status"] in ("queued", "working")
                             or time.time() - v.get("finished", 0) < 14 * 86400}
             self.save(data)
+        if job.get("kind") == "par_request":  # the hospital's TLG channel (par_counts.py): building totals entered
+            return self.desk.pars().job_done(job, question)
         if job.get("kind") == "inventory":  # #stockroom (inventory.py): the Count Station's warnings under the card
             return self.desk.inventory().job_done(job, question)
         if job.get("kind") == "service_code":  # #uniform-requests (uniform.py)

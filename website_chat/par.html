@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>Par counts</title>
+<meta name="apple-mobile-web-app-title" content="Par counts">
+<meta name="application-name" content="Par counts">
+<meta name="theme-color" content="#003f50">
+<link rel="apple-touch-icon" href="/inventory-icon.png">
+<style>
+  :root { --navy: #003f50; --gold: #ffb807; --tint: #eaf0f2; --ink: #1c2226; --muted: #5d6a70; --line: #dfe5e8;
+          --ok: #1e6b3a; --warn: #8a5a00; --warnbg: #fff4dc; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 16px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; color: var(--ink);
+         background: #f3f5f6; padding-bottom: 96px; }
+  header { background: #fff; padding: 12px 16px; display: flex; align-items: center; gap: 12px; border-bottom: 3px solid var(--gold); }
+  header img { height: 34px; }
+  header b { margin-left: auto; color: var(--navy); font-size: 15px; }
+  main { max-width: 600px; margin: 0 auto; padding: 16px; }
+  .card { background: #fff; border-radius: 12px; padding: 16px; margin-bottom: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+  h2 { margin: 0 0 10px; font-size: 17px; color: var(--navy); }
+  label { display: block; font-size: 13px; color: var(--muted); margin: 8px 0 4px; }
+  input, select { width: 100%; font: inherit; padding: 11px 12px; border: 1px solid var(--line); border-radius: 9px; background: #fff; }
+  button { font: inherit; font-weight: 600; border: 0; border-radius: 10px; padding: 12px 16px; cursor: pointer; }
+  .primary { background: var(--navy); color: #fff; width: 100%; }
+  .ghost { background: var(--tint); color: var(--navy); }
+  .muted { color: var(--muted); font-size: 13px; }
+  .points div { display: flex; justify-content: space-between; align-items: center; padding: 12px 4px;
+                border-bottom: 1px solid var(--line); cursor: pointer; }
+  .points .done { color: var(--ok); font-size: 13px; font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; font-size: 12px; color: var(--muted); font-weight: 600; padding: 6px 4px; }
+  td { padding: 6px 4px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  td input { width: 84px; padding: 8px; text-align: right; }
+  td.need { font-weight: 700; color: var(--navy); text-align: right; width: 64px; }
+  .num { text-align: right; width: 56px; }
+  .bar { position: fixed; left: 0; right: 0; bottom: 0; background: #fff; border-top: 1px solid var(--line);
+         padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); }
+  .bar .primary { max-width: 568px; display: block; margin: 0 auto; }
+  .hidden { display: none !important; }
+  .note { background: var(--warnbg); color: var(--warn); padding: 8px 10px; border-radius: 8px; font-size: 14px; margin-top: 8px; }
+  @media print { header, .bar, .noprint { display: none !important; } body { background: #fff; padding: 0; } .card { box-shadow: none; } }
+</style>
+</head>
+<body>
+<header><img id="logo" alt=""><b>Par counts</b></header>
+<main>
+  <section class="card noprint" id="who-card">
+    <label for="who">Your name</label>
+    <input id="who" autocomplete="name" placeholder="First and last name">
+    <label for="hosp">Hospital</label>
+    <select id="hosp"></select>
+    <p class="muted" id="for"></p>
+    <p class="note hidden" id="outbox"></p>
+  </section>
+
+  <section class="card noprint" id="list-card">
+    <h2>Delivery points</h2>
+    <div class="points" id="points"></div>
+  </section>
+
+  <section class="card hidden noprint" id="count-card">
+    <h2 id="point-name"></h2>
+    <p class="muted">Type what's on the shelf. Need = par minus on hand.</p>
+    <table><thead><tr><th>Item</th><th class="num">Par</th><th>On hand</th><th class="need">Need</th></tr></thead>
+      <tbody id="rows"></tbody></table>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="ghost" id="back" style="flex:1">Back</button>
+      <button class="primary" id="save" style="flex:2">Save this point</button>
+    </div>
+  </section>
+
+  <section class="card hidden" id="pull-card">
+    <h2 id="pull-title"></h2>
+    <div id="pull"></div>
+    <div class="noprint" style="display:flex;gap:8px;margin-top:12px">
+      <button class="ghost" id="print" style="flex:1">Print</button>
+      <button class="ghost" id="again" style="flex:1">Back to points</button>
+    </div>
+  </section>
+  <p class="note hidden" id="err"></p>
+</main>
+<div class="bar noprint" id="bar"><button class="primary" id="finish">Done for today: send the pull list</button></div>
+
+<script>
+const CFG = __CONFIG__;
+const $ = id => document.getElementById(id);
+$("logo").src = CFG.logo; $("logo").alt = CFG.name;
+const store = { get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } },
+                set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} } };
+let conf = null, hosp = null, point = null;
+
+async function api(what, body) {
+  const r = await fetch(`${CFG.api}/${what}`, { method: "POST", headers: { "Content-Type": "application/json" },
+                                                 body: JSON.stringify(body || {}) });
+  if (!r.ok) throw new Error(r.status === 401 ? "This link isn't valid any more. Ask the office for the new one." : "offline");
+  return r.json();
+}
+function err(t) { $("err").textContent = t || ""; $("err").classList.toggle("hidden", !t); }
+
+$("who").value = store.get("par-who") || "";
+$("who").addEventListener("change", () => store.set("par-who", $("who").value.trim()));
+
+// Counts made without signal wait on the phone and go when it's back (hospital basements, 11/26).
+function outbox() { return store.get("par-outbox") || []; }
+function showOutbox() {
+  const n = outbox().length;
+  $("outbox").textContent = n ? `${n} saved count${n > 1 ? "s" : ""} waiting for signal. They'll send on their own.` : "";
+  $("outbox").classList.toggle("hidden", !n);
+}
+async function flush() {
+  const left = [];
+  for (const b of outbox()) { try { await api("save", b); } catch (e) { left.push(b); } }
+  store.set("par-outbox", left); showOutbox();
+  if (!left.length && conf) load();
+}
+setInterval(flush, 20000); window.addEventListener("online", flush);
+
+async function load() {
+  try { conf = await api("config"); } catch (e) { err("Can't reach the office right now. Counts you save will wait on this phone."); return; }
+  err("");
+  const sel = $("hosp"), keep = sel.value || store.get("par-hosp");
+  sel.innerHTML = "";
+  conf.hospitals.forEach(h => { const o = document.createElement("option"); o.value = h.account; o.textContent = h.name; sel.appendChild(o); });
+  if (keep && conf.hospitals.some(h => h.account === keep)) sel.value = keep;
+  const d = new Date(conf.date + "T12:00:00");
+  $("for").textContent = "Counting for " + d.toLocaleDateString(undefined, { weekday: "long", month: "numeric", day: "numeric" }) + "'s delivery.";
+  pick();
+}
+$("hosp").addEventListener("change", () => { store.set("par-hosp", $("hosp").value); pick(); });
+
+function pick() {
+  hosp = conf.hospitals.find(h => h.account === $("hosp").value) || conf.hospitals[0];
+  if (!hosp) { $("points").innerHTML = '<p class="muted">No hospitals are set up yet.</p>'; return; }
+  const waiting = new Set(outbox().filter(b => b.account === hosp.account).map(b => b.point));
+  $("points").innerHTML = "";
+  hosp.points.forEach(p => {
+    const d = document.createElement("div");
+    const by = hosp.counted[p.id];
+    d.innerHTML = `<span></span><span class="done"></span>`;
+    d.firstChild.textContent = p.name;
+    d.lastChild.textContent = waiting.has(p.id) ? "saved, waiting for signal" : by !== undefined ? "✓ " + (by || "counted") : "";
+    d.onclick = () => open(p);
+    $("points").appendChild(d);
+  });
+}
+
+function open(p) {
+  point = p;
+  $("list-card").classList.add("hidden"); $("count-card").classList.remove("hidden"); $("bar").classList.add("hidden");
+  $("point-name").textContent = p.name;
+  const draft = store.get(`par-draft-${hosp.account}-${p.id}`) || {};
+  $("rows").innerHTML = "";
+  p.items.forEach(it => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td></td><td class="num">${it.par}</td><td><input type="number" inputmode="numeric" min="0"></td><td class="need"></td>`;
+    tr.firstChild.textContent = it.item;
+    const inp = tr.querySelector("input"), need = tr.querySelector(".need");
+    inp.value = draft[it.item] ?? "";
+    const upd = () => {
+      need.textContent = inp.value === "" ? "" : Math.max(0, it.par - parseInt(inp.value || "0", 10));
+      const d = store.get(`par-draft-${hosp.account}-${p.id}`) || {}; d[it.item] = inp.value;
+      store.set(`par-draft-${hosp.account}-${p.id}`, d);
+    };
+    inp.addEventListener("input", upd); upd();
+    $("rows").appendChild(tr);
+  });
+  window.scrollTo(0, 0);
+}
+function back() {
+  $("count-card").classList.add("hidden"); $("pull-card").classList.add("hidden");
+  $("list-card").classList.remove("hidden"); $("bar").classList.remove("hidden"); pick();
+}
+$("back").onclick = back; $("again").onclick = back;
+
+$("save").onclick = async () => {
+  if (!$("who").value.trim()) { err("Put your name in first."); $("who").focus(); return; }
+  const counts = {};
+  [...$("rows").children].forEach((tr, i) => { const v = tr.querySelector("input").value; if (v !== "") counts[point.items[i].item] = v; });
+  const body = { account: hosp.account, point: point.id, counts, who: $("who").value.trim(), date: conf.date };
+  try {
+    await api("save", body);
+    hosp.counted[point.id] = body.who;
+    store.set(`par-draft-${hosp.account}-${point.id}`, {});
+    err("");
+  } catch (e) {
+    if (e.message !== "offline") { err(e.message); return; }
+    store.set("par-outbox", outbox().filter(b => !(b.account === body.account && b.point === body.point)).concat([body]));
+    showOutbox();
+  }
+  back();
+};
+
+$("finish").onclick = async () => {
+  if (!$("who").value.trim()) { err("Put your name in first."); $("who").focus(); return; }
+  if (outbox().length) { err("Some counts are still waiting for signal. Send them first (move to where there's signal)."); return; }
+  const left = hosp.points.filter(p => hosp.counted[p.id] === undefined).map(p => p.name);
+  if (left.length && !confirm(`${left.length} point(s) not counted yet: ${left.join(", ")}. Send the pull list anyway?`)) return;
+  try {
+    const out = await api("finish", { account: hosp.account, who: $("who").value.trim(), date: conf.date });
+    if (!out.ok) throw new Error(out.error);
+    showPull(out.pull);
+  } catch (e) { err(e.message === "offline" ? "No signal: try Done again where there's signal." : e.message); }
+};
+
+function showPull(pl) {
+  $("list-card").classList.add("hidden"); $("bar").classList.add("hidden"); $("pull-card").classList.remove("hidden");
+  const d = new Date(pl.date + "T12:00:00");
+  $("pull-title").textContent = `Pull list · ${pl.name} · ${d.toLocaleDateString(undefined, { weekday: "long", month: "numeric", day: "numeric" })}`;
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  let h = "<table><thead><tr><th>Item</th><th class='num'>Total</th></tr></thead><tbody>"
+    + (pl.totals.map(t => `<tr><td>${esc(t.item)}</td><td class="need">${t.need}</td></tr>`).join("") || "<tr><td colspan=2>Every counted point is at par.</td></tr>")
+    + "</tbody></table>";
+  if (pl.missing.length) h += `<p class="note">Not counted: ${esc(pl.missing.join(", "))}</p>`;
+  h += "<h2 style='margin-top:16px'>By delivery point</h2>" + pl.points.map(p =>
+    `<p><b>${esc(p.name)}</b>${p.by ? " <span class='muted'>(" + esc(p.by) + ")</span>" : ""}<br>`
+    + (p.lines.map(x => `${esc(x.item)} ${x.need}`).join(", ") || "at par") + "</p>").join("");
+  $("pull").innerHTML = h + "<p class='muted'>Sent to the TLG channel for route makeup.</p>";
+}
+$("print").onclick = () => window.print();
+
+showOutbox(); load(); flush();
+</script>
+</body>
+</html>

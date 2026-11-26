@@ -211,6 +211,20 @@ count, no service dates); it only records that the garment was seen.
   with what you saw, and how many barcodes went in before it stopped.
 - Report `entered` with how many barcodes went in and one line per warning: `barcode: what Alliant said`.
 
+## Hospital par requests (kind par_request)
+
+A `par_request` job comes from the hospital techs' par counts (Scott, 11/26). It gives one building customer (e.g.
+6001-2-00000 Alaska Regional), the delivery date, and **building totals**: one quantity per item for that day.
+
+- Healthcare > **Request Entry**: the customer, the delivery unit the job names (or the building's main one), and the
+  **Week** that holds the delivery date. Press Enter.
+- On each item line in the job, set that **day's Quantity** to the number given. Leave every other line, every other
+  day, and every "No Delivery" box as it is. Then **Save** (and **Submit** if the screen has it).
+- Read the lines back after saving: the day's Quantity shows the job's number.
+- If entry is blocked (production has started loading carts for that date), or an item isn't on the customer:
+  `needs_person` with what you saw. Production works from the pull list either way, so nothing waits on you.
+- Report `entered` with each line you set.
+
 ## Special (S) and credit (C) invoices
 
 A ticket headed **🧾 Special invoice (S)** or **🧾 Credit invoice (C)** is a one-time invoice, not a change to the

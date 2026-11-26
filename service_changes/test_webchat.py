@@ -595,3 +595,26 @@ def test_random_numbers_on_the_customers_page_get_stopped(monkeypatch):
         srv.shutdown()
         desk.shutdown()
         webchat.INVENTORY_HITS.clear()
+
+
+def test_the_par_counting_page_is_only_at_its_link(monkeypatch):
+    import threading
+    import urllib.error
+    import urllib.request
+    from . import webchat
+    monkeypatch.setenv("PAR_KEY", "p" * 20)
+    srv = webchat.ThreadingHTTPServer(("127.0.0.1", 0), webchat.make_handler(
+        webchat.Chat(FakeClaude(), lambda *a: None, "/tmp"), "https://chat.snowwhitelinen.com"))
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    get = lambda path: urllib.request.urlopen(urllib.request.Request(
+        f"http://127.0.0.1:{srv.server_port}{path}", headers={"Host": "chat.thelaundrygroup.com"}))
+    try:
+        page = get(f"/par/{'p' * 20}/").read().decode()
+        assert "Par counts" in page and f"/api/par/{'p' * 20}" in page and "__CONFIG__" not in page
+        try:
+            get(f"/par/{'x' * 20}/")
+            assert False
+        except urllib.error.HTTPError as e:
+            assert e.code == 404
+    finally:
+        srv.shutdown()
