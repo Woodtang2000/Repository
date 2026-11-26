@@ -261,3 +261,17 @@ def test_watchdog_and_signed_out_alert(tmp_path):
     n = len(slack.thread)
     assert jobs.alert("Alliant User/Password box, empty") == "alerted"
     assert any(text == "⚠️ Donna has been logged out of Alliant – please reconnect." for _, text in slack.thread[n:])
+
+
+def test_paused_on_alliant_means_no_hourly_warnings(tmp_path):
+    # Scott, 11/26: Alliant's Microsoft sign-in is locked out; "just stop warning us every hour until I get this reset"
+    jobs, slack, t, readbacks = setup(tmp_path)
+    jobs.next()
+    seen = jobs.load()["seen_at"]
+    assert "warnings are off" in jobs.pause(True)
+    n = len(slack.thread)
+    assert jobs.watchdog(seen + 3 * 3600) == ""
+    jobs.alert("Microsoft sign-in, MFA code")
+    assert len(slack.thread) == n  # nothing posted while paused
+    assert "warnings are back on" in jobs.pause(False)
+    assert jobs.watchdog(seen + 4 * 3600) == "alerted"

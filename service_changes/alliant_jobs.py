@@ -174,8 +174,9 @@ class Jobs:
             data = self.load()
             data["paused"] = on
             self.save(data)
-        return "Donna is paused: she won't take new Alliant jobs until you say \"Donna resume\"." if on else \
-            "Donna is back on Alliant jobs."
+        return ("Donna is paused on Alliant: she won't take Alliant jobs, and the workstation and logged-out warnings are "
+                "off, until you say \"Donna resume\". Texts, email, chat and everything else keep working.") if on else \
+            "Donna is back on Alliant jobs, and her workstation warnings are back on."
 
     # ---- the workstation side ------------------------------------------------------------------------------------
 
@@ -362,6 +363,8 @@ class Jobs:
         with self.lock:
             data = self.load()
             seen = data.get("seen_at")
+            if data.get("paused"):  # paused on Alliant (Scott, 11/26: "just stop warning us every hour"): known, no news
+                return ""
             if not seen or now - seen < minutes * 60 or now - data.get("watch_alerted", 0) < 3600:
                 return ""
             data["watch_alerted"] = now
@@ -382,6 +385,9 @@ class Jobs:
         an hour; a ticket thread alone is easy to miss. She clicks Reconnect and a filled-in Sign in herself; this is
         when that wasn't enough (an empty field, a code or phone approval, another account)."""
         if time.time() - getattr(self, "warned", 0) < 3600:
+            return
+        if self.load().get("paused"):  # paused on Alliant: they know it's down (Scott, 11/26)
+            print(time.strftime("%H:%M"), "Alliant signed out (paused: not posted)", note[:120], flush=True)
             return
         self.warned = time.time()
         text = "⚠️ Donna has been logged out of Alliant – please reconnect."
