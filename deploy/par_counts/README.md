@@ -84,3 +84,11 @@ we need to inject linen."
 - **Who sets up:** setup is on the page at the managers' link, `/par/<PAR_ADMIN_KEY>/`, with the same page and a "Set up"
   button. The techs' link (`PAR_KEY`) can only count, and the server enforces that.
 - **Linen Helper export:** still works for the hospitals. It fills in the delivery units of a linen room.
+
+## No Slack channel (Scott, 11/26)
+- **No channel post:** the pull list isn't posted in a channel. It stays on the page (printable).
+- **Chris gets one direct message** (`PAR_NOTIFY`, Chris Gowen by default):
+  - "✅ <linen room>: counts are done and entered in Alliant for <day>" once Donna's Request Entry is done.
+  - If Donna couldn't enter them, or isn't working in Alliant (paused, or `PAR_ALLIANT` off), the message says the
+    counts are done and lists the totals for him to enter by hand.
+  - If everything was at par, it says so.

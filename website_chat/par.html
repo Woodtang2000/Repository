@@ -111,7 +111,7 @@
   </section>
   <p class="note hidden" id="err"></p>
 </main>
-<div class="bar noprint" id="bar"><button class="primary" id="finish">Done for today: send the pull list</button></div>
+<div class="bar noprint" id="bar"><button class="primary" id="finish">Done for today: send the counts</button></div>
 
 <script>
 const CFG = __CONFIG__;
@@ -229,7 +229,7 @@ $("finish").onclick = async () => {
   if (!$("who").value.trim()) { err("Put your name in first."); $("who").focus(); return; }
   if (outbox().length) { err("Some counts are still waiting for signal. Send them first (move to where there's signal)."); return; }
   const left = hosp.points.filter(p => hosp.counted[p.id] === undefined).map(p => p.name);
-  if (left.length && !confirm(`${left.length} not counted yet: ${left.join(", ")}. Send the pull list anyway?`)) return;
+  if (left.length && !confirm(`${left.length} not counted yet: ${left.join(", ")}. Send the counts anyway?`)) return;
   try {
     const out = await api("finish", { account: hosp.account, who: $("who").value.trim(), date: conf.date });
     if (!out.ok) throw new Error(out.error);
@@ -249,7 +249,7 @@ function showPull(pl) {
   h += "<h2 style='margin-top:16px'>By delivery unit</h2>" + pl.points.map(p =>
     `<p><b>${esc(p.name)}</b>${p.by ? " <span class='muted'>(" + esc(p.by) + ")</span>" : ""}<br>`
     + (p.lines.map(x => `${esc(x.item)} ${x.need}`).join(", ") || "at par") + "</p>").join("");
-  $("pull").innerHTML = h + "<p class='muted'>Sent to the TLG channel for route makeup.</p>";
+  $("pull").innerHTML = h + "<p class='muted'>Donna enters the totals in Alliant and lets Chris know.</p>";
 }
 $("print").onclick = () => window.print();
 

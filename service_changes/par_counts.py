@@ -7,8 +7,9 @@ deploy/par_counts/README.md.
 - The techs' page: chat.thelaundrygroup.com/par/<PAR_KEY>/ (employees only, the key in the link). Pick the hospital,
   pick a delivery point, type what's on the shelf; the page shows the need (par - on hand) as they go. Each point is
   saved on its own. Phones that lose signal keep the counts and send them later.
-- "Done for today" builds the pull list: combined totals per item plus each point's breakdown. It's posted in the
-  hospital's TLG channel and printable from the page. **Production runs off this list, never waiting on Alliant**.
+- "Done for today" builds the pull list: combined totals per item plus each point's breakdown, printable from the page.
+  Nothing is posted in a Slack channel (Scott, 11/26): Chris (PAR_NOTIFY) gets a direct message once the counts are
+  done and entered in Alliant, or that he has to enter them by hand.
 - Alliant gets **building totals only** (Scott, 11/26): Donna enters one Request Entry with the combined quantities
   (kind "par_request"). That starts once Donna is back in Alliant: PAR_ALLIANT=on, and she's not paused.
 - Never involve TEXO / Alliant support in this project (Scott, 11/26: "They own linen helper").
@@ -223,10 +224,11 @@ class Pars:
                 "totals": sorted(totals.values(), key=lambda t: t["item"]), "points": points, "missing": missing}
 
     def finish(self, body: dict) -> dict:
-        """"Done for today": the pull list to the hospital's TLG channel; Donna's Alliant entry once that's on."""
+        """"Done for today": the pull list stays on the page (printable); Donna enters the building totals in Alliant
+        and then tells Chris. Nothing goes in a Slack channel (Scott, 11/26)."""
         account = str(body.get("account") or "")
         if account not in self.setup():
-            return {"ok": False, "error": "Unknown hospital."}
+            return {"ok": False, "error": "Unknown linen room."}
         date = str(body.get("date") or delivery_date())
         pl = self.pull_list(account, date)
         with self.lock:
@@ -234,35 +236,34 @@ class Pars:
             day = data.setdefault(date, {}).setdefault(account, {"points": {}})
             day.update(done=True, done_by=str(body.get("who") or "")[:60], done_at=time.time())
             self._save(COUNTS, data)
-        self.post(pl)
         queued = self.queue_alliant(pl)
+        if not queued:  # nothing for Alliant (all at par), or Donna isn't in Alliant: Chris hears now
+            d = datetime.strptime(date, "%Y-%m-%d")
+            why = ("nothing needed, every unit is at par" if not pl["totals"] else
+                   "not entered in Alliant: Donna isn't working in Alliant right now, so please enter the totals")
+            self.notify(f"🧺 {pl['name']}: counts are done for {d:%A %-m/%-d} ({why})." + self._missing(pl)
+                        + ("" if not pl["totals"] else "\n" + self._totals(pl)))
         return {"ok": True, "pull": pl, "alliant": queued}
 
-    def text(self, pl: dict) -> str:
-        d = datetime.strptime(pl["date"], "%Y-%m-%d")
-        # route makeup is told the carts can be built (Scott, 11/26: "They can be notified. Chris."); PAR_NOTIFY = Slack ids
-        who = " ".join(f"<@{x.strip()}>" for x in os.environ.get("PAR_NOTIFY", "U0CJJ3L9PPV").split(",") if x.strip())
-        out = [f"🧺 *Pull list · {pl['name']} · for {d:%A %-m/%-d}*" + (f"\n{who} ready to build the carts." if who else "")]
-        out += [f"• {t['item']}: *{t['need']}*" for t in pl["totals"]] or ["Nothing needed: every counted point is at par."]
-        if pl["missing"]:
-            out.append(f"⚠️ Not counted ({len(pl['missing'])}): " + ", ".join(pl["missing"]))
-        out.append("_By delivery point:_")
-        for p in pl["points"]:
-            out.append(f"*{p['name']}*" + (f" ({p['by']})" if p["by"] else "") + ": "
-                       + (", ".join(f"{x['item']} {x['need']}" for x in p["lines"]) or "at par"))
-        return "\n".join(out)
+    @staticmethod
+    def _totals(pl: dict) -> str:
+        return "\n".join(f"• {t['item']}: {t['need']}" for t in pl["totals"])
 
-    def post(self, pl: dict) -> str:
-        name = os.environ.get("PAR_CHANNEL", "tlg-alaska-regional")
-        ch = getattr(self.desk, "channels", {}).get(name) or os.environ.get("PAR_CHANNEL_ID", "")
-        if not ch:
-            print(time.strftime("%H:%M"), "par counts: no channel", name, flush=True)
-            return ""
-        try:
-            return self.desk.slack.chat_postMessage(channel=ch, text=self.text(pl)[:3900], unfurl_links=False).get("ts", "")
-        except Exception as e:
-            print(time.strftime("%H:%M"), "par pull list not posted:", str(e)[:200], flush=True)
-            return ""
+    @staticmethod
+    def _missing(pl: dict) -> str:
+        return f" Not counted: {', '.join(pl['missing'])}." if pl.get("missing") else ""
+
+    def notify(self, text: str) -> None:
+        """A direct message to whoever builds the carts (PAR_NOTIFY, Slack ids; Chris Gowen by default)."""
+        for uid in [x.strip() for x in os.environ.get("PAR_NOTIFY", "U0CJJ3L9PPV").split(",") if x.strip()]:
+            try:
+                try:
+                    ch = self.desk.slack.conversations_open(users=uid)["channel"]["id"]
+                except Exception:
+                    ch = uid  # Slack also takes a user id as the channel for a bot's direct message
+                self.desk.slack.chat_postMessage(channel=ch, text=text[:3900], unfurl_links=False)
+            except Exception as e:
+                print(time.strftime("%H:%M"), "par notify failed:", str(e)[:200], flush=True)
 
     def queue_alliant(self, pl: dict) -> str:
         """Building totals into Alliant's Request Entry (Donna's workstation), once she's back in Alliant."""
@@ -283,15 +284,20 @@ class Pars:
         return jobs.custom_job("par_request", text, {"account": pl["account"], "request_id": f"{pl['account']}/{pl['date']}"})
 
     def job_done(self, job: dict, question: str = "") -> str:
-        name = os.environ.get("PAR_CHANNEL", "tlg-alaska-regional")
-        ch = getattr(self.desk, "channels", {}).get(name) or os.environ.get("PAR_CHANNEL_ID", "")
-        ok = job["status"] == "entered"
-        text = (f"✅ Entered in Alliant (Request Entry) {datetime.now(ALASKA):%-I:%M %p}: {job.get('request_id', '')}"
-                if ok else f"⚠️ Couldn't enter the building totals in Alliant ({job.get('request_id', '')}). "
-                           "Please enter them by hand.") + (f"\n{question}" if question else "") + \
-            (f"\n{job.get('note')}" if job.get("note") else "")
-        if ch:
-            self.desk.slack.chat_postMessage(channel=ch, text=text[:3900], unfurl_links=False)
+        """Donna's Alliant entry finished: Chris hears the counts are done and entered (or that he has to enter them)."""
+        account, _, date = str(job.get("request_id", "")).partition("/")
+        name = (self.setup().get(account) or {}).get("name", account)
+        try:
+            day = f"{datetime.strptime(date, '%Y-%m-%d'):%A %-m/%-d}"
+        except ValueError:
+            day = date
+        if job["status"] == "entered":
+            text = f"✅ {name}: counts are done and entered in Alliant for {day}."
+        else:
+            pl = self.pull_list(account, date) if account in self.setup() else {"totals": []}
+            text = (f"⚠️ {name}: counts are done for {day}, but Donna couldn't enter them in Alliant. Please enter "
+                    "these totals by hand:\n" + self._totals(pl))
+        self.notify(text)
         return job["status"]
 
 

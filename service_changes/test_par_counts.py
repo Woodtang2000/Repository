@@ -12,8 +12,7 @@ from .test_desk import setup  # noqa: F401
 def pars(setup, tmp_path, monkeypatch):
     slack, d = setup
     d.data_dir = str(tmp_path)
-    d.channels["tlg-alaska-regional"] = "CARH"
-    slack.msgs["CARH"] = []
+    slack.msgs["U0CJJ3L9PPV"] = []  # Chris Gowen's direct messages
     csv = tmp_path / "lh.csv"
     csv.write_text("Delivery Point,Item Number,Description,Par Level\n"
                    "3 West,7-01-00,MEDICAL SHEET FLAT,40\n3 West,7-01-04,MEDICAL PILLOW CASE,30\n"
@@ -47,11 +46,12 @@ def test_counts_make_the_combined_pull_list_in_the_tlg_channel(pars, monkeypatch
     res = d.pars().finish({"account": "6001-2-00000", "who": "Samantha"})
     totals = {t["item"]: t["need"] for t in res["pull"]["totals"]}
     assert totals == {"MEDICAL SHEET FLAT": 43}  # 28 + 15; pillow cases and towels are at par
-    post = slack.msgs["CARH"][-1]["text"]
-    assert "Pull list · Alaska Regional Hospital" in post and "MEDICAL SHEET FLAT: *43*" in post
-    assert "<@U0CJJ3L9PPV> ready to build the carts." in post  # Chris Gowen (Scott, 11/26)
-    assert "*3 West* (Samantha): MEDICAL SHEET FLAT 28" in post and "*ICU* (Shakira): MEDICAL SHEET FLAT 15" in post
-    assert res["alliant"] == "" and not d.jobs().load()["jobs"]  # Alliant waits until Donna is back in (PAR_ALLIANT)
+    assert [p["name"] for p in res["pull"]["points"]] == ["3 West", "ICU"]  # the page's printable list
+    # nothing in a channel; Donna isn't in Alliant yet, so Chris hears the counts are done and to enter them himself
+    assert res["alliant"] == "" and not d.jobs().load()["jobs"]
+    note = slack.msgs["U0CJJ3L9PPV"][-1]["text"]
+    assert "Alaska Regional Hospital: counts are done for Tuesday 12/1" in note and "please enter" in note
+    assert "• MEDICAL SHEET FLAT: 43" in note
 
 
 def test_building_totals_go_to_donnas_alliant_queue_once_she_is_back(pars, monkeypatch):
@@ -67,8 +67,11 @@ def test_building_totals_go_to_donnas_alliant_queue_once_she_is_back(pars, monke
     assert "3 West" in d.pars().pull_list("6001-2-00000", "2026-12-01")["missing"]
     job["status"] = "working"
     data = d.jobs().load(); data["jobs"][jid]["status"] = "working"; d.jobs().save(data)
+    sent = len(slack.msgs["U0CJJ3L9PPV"])  # queued for Alliant: Chris waits for the entry
     d.jobs().result(jid, "entered", "MEDICAL TOWEL BATH 12 set")
-    assert "Entered in Alliant (Request Entry)" in slack.msgs["CARH"][-1]["text"]
+    assert len(slack.msgs["U0CJJ3L9PPV"]) == sent + 1
+    assert slack.msgs["U0CJJ3L9PPV"][-1]["text"] == \
+        "✅ Alaska Regional Hospital: counts are done and entered in Alliant for Tuesday 12/1."
 
 
 def test_unknown_points_are_refused(pars):
@@ -110,3 +113,14 @@ def test_a_linen_room_first_then_its_delivery_units_add_up_to_its_account(pars):
 def test_the_techs_config_has_no_setup(pars):
     slack, d = pars
     assert d.pars().config()["admin"] is False and "items" not in d.pars().config()["hospitals"][0]
+
+
+def test_chris_is_told_to_enter_them_when_donna_cant(pars, monkeypatch):
+    slack, d = pars
+    monkeypatch.setenv("PAR_ALLIANT", "on")
+    d.pars().save({"account": "6001-2-00000", "point": "icu", "who": "S", "counts": {"MEDICAL TOWEL BATH": 3}})
+    jid = d.pars().finish({"account": "6001-2-00000"})["alliant"]
+    data = d.jobs().load(); data["jobs"][jid]["status"] = "working"; d.jobs().save(data)
+    d.jobs().result(jid, "needs_person", "loading already started")
+    note = slack.msgs["U0CJJ3L9PPV"][-1]["text"]
+    assert "couldn't enter them in Alliant" in note and "• MEDICAL TOWEL BATH: 12" in note
