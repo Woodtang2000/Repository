@@ -12,6 +12,10 @@ deploy/par_counts/README.md.
 - Alliant gets **building totals only** (Scott, 11/26): Donna enters one Request Entry with the combined quantities
   (kind "par_request"). That starts once Donna is back in Alliant: PAR_ALLIANT=on, and she's not paused.
 - Never involve TEXO / Alliant support in this project (Scott, 11/26: "They own linen helper").
+- Built from the linen room down (Scott, 11/26): each Alliant account is a central linen room, and delivery units
+  (buildings, floors, departments) are added under it. Every unit's need adds up to the linen room's account, which is
+  what production builds and what goes to Alliant. A linen room with no units is counted as itself (a lodge with
+  one linen room). Setup happens on the page at the managers' link (PAR_ADMIN_KEY), or from a Linen Helper export.
 """
 import csv
 import json
@@ -83,21 +87,86 @@ class Pars:
         os.replace(self._p(name) + ".tmp", self._p(name))
 
     def setup(self) -> dict:
-        """{account: {name, points: [{id, name, items: [{sku, item, par}]}]}}"""
+        """{account: {name, items: [{sku, item, par}], points: [{id, name, items: [{sku, item, par}]}]}}: the linen
+        room (its own pars, used while it has no delivery units) and its delivery units."""
         return self._load(POINTS)
+
+    @staticmethod
+    def points(room: dict) -> list[dict]:
+        """What gets counted: the delivery units, or the linen room itself while it has none."""
+        return room.get("points") or [{"id": "room", "name": room.get("name", "Linen room"), "items": room.get("items", [])}]
+
+    def change(self, body: dict) -> dict:
+        """The managers' setup (their link only; webchat.py sets admin). op: room {account, name} adds or renames a
+        linen room; unit {account, name} adds a delivery unit; item {account, point ("room" or a unit), item, sku,
+        par} adds or changes a par (par blank or remove: deletes it); remove_unit {account, point}."""
+        op = str(body.get("op") or "")
+        account = re.sub(r"\s+", "", str(body.get("account") or ""))[:30]
+        name = re.sub(r"\s+", " ", str(body.get("name") or "")).strip()[:80]
+        if not re.fullmatch(r"[\w-]{3,30}", account):
+            return {"ok": False, "error": "Put in the Alliant account number of the linen room."}
+        with self.lock:
+            data = self.setup()
+            room = data.get(account)
+            if op == "room":
+                if not name:
+                    return {"ok": False, "error": "Give the linen room a name."}
+                room = data.setdefault(account, {"name": name, "items": [], "points": []})
+                room["name"] = name
+            elif not room:
+                return {"ok": False, "error": "Unknown linen room."}
+            elif op == "unit":
+                if not name:
+                    return {"ok": False, "error": "Give the delivery unit a name."}
+                pid = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "unit"
+                ids = {p["id"] for p in room.get("points", [])}
+                base, n = pid, 2
+                while pid in ids or pid == "room":
+                    pid, n = f"{base}-{n}", n + 1
+                room.setdefault("points", []).append({"id": pid, "name": name, "items": []})
+            elif op == "remove_unit":
+                room["points"] = [p for p in room.get("points", []) if p["id"] != str(body.get("point") or "")]
+            elif op == "item":
+                pid = str(body.get("point") or "room")
+                target = room if pid == "room" else next((p for p in room.get("points", []) if p["id"] == pid), None)
+                item = re.sub(r"\s+", " ", str(body.get("item") or "")).strip()[:80]
+                if target is None or not item:
+                    return {"ok": False, "error": "Unknown delivery unit or no item."}
+                par = str(body.get("par") if body.get("par") is not None else "").strip()
+                items = target.setdefault("items", [])
+                old = next((i for i in items if i["item"].lower() == item.lower()), None)
+                if body.get("remove") or par == "":
+                    target["items"] = [i for i in items if i is not old]
+                else:
+                    if not re.fullmatch(r"\d{1,5}", par):
+                        return {"ok": False, "error": "The par is a whole number."}
+                    known = next((i for i in room.get("items", []) + [x for p in room.get("points", [])
+                                  for x in p["items"]] if i["item"].lower() == item.lower()), None)
+                    sku = str(body.get("sku") or (old or known or {}).get("sku") or "").strip()[:30]
+                    if old:
+                        old.update(par=int(par), sku=sku)
+                    else:
+                        items.append({"sku": sku, "item": (known or {}).get("item", item), "par": int(par)})
+            else:
+                return {"ok": False, "error": "Unknown change."}
+            self._save(POINTS, data)
+        return {"ok": True, "config": self.config(admin=True)}
 
     def add_hospital(self, h: dict) -> None:
         with self.lock:
             data = self.setup()
-            data[h["account"]] = {"name": h["name"], "points": h["points"]}
+            old = data.get(h["account"], {})
+            data[h["account"]] = {"name": h["name"], "items": old.get("items", []), "points": h["points"]}
             self._save(POINTS, data)
 
-    def config(self) -> dict:
-        """For the page: the hospitals, their points and pars, and what's been counted for tomorrow already."""
+    def config(self, admin: bool = False) -> dict:
+        """For the page: the linen rooms, what's counted in each (its units, or itself) with the pars, and what's been
+        counted for tomorrow already. Managers also get each linen room's own pars, for setup."""
         date = delivery_date()
         counts = self._load(COUNTS).get(date, {})
-        return {"date": date, "hospitals": [
-            {"account": a, "name": h["name"], "points": h["points"],
+        return {"date": date, "admin": admin, "hospitals": [
+            {"account": a, "name": h["name"], "points": self.points(h), "units": bool(h.get("points")),
+             **({"items": h.get("items", [])} if admin else {}),
              "counted": {pid: c.get("by", "") for pid, c in counts.get(a, {}).get("points", {}).items()},
              "done": bool(counts.get(a, {}).get("done"))}
             for a, h in sorted(self.setup().items())]}
@@ -106,7 +175,7 @@ class Pars:
         """One delivery point's count: {account, point, counts: {item: on hand}, who}."""
         account, pid = str(body.get("account") or ""), str(body.get("point") or "")
         h = self.setup().get(account)
-        point = next((p for p in (h or {}).get("points", []) if p["id"] == pid), None)
+        point = next((p for p in self.points(h) if p["id"] == pid), None) if h else None
         if not point:
             return {"ok": False, "error": "Unknown hospital or delivery point."}
         given = body.get("counts") or {}
@@ -135,7 +204,7 @@ class Pars:
         day = self._load(COUNTS).get(date, {}).get(account, {})
         totals: dict[str, dict] = {}
         points, missing = [], []
-        for p in h.get("points", []):
+        for p in self.points(h) if h else []:
             c = day.get("points", {}).get(p["id"])
             if not c:
                 missing.append(p["name"])

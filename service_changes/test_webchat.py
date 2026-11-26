@@ -611,6 +611,9 @@ def test_the_par_counting_page_is_only_at_its_link(monkeypatch):
     try:
         page = get(f"/par/{'p' * 20}/").read().decode()
         assert "Par counts" in page and f"/api/par/{'p' * 20}" in page and "__CONFIG__" not in page
+        assert '"admin": false' in page
+        monkeypatch.setenv("PAR_ADMIN_KEY", "m" * 20)  # the managers' link also sets up linen rooms and units
+        assert '"admin": true' in get(f"/par/{'m' * 20}/").read().decode()
         try:
             get(f"/par/{'x' * 20}/")
             assert False
@@ -618,3 +621,43 @@ def test_the_par_counting_page_is_only_at_its_link(monkeypatch):
             assert e.code == 404
     finally:
         srv.shutdown()
+
+
+def test_only_the_managers_par_link_can_set_up(monkeypatch):
+    import json as _json
+    import threading
+    import urllib.request
+    from http.server import BaseHTTPRequestHandler
+    from . import webchat
+    seen = []
+
+    class FakeDesk(BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass
+
+        def do_POST(self):
+            seen.append((self.path, _json.loads(self.rfile.read(int(self.headers["Content-Length"])))))
+            data = b'{"ok": true}'
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+    desk = webchat.ThreadingHTTPServer(("127.0.0.1", 0), FakeDesk)
+    threading.Thread(target=desk.serve_forever, daemon=True).start()
+    monkeypatch.setenv("DESK_VOICE_PORT", str(desk.server_port))
+    monkeypatch.setenv("PAR_KEY", "p" * 20)
+    monkeypatch.setenv("PAR_ADMIN_KEY", "m" * 20)
+    srv = webchat.ThreadingHTTPServer(("127.0.0.1", 0), webchat.make_handler(
+        webchat.Chat(FakeClaude(), lambda *a: None, "/tmp"), "https://chat.snowwhitelinen.com"))
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    post = lambda key: urllib.request.urlopen(urllib.request.Request(
+        f"http://127.0.0.1:{srv.server_port}/api/par/{key}/change", method="POST",
+        data=b'{"op": "unit", "admin": true}', headers={"Content-Type": "application/json"}))
+    try:
+        post("p" * 20)
+        assert seen[-1] == ("/par/change", {"op": "unit", "admin": False})  # a tech's page can't claim to be a manager
+        post("m" * 20)
+        assert seen[-1][1]["admin"] is True
+    finally:
+        srv.shutdown()
+        desk.shutdown()

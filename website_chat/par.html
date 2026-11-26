@@ -50,14 +50,43 @@
   <section class="card noprint" id="who-card">
     <label for="who">Your name</label>
     <input id="who" autocomplete="name" placeholder="First and last name">
-    <label for="hosp">Hospital</label>
+    <label for="hosp">Linen room</label>
     <select id="hosp"></select>
     <p class="muted" id="for"></p>
     <p class="note hidden" id="outbox"></p>
+    <button class="ghost hidden" id="setup-open" style="width:100%;margin-top:10px">Set up linen rooms and delivery units</button>
+  </section>
+
+  <section class="card hidden noprint" id="setup-card">
+    <h2>Set up</h2>
+    <p class="muted">Start with the linen room (its Alliant account), then add its delivery units: buildings, floors or
+      departments. Every unit's need adds up to the linen room's account. A linen room with no units is counted as itself.</p>
+    <div id="units"></div>
+    <label for="unit-name">Add a delivery unit to <span id="setup-room"></span></label>
+    <div style="display:flex;gap:8px"><input id="unit-name" placeholder="e.g. Building 4, 3 West, ICU">
+      <button class="ghost" id="unit-add">Add</button></div>
+    <h2 style="margin-top:18px">New linen room</h2>
+    <label for="room-acct">Alliant account</label><input id="room-acct" placeholder="6021-2-00000">
+    <label for="room-name">Name</label><input id="room-name" placeholder="Seward Windsong Lodge">
+    <button class="ghost" id="room-add" style="width:100%;margin-top:10px">Add linen room</button>
+    <button class="primary" id="setup-close" style="margin-top:14px">Done setting up</button>
+  </section>
+
+  <section class="card hidden noprint" id="pars-card">
+    <h2 id="pars-name"></h2>
+    <p class="muted">Change a par and tap away to save it. Clear it to take the item off.</p>
+    <table><thead><tr><th>Item</th><th class="num">Par</th></tr></thead><tbody id="par-rows"></tbody></table>
+    <label for="new-item">Add an item</label>
+    <input id="new-item" list="known-items" placeholder="Item name">
+    <datalist id="known-items"></datalist>
+    <div style="display:flex;gap:8px;margin-top:8px"><input id="new-sku" placeholder="Item # (optional)">
+      <input id="new-par" type="number" inputmode="numeric" min="0" placeholder="Par" style="width:110px">
+      <button class="ghost" id="item-add">Add</button></div>
+    <button class="primary" id="pars-back" style="margin-top:14px">Back to setup</button>
   </section>
 
   <section class="card noprint" id="list-card">
-    <h2>Delivery points</h2>
+    <h2 id="list-title">Delivery units</h2>
     <div class="points" id="points"></div>
   </section>
 
@@ -68,7 +97,7 @@
       <tbody id="rows"></tbody></table>
     <div style="display:flex;gap:8px;margin-top:12px">
       <button class="ghost" id="back" style="flex:1">Back</button>
-      <button class="primary" id="save" style="flex:2">Save this point</button>
+      <button class="primary" id="save" style="flex:2">Save this count</button>
     </div>
   </section>
 
@@ -133,7 +162,10 @@ $("hosp").addEventListener("change", () => { store.set("par-hosp", $("hosp").val
 
 function pick() {
   hosp = conf.hospitals.find(h => h.account === $("hosp").value) || conf.hospitals[0];
-  if (!hosp) { $("points").innerHTML = '<p class="muted">No hospitals are set up yet.</p>'; return; }
+  $("setup-open").classList.toggle("hidden", !conf.admin);
+  if (!hosp) { $("points").innerHTML = '<p class="muted">No linen rooms are set up yet.</p>'; return; }
+  $("list-title").textContent = hosp.units ? "Delivery units" : "Linen room";
+  if (!$("setup-card").classList.contains("hidden")) drawSetup();
   const waiting = new Set(outbox().filter(b => b.account === hosp.account).map(b => b.point));
   $("points").innerHTML = "";
   hosp.points.forEach(p => {
@@ -197,7 +229,7 @@ $("finish").onclick = async () => {
   if (!$("who").value.trim()) { err("Put your name in first."); $("who").focus(); return; }
   if (outbox().length) { err("Some counts are still waiting for signal. Send them first (move to where there's signal)."); return; }
   const left = hosp.points.filter(p => hosp.counted[p.id] === undefined).map(p => p.name);
-  if (left.length && !confirm(`${left.length} point(s) not counted yet: ${left.join(", ")}. Send the pull list anyway?`)) return;
+  if (left.length && !confirm(`${left.length} not counted yet: ${left.join(", ")}. Send the pull list anyway?`)) return;
   try {
     const out = await api("finish", { account: hosp.account, who: $("who").value.trim(), date: conf.date });
     if (!out.ok) throw new Error(out.error);
@@ -214,12 +246,88 @@ function showPull(pl) {
     + (pl.totals.map(t => `<tr><td>${esc(t.item)}</td><td class="need">${t.need}</td></tr>`).join("") || "<tr><td colspan=2>Every counted point is at par.</td></tr>")
     + "</tbody></table>";
   if (pl.missing.length) h += `<p class="note">Not counted: ${esc(pl.missing.join(", "))}</p>`;
-  h += "<h2 style='margin-top:16px'>By delivery point</h2>" + pl.points.map(p =>
+  h += "<h2 style='margin-top:16px'>By delivery unit</h2>" + pl.points.map(p =>
     `<p><b>${esc(p.name)}</b>${p.by ? " <span class='muted'>(" + esc(p.by) + ")</span>" : ""}<br>`
     + (p.lines.map(x => `${esc(x.item)} ${x.need}`).join(", ") || "at par") + "</p>").join("");
   $("pull").innerHTML = h + "<p class='muted'>Sent to the TLG channel for route makeup.</p>";
 }
 $("print").onclick = () => window.print();
+
+// Managers' link only (the server checks it too): the linen room first, then its delivery units and their pars.
+let editing = null;
+const show = (...ids) => ["list-card", "count-card", "pull-card", "setup-card", "pars-card"].forEach(
+  c => $(c).classList.toggle("hidden", !ids.includes(c)));
+async function change(body) {
+  try {
+    const out = await api("change", body);
+    if (!out.ok) { err(out.error); return false; }
+    err(""); conf = out.config; return true;
+  } catch (e) { err(e.message === "offline" ? "No signal: setup needs a connection." : e.message); return false; }
+}
+function room() { return conf.hospitals.find(h => h.account === $("hosp").value) || conf.hospitals[0]; }
+function drawSetup() {
+  const r = room();
+  $("setup-room").textContent = r ? r.name : "(add a linen room first)";
+  $("units").innerHTML = "";
+  if (!r) return;
+  const list = r.units ? r.points : [{ id: "room", name: r.name + " (the linen room itself)", items: r.items || [] }];
+  list.forEach(p => {
+    const d = document.createElement("div");
+    d.className = "points";
+    d.innerHTML = `<div><span></span><span style="display:flex;gap:6px"><button class="ghost">Pars</button>${
+      p.id === "room" ? "" : '<button class="ghost">Remove</button>'}</span></div>`;
+    d.querySelector("span").textContent = `${p.name} · ${p.items.length} item${p.items.length === 1 ? "" : "s"}`;
+    const [pars, rm] = d.querySelectorAll("button");
+    pars.onclick = () => openPars(p.id);
+    if (rm) rm.onclick = async () => {
+      if (confirm(`Remove ${p.name} and its pars?`) && await change({ op: "remove_unit", account: r.account, point: p.id })) drawSetup();
+    };
+    $("units").appendChild(d);
+  });
+}
+function openPars(pid) {
+  editing = pid;
+  const r = room();
+  const p = pid === "room" ? { name: r.name + " (linen room)", items: r.items || [] } : r.points.find(x => x.id === pid);
+  if (!p) { show("setup-card"); drawSetup(); return; }
+  show("pars-card"); $("bar").classList.add("hidden");
+  $("pars-name").textContent = `${p.name}: pars`;
+  $("par-rows").innerHTML = "";
+  p.items.forEach(it => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td></td><td class="num"><input type="number" inputmode="numeric" min="0"></td>`;
+    tr.firstChild.textContent = it.item + (it.sku ? ` (${it.sku})` : "");
+    const inp = tr.querySelector("input"); inp.value = it.par;
+    inp.addEventListener("change", async () => {
+      if (inp.value === "" && !confirm(`Take ${it.item} off?`)) { inp.value = it.par; return; }
+      if (await change({ op: "item", account: r.account, point: pid, item: it.item, par: inp.value })) openPars(pid);
+    });
+    $("par-rows").appendChild(tr);
+  });
+  const known = new Set(); (r.items || []).concat(...(r.points || []).map(x => x.items)).forEach(i => known.add(i.item));
+  $("known-items").innerHTML = [...known].sort().map(i => `<option value="${i.replace(/"/g, "&quot;")}">`).join("");
+}
+$("setup-open").onclick = () => { show("setup-card"); $("bar").classList.add("hidden"); drawSetup(); };
+$("setup-close").onclick = () => { $("setup-card").classList.add("hidden"); back(); };
+$("pars-back").onclick = () => { show("setup-card"); drawSetup(); };
+$("room-add").onclick = async () => {
+  const account = $("room-acct").value.trim(), name = $("room-name").value.trim();
+  if (await change({ op: "room", account, name })) {
+    $("room-acct").value = $("room-name").value = ""; store.set("par-hosp", account);
+    await load(); $("hosp").value = account; pick(); drawSetup();
+  }
+};
+$("unit-add").onclick = async () => {
+  const r = room(); if (!r) { err("Add the linen room first."); return; }
+  if (await change({ op: "unit", account: r.account, name: $("unit-name").value.trim() })) { $("unit-name").value = ""; pick(); drawSetup(); }
+};
+$("item-add").onclick = async () => {
+  const r = room();
+  if (await change({ op: "item", account: r.account, point: editing, item: $("new-item").value.trim(),
+                     sku: $("new-sku").value.trim(), par: $("new-par").value.trim() || "x" })) {
+    $("new-item").value = $("new-sku").value = $("new-par").value = ""; openPars(editing);
+  }
+};
 
 showOutbox(); load(); flush();
 </script>

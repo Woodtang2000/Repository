@@ -1767,12 +1767,16 @@ class Desk:
                         return self.reply(500, b"{}")
                     print(time.strftime("%H:%M"), "alliant jobs file:", f.group(1), out, flush=True)
                     return self.reply(200, json.dumps({"ok": out}).encode())
-                pc = re.fullmatch(r"/par/(config|save|finish)", self.path)
+                pc = re.fullmatch(r"/par/(config|save|finish|change)", self.path)
                 if pc:  # the hospital techs' par counting page, through webchat.py (its key checked there)
                     try:
                         body = json.loads(self.rfile.read(min(int(self.headers.get("Content-Length") or 0), 200000)) or b"{}")
-                        out = {"config": lambda: desk.pars().config(), "save": lambda: desk.pars().save(body),
-                               "finish": lambda: desk.pars().finish(body)}[pc.group(1)]()
+                        admin = body.get("admin") is True  # set by webchat.py for the managers' link, never by the page
+                        if pc.group(1) == "change" and not admin:
+                            return self.reply(403, b'{"error":"managers only"}')
+                        out = {"config": lambda: desk.pars().config(admin), "save": lambda: desk.pars().save(body),
+                               "finish": lambda: desk.pars().finish(body),
+                               "change": lambda: desk.pars().change(body)}[pc.group(1)]()
                     except Exception as e:
                         print(time.strftime("%H:%M"), "par counts error:", e, flush=True)
                         return self.reply(500, b'{"error":"server"}')

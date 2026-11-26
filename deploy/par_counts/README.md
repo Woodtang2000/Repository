@@ -73,3 +73,14 @@ we need to inject linen."
 - **Injection:** COG, so injection means Pursuit adds linen. Donna alerts Scott when usage outgrows what's in
   circulation, or when the runner flags it.
 - Still open: who sets the pars, and which Pursuit 6021 customer numbers are which lodge.
+
+## Built from the linen room down (Scott, 11/26)
+- **Linen room first:** each linen room is an Alliant account (the central linen room). **Delivery units** (buildings,
+  floors, departments) are added under it, each with its own pars.
+- **Totals roll up:** every unit's need adds up to the linen room's account. That total is what production builds and
+  what goes to Alliant.
+- **No units yet:** the linen room itself is counted, which covers Talkeetna, Denali Backcountry and Kenai Fjords. Add
+  units later and they take over; the linen room's own pars are kept.
+- **Who sets up:** setup is on the page at the managers' link, `/par/<PAR_ADMIN_KEY>/`, with the same page and a "Set up"
+  button. The techs' link (`PAR_KEY`) can only count, and the server enforces that.
+- **Linen Helper export:** still works for the hospitals. It fills in the delivery units of a linen room.
