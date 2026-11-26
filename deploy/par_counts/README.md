@@ -43,3 +43,17 @@ Scott, 11/23-11/26. Spec in progress: nothing is built yet.
   - who uses it (their housekeeping, or our driver);
   - their accounts (Pursuit 6021) and buildings;
   - who sets the pars.
+
+## Pursuit's flow (Scott, 11/26)
+"The linen gets delivered to a central location. The housekeepers take the count then the linen runner takes each
+building what they need to fill in what is missing from the pars in the linen room. We get the numbers back at
+production which tells us how much they are using and allows us to forecast bulk deliveries or let Pursuit know that
+we need to inject linen."
+- Housekeepers count each building's linen room against its pars, in the app (their own private link).
+- The linen runner gets a run sheet: per building, what to take from the central location to bring it to par.
+- Production gets the counts as daily usage per item, building and hotel. These are planning numbers, not orders:
+  - for forecasting bulk deliveries;
+  - for a linen injection alert to Scott when usage outgrows the linen in circulation. This is best if the central
+    room is counted too: buildings' total need more than what's in the center means inject linen.
+- Still open: does Pursuit count the central room; which Pursuit 6021 locations are the four hotels and their
+  buildings or linen rooms; who sets the pars.
