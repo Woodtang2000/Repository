@@ -49,6 +49,7 @@ def test_counts_make_the_combined_pull_list_in_the_tlg_channel(pars, monkeypatch
     assert totals == {"MEDICAL SHEET FLAT": 43}  # 28 + 15; pillow cases and towels are at par
     post = slack.msgs["CARH"][-1]["text"]
     assert "Pull list · Alaska Regional Hospital" in post and "MEDICAL SHEET FLAT: *43*" in post
+    assert "<@U0CJJ3L9PPV> ready to build the carts." in post  # Chris Gowen (Scott, 11/26)
     assert "*3 West* (Samantha): MEDICAL SHEET FLAT 28" in post and "*ICU* (Shakira): MEDICAL SHEET FLAT 15" in post
     assert res["alliant"] == "" and not d.jobs().load()["jobs"]  # Alliant waits until Donna is back in (PAR_ALLIANT)
 

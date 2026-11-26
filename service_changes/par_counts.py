@@ -171,7 +171,9 @@ class Pars:
 
     def text(self, pl: dict) -> str:
         d = datetime.strptime(pl["date"], "%Y-%m-%d")
-        out = [f"🧺 *Pull list · {pl['name']} · for {d:%A %-m/%-d}*"]
+        # route makeup is told the carts can be built (Scott, 11/26: "They can be notified. Chris."); PAR_NOTIFY = Slack ids
+        who = " ".join(f"<@{x.strip()}>" for x in os.environ.get("PAR_NOTIFY", "U0CJJ3L9PPV").split(",") if x.strip())
+        out = [f"🧺 *Pull list · {pl['name']} · for {d:%A %-m/%-d}*" + (f"\n{who} ready to build the carts." if who else "")]
         out += [f"• {t['item']}: *{t['need']}*" for t in pl["totals"]] or ["Nothing needed: every counted point is at par."]
         if pl["missing"]:
             out.append(f"⚠️ Not counted ({len(pl['missing'])}): " + ", ".join(pl["missing"]))
