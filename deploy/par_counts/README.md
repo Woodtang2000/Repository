@@ -57,3 +57,19 @@ we need to inject linen."
     room is counted too: buildings' total need more than what's in the center means inject linen.
 - Still open: does Pursuit count the central room; which Pursuit 6021 locations are the four hotels and their
   buildings or linen rooms; who sets the pars.
+
+## Pursuit's lodges (Scott, 11/26) - a COG (customer-owned goods) account
+| Lodge | Setup | Notes |
+|---|---|---|
+| Seward Windsong Lodge | Multi-point: about 12 buildings of about 12 rooms, each with its own linen room and pars | Central delivery at Pursuit's Seward laundry (being shut down), or maybe the lodge itself; works the same |
+| Talkeetna Lodge | One linen room count (about 250 rooms) | Traditional hotel |
+| Denali Backcountry Lodge | One linen room count | Supplied from Talkeetna Lodge, driven to Healy |
+| Kenai Fjords Lodge | One linen room count | Supplied out of Seward |
+
+- **Central room count:** not counted, unless they want an inventory (optional in the app).
+- **Runner flag:** the linen runner says when supply is shrinking or deliveries are getting harder to fill, with a
+  button and an optional note. It goes to Scott and production.
+- **What we bring:** set by usage. Donna shows the usage trend per lodge for production.
+- **Injection:** COG, so injection means Pursuit adds linen. Donna alerts Scott when usage outgrows what's in
+  circulation, or when the runner flags it.
+- Still open: who sets the pars, and which Pursuit 6021 customer numbers are which lodge.
