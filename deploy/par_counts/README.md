@@ -26,3 +26,20 @@ Scott, 11/23-11/26. Spec in progress: nothing is built yet.
 - The cart-building cutoff time, and whether counts happen every day including weekends (Scott).
 - The delivery unit list in Alliant (Donna's read-only screen task; waits on the Alliant Microsoft sign-in reset).
 - Guardrail: add delivery units, standard quantities and cart weights to the nightly Alliant data (needs Scott's OK).
+
+## Update 2026-11-26
+- **Built (commit 05a8627, e4324f6):** Linen Helper import, the techs' counting page (offline saves), the combined
+  pull list in #tlg-alaska-regional tagging Chris Gowen ("ready to build the carts"), and Donna's Alliant building
+  totals behind PAR_ALLIANT. Not deployed for use yet.
+- **Hospitals on hold:** Scott may get a direct read from Linen Helper. Then the techs keep counting in Linen Helper,
+  and the pull list, Chris's notice, the Alliant entry and the reports run off Linen Helper's counts instead.
+- **Pursuit is the reason to keep building** (Scott, 11/26: "something that pursuit can use in there operations next
+  summer"). Target: ready before summer 2027. A customer version:
+  - each hotel gets its own private link showing only its own account;
+  - delivery points are their buildings or linen closets, with their own pars;
+  - their counts give them a distribution list, and give us an early demand signal for production.
+- To settle with Scott before spring:
+  - do Pursuit's counts become orders, or planning only;
+  - who uses it (their housekeeping, or our driver);
+  - their accounts (Pursuit 6021) and buildings;
+  - who sets the pars.
